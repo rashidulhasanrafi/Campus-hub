@@ -15,6 +15,7 @@ import {
   DEV_MOCK_PROFILE,
   supabase,
   MOCK_STUDENTS,
+  detectCampusTheme,
 } from "@/lib/supabase";
 import AuthScreen from "@/components/AuthScreen";
 import OnboardingScreen from "@/components/OnboardingScreen";
@@ -41,6 +42,15 @@ export default function CampusHubHome() {
   const [incomingInvite, setIncomingInvite] = useState<DirectCallInvite | null>(null);
   const [directRoomToJoin, setDirectRoomToJoin] = useState<string | null>(null);
   const [selectedHangoutRoomId, setSelectedHangoutRoomId] = useState<string | null>(null);
+
+  // Apply campus theme attribute on document root (defaults to UIU)
+  useEffect(() => {
+    const campus = detectCampusTheme(profile?.email || session?.user?.email);
+    if (typeof document !== "undefined") {
+      document.documentElement.setAttribute("data-campus", campus);
+      document.body.setAttribute("data-campus", campus);
+    }
+  }, [profile, session]);
 
   // Check auth session & load user profile
   const checkAuthAndProfile = useCallback(async () => {
@@ -271,20 +281,33 @@ export default function CampusHubHome() {
 
   // 4. Authenticated & Profile Ready: Render Campus Hub Application
   return (
-    <div className="min-h-screen flex flex-col bg-[#090a0f] text-zinc-100 selection:bg-zinc-800 selection:text-white">
-      {/* Global Campus Header with Active Status & Sign Out */}
-      <CampusHeader
-        profile={profile}
-        onlineCount={students.length}
-        onOpenProfileModal={() => setEditProfileOpen(true)}
-        onStatusChange={handleStatusChange}
-        onSignOut={handleSignOut}
-        currentTab={currentTab}
-        onTabChange={(tab) => {
-          if (tab !== "match") setDirectRoomToJoin(null);
-          setCurrentTab(tab);
-        }}
-      />
+    <div className="relative min-h-screen flex flex-col bg-[#090a0f] text-zinc-100 selection:bg-orange-600 selection:text-white overflow-x-hidden">
+      {/* Background Subtle Watermark: UIU Emblem centered with 3.5% opacity */}
+      <div
+        aria-hidden="true"
+        className="fixed inset-0 pointer-events-none z-0 flex items-center justify-center overflow-hidden select-none"
+      >
+        <img
+          src="/images/uiu-logo-tight.png"
+          alt=""
+          className="uiu-watermark w-[480px] sm:w-[640px] md:w-[720px] max-w-none opacity-[0.035] filter contrast-125 object-contain"
+        />
+      </div>
+
+      <div className="relative z-10 flex flex-col flex-1 min-h-screen">
+        {/* Global Campus Header with Active Status & Sign Out */}
+        <CampusHeader
+          profile={profile}
+          onlineCount={students.length}
+          onOpenProfileModal={() => setEditProfileOpen(true)}
+          onStatusChange={handleStatusChange}
+          onSignOut={handleSignOut}
+          currentTab={currentTab}
+          onTabChange={(tab) => {
+            if (tab !== "match") setDirectRoomToJoin(null);
+            setCurrentTab(tab);
+          }}
+        />
 
       {/* Main Workspace View Router */}
       <main className="flex-1 flex flex-col w-full">
@@ -359,6 +382,7 @@ export default function CampusHubHome() {
         onAccept={handleAcceptInvite}
         onDecline={handleDeclineInvite}
       />
+      </div>
     </div>
   );
 }

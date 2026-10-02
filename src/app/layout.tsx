@@ -13,6 +13,8 @@ const geistMono = Geist_Mono({
   subsets: ["latin"],
 });
 
+import { ThemeProvider } from "@/context/ThemeContext";
+
 export const viewport: Viewport = {
   width: "device-width",
   initialScale: 1,
@@ -23,14 +25,14 @@ export const viewport: Viewport = {
 };
 
 export const metadata: Metadata = {
-  title: "Campus Hub | Real-Time Video & Student Social Network",
+  title: "UIU Campus Hub | United International University",
   description:
-    "Connect with campus peers instantly: 1-on-1 random video matchmaking, multi-peer hangout study rooms, and live online lounge.",
+    "Connect with UIU peers instantly: 1-on-1 random video matchmaking, multi-peer hangout study rooms, and live online lounge.",
   manifest: "/manifest.json",
   appleWebApp: {
     capable: true,
     statusBarStyle: "black-translucent",
-    title: "Campus Hub",
+    title: "UIU Hub",
   },
 };
 
@@ -42,6 +44,7 @@ export default function RootLayout({
   return (
     <html
       lang="en"
+      data-campus="uiu"
       suppressHydrationWarning
       className={`${geistSans.variable} ${geistMono.variable} dark h-full antialiased`}
     >
@@ -49,12 +52,18 @@ export default function RootLayout({
         <meta name="mobile-web-app-capable" content="yes" />
         <meta name="apple-mobile-web-app-capable" content="yes" />
         <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
+        <script
+          dangerouslySetInnerHTML={{
+            __html: `(function(){try{var t=localStorage.getItem("campus_hub_theme_mode");var d=t==="dark"||(!t&&window.matchMedia("(prefers-color-scheme: dark)").matches)||!t;if(d){document.documentElement.classList.add("dark");document.documentElement.classList.remove("light");document.documentElement.setAttribute("data-theme","dark");}else{document.documentElement.classList.remove("dark");document.documentElement.classList.add("light");document.documentElement.setAttribute("data-theme","light");}}catch(e){}})()`,
+          }}
+        />
       </head>
       <body
+        data-campus="uiu"
         suppressHydrationWarning
-        className="min-h-full flex flex-col bg-[#090a0f] text-zinc-100 select-none"
+        className="min-h-full flex flex-col bg-[#090a0f] text-zinc-100 select-none transition-colors duration-200"
       >
-        {children}
+        <ThemeProvider>{children}</ThemeProvider>
       </body>
     </html>
   );

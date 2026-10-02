@@ -3,7 +3,6 @@
 import React, { useState, useRef, useEffect } from "react";
 import { supabase, setDevPreview } from "@/lib/supabase";
 import {
-  Sparkles,
   Mail,
   ArrowRight,
   ShieldCheck,
@@ -13,10 +12,12 @@ import {
   AlertCircle,
   Video,
   Users,
-  Radio,
   Zap,
+  Sun,
+  Moon,
 } from "lucide-react";
 import confetti from "canvas-confetti";
+import { useTheme } from "@/context/ThemeContext";
 
 interface AuthScreenProps {
   onAuthSuccess: () => void;
@@ -24,6 +25,7 @@ interface AuthScreenProps {
 }
 
 export default function AuthScreen({ onAuthSuccess, onBypassDev }: AuthScreenProps) {
+  const { isDark, toggleTheme } = useTheme();
   const [step, setStep] = useState<"email" | "otp">("email");
   const [email, setEmail] = useState("");
   const [otpDigits, setOtpDigits] = useState<string[]>(["", "", "", "", "", ""]);
@@ -63,7 +65,6 @@ export default function AuthScreen({ onAuthSuccess, onBypassDev }: AuthScreenPro
 
   const validateGmail = (input: string): boolean => {
     const trimmed = input.trim().toLowerCase();
-    // Allow any valid email, specifically emphasizing gmail / university domains
     const regex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
     return regex.test(trimmed);
   };
@@ -75,12 +76,12 @@ export default function AuthScreen({ onAuthSuccess, onBypassDev }: AuthScreenPro
 
     let normalizedEmail = email.trim().toLowerCase();
     if (!normalizedEmail.includes("@")) {
-      normalizedEmail = `${normalizedEmail}@gmail.com`;
+      normalizedEmail = `${normalizedEmail}@bscse.uiu.ac.bd`;
       setEmail(normalizedEmail);
     }
 
     if (!validateGmail(normalizedEmail)) {
-      setErrorMessage("Please enter a valid Gmail address (e.g. yourname@gmail.com).");
+      setErrorMessage("Please enter a valid student email (e.g. name@bscse.uiu.ac.bd or @gmail.com).");
       return;
     }
 
@@ -99,7 +100,7 @@ export default function AuthScreen({ onAuthSuccess, onBypassDev }: AuthScreenPro
 
       setStep("otp");
       setResendCooldown(30);
-      setInfoMessage(`6-digit code dispatched to ${normalizedEmail}`);
+      setInfoMessage(`6-digit passcode dispatched to ${normalizedEmail}`);
     } catch (err: unknown) {
       const error = err as Error;
       console.error("Error sending OTP:", error);
@@ -116,7 +117,7 @@ export default function AuthScreen({ onAuthSuccess, onBypassDev }: AuthScreenPro
         particleCount: 35,
         spread: 60,
         origin: { y: 0.6 },
-        colors: ["#10b981", "#06b6d4", "#6366f1"],
+        colors: ["#f97316", "#ea580c", "#fbbf24"],
       });
     } catch {}
     if (onBypassDev) {
@@ -127,7 +128,6 @@ export default function AuthScreen({ onAuthSuccess, onBypassDev }: AuthScreenPro
   };
 
   const handleOtpChange = (index: number, value: string) => {
-    // Handle paste of complete 6-digit code
     if (value.length > 1) {
       const clean = value.replace(/\D/g, "").slice(0, 6);
       if (clean.length > 0) {
@@ -142,13 +142,11 @@ export default function AuthScreen({ onAuthSuccess, onBypassDev }: AuthScreenPro
       return;
     }
 
-    // Single digit input
     const cleanDigit = value.replace(/\D/g, "");
     const newDigits = [...otpDigits];
     newDigits[index] = cleanDigit;
     setOtpDigits(newDigits);
 
-    // Auto focus next box
     if (cleanDigit && index < 5) {
       inputRefs.current[index + 1]?.focus();
     }
@@ -160,19 +158,19 @@ export default function AuthScreen({ onAuthSuccess, onBypassDev }: AuthScreenPro
     }
   };
 
-  const handleVerifyOtp = async (tokenToVerify?: string) => {
-    const token = tokenToVerify || otpDigits.join("");
+  const handleVerifyOtp = async (codeToVerify?: string) => {
+    const token = codeToVerify || otpDigits.join("");
     if (token.length !== 6) {
-      setErrorMessage("Please enter the complete 6-digit code.");
+      setErrorMessage("Please enter the complete 6-digit passcode.");
       return;
     }
 
     setLoading(true);
     setErrorMessage("");
-
     try {
+      const normalizedEmail = email.trim().toLowerCase();
       const { data, error } = await supabase.auth.verifyOtp({
-        email: email.trim().toLowerCase(),
+        email: normalizedEmail,
         token,
         type: "email",
       });
@@ -187,46 +185,76 @@ export default function AuthScreen({ onAuthSuccess, onBypassDev }: AuthScreenPro
             particleCount: 40,
             spread: 60,
             origin: { y: 0.6 },
+            colors: ["#f97316", "#ea580c", "#38bdf8"],
           });
         } catch {}
         onAuthSuccess();
       } else {
-        throw new Error("Verification completed but session could not be established.");
+        throw new Error("Verification completed, but no session was returned.");
       }
     } catch (err: unknown) {
       const error = err as Error;
-      console.error("Error verifying OTP:", error);
-      setErrorMessage(error.message || "Invalid or expired code. Please try again.");
+      console.error("OTP Verification Error:", error);
+      setErrorMessage(error.message || "Invalid or expired passcode. Please try again.");
     } finally {
       setLoading(false);
     }
   };
 
   return (
-    <div className="min-h-screen flex flex-col items-center justify-center p-4 relative overflow-hidden bg-zinc-950 text-white">
-      {/* Subtle Ambient Background Highlight */}
-      <div className="absolute top-1/3 left-1/2 -translate-x-1/2 -translate-y-1/2 w-96 h-96 bg-zinc-800/20 rounded-full blur-[120px] pointer-events-none" />
+    <div className="min-h-screen flex flex-col items-center justify-center p-4 relative overflow-hidden bg-[#090a0f] text-white">
+      {/* Top Right Theme Toggle */}
+      <div className="absolute top-4 right-4 z-20">
+        <button
+          onClick={toggleTheme}
+          title={isDark ? "Switch to Light Mode" : "Switch to Dark Mode"}
+          aria-label="Toggle light or dark mode"
+          className="p-2 rounded-xl bg-zinc-900/80 hover:bg-zinc-800 text-zinc-400 hover:text-orange-400 border border-zinc-800 hover:border-orange-500/40 transition-all flex items-center justify-center shadow-sm active:scale-95"
+        >
+          {isDark ? (
+            <Sun className="w-4 h-4 text-amber-400 transition-transform duration-200 hover:rotate-45" />
+          ) : (
+            <Moon className="w-4 h-4 text-orange-500 transition-transform duration-200 hover:-rotate-12" />
+          )}
+        </button>
+      </div>
+
+      {/* Background Subtle Watermark */}
+      <div
+        aria-hidden="true"
+        className="fixed inset-0 pointer-events-none z-0 flex items-center justify-center overflow-hidden select-none"
+      >
+        <img
+          src="/images/uiu-logo-tight.png"
+          alt=""
+          className="uiu-watermark w-[420px] sm:w-[580px] max-w-none opacity-[0.035] filter contrast-125 object-contain"
+        />
+      </div>
 
       {/* Main Auth Card */}
       <div className="relative z-10 w-full max-w-md rounded-2xl border border-zinc-800/80 p-6 sm:p-8 bg-zinc-900/60 backdrop-blur-xl shadow-2xl space-y-6">
         {/* Brand Logo & Title */}
         <div className="text-center space-y-3">
-          <div className="mx-auto w-12 h-12 rounded-xl bg-zinc-900 border border-zinc-700/80 flex items-center justify-center text-zinc-100 shadow-sm">
-            <Sparkles className="w-6 h-6 text-emerald-400" />
+          <div className="mx-auto w-14 h-14 rounded-2xl bg-zinc-900 border border-orange-500/40 p-2 flex items-center justify-center text-zinc-100 shadow-md">
+            <img
+              src="/images/uiu-logo-tight.png"
+              alt="UIU Crest Logo"
+              className="w-full h-full object-contain"
+            />
           </div>
 
           <div>
-            <div className="inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-md text-[10px] font-semibold bg-zinc-800/80 text-zinc-300 border border-zinc-700/60 mb-2">
-              <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-pulse" />
-              CAMPUS SOCIAL HUB
+            <div className="inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-md text-[10px] font-bold bg-orange-500/15 text-orange-400 border border-orange-500/30 mb-2">
+              <span className="w-1.5 h-1.5 rounded-full bg-orange-500 animate-pulse" />
+              UNITED INTERNATIONAL UNIVERSITY
             </div>
             <h1 className="text-xl sm:text-2xl font-bold text-zinc-100 tracking-tight">
-              {step === "email" ? "Sign In to Campus" : "Verify Gmail Code"}
+              {step === "email" ? "Sign In to UIU Hub" : "Verify Passcode"}
             </h1>
             <p className="text-xs text-zinc-400 mt-1 max-w-xs mx-auto">
               {step === "email"
-                ? "Connect with fellow students via 1-on-1 random video match & multi-peer study rooms."
-                : `Enter the 6-digit passcode dispatched to your inbox.`}
+                ? "Connect with fellow UIU students via 1-on-1 random video match & study rooms."
+                : `Enter the 6-digit passcode dispatched to your email.`}
             </p>
           </div>
         </div>
@@ -235,12 +263,12 @@ export default function AuthScreen({ onAuthSuccess, onBypassDev }: AuthScreenPro
         {step === "email" && (
           <div className="flex items-center justify-center gap-2 flex-wrap py-0.5">
             <span className="inline-flex items-center gap-1 px-2.5 py-1 rounded-lg text-[10px] font-medium bg-zinc-900 border border-zinc-800 text-zinc-300">
-              <Video className="w-3 h-3 text-zinc-400" />
-              1-on-1 Random Match
+              <Video className="w-3 h-3 text-orange-400" />
+              1-on-1 Video Match
             </span>
             <span className="inline-flex items-center gap-1 px-2.5 py-1 rounded-lg text-[10px] font-medium bg-zinc-900 border border-zinc-800 text-zinc-300">
-              <Users className="w-3 h-3 text-zinc-400" />
-              8-Peer Hangouts
+              <Users className="w-3 h-3 text-orange-400" />
+              8-Peer Study Lounges
             </span>
           </div>
         )}
@@ -254,8 +282,8 @@ export default function AuthScreen({ onAuthSuccess, onBypassDev }: AuthScreenPro
         )}
 
         {infoMessage && (
-          <div className="flex items-start gap-2.5 p-3 rounded-xl bg-emerald-500/10 border border-emerald-500/20 text-xs text-emerald-300 animate-in fade-in duration-150">
-            <CheckCircle2 className="w-4 h-4 text-emerald-400 shrink-0 mt-0.5" />
+          <div className="flex items-start gap-2.5 p-3 rounded-xl bg-orange-500/10 border border-orange-500/25 text-xs text-orange-300 animate-in fade-in duration-150">
+            <CheckCircle2 className="w-4 h-4 text-orange-400 shrink-0 mt-0.5" />
             <span>{infoMessage}</span>
           </div>
         )}
@@ -265,7 +293,7 @@ export default function AuthScreen({ onAuthSuccess, onBypassDev }: AuthScreenPro
           <form onSubmit={handleSendCode} className="space-y-4">
             <div>
               <label className="block text-xs font-medium text-zinc-300 mb-1.5">
-                Your Gmail Address
+                Student Email / Gmail
               </label>
               <div className="relative">
                 <Mail className="absolute left-3.5 top-3 w-4 h-4 text-zinc-500" />
@@ -275,27 +303,37 @@ export default function AuthScreen({ onAuthSuccess, onBypassDev }: AuthScreenPro
                   autoFocus
                   value={email}
                   onChange={(e) => setEmail(e.target.value)}
-                  placeholder="e.g. student@gmail.com"
-                  className="w-full pl-10 pr-4 py-2.5 rounded-xl bg-zinc-900 border border-zinc-800 text-xs text-zinc-100 placeholder-zinc-500 focus:outline-none focus:border-zinc-600 transition-colors"
+                  placeholder="e.g. student@bscse.uiu.ac.bd or @gmail.com"
+                  className="w-full pl-10 pr-4 py-2.5 rounded-xl bg-zinc-900 border border-zinc-800 text-xs text-zinc-100 placeholder-zinc-500 focus:outline-none focus:border-orange-500 focus:ring-1 focus:ring-orange-500/20 transition-colors"
                 />
               </div>
             </div>
 
             {/* Quick Domain Suggestion */}
             {email && !email.includes("@") && (
-              <button
-                type="button"
-                onClick={() => setEmail(`${email}@gmail.com`)}
-                className="text-[11px] font-medium text-zinc-400 hover:text-zinc-200 transition-colors flex items-center gap-1"
-              >
-                Auto-complete: <span className="underline">{email}@gmail.com</span>
-              </button>
+              <div className="flex flex-wrap items-center gap-1.5 pt-0.5">
+                <button
+                  type="button"
+                  onClick={() => setEmail(`${email}@bscse.uiu.ac.bd`)}
+                  className="text-[10px] font-medium text-zinc-400 hover:text-orange-400 transition-colors px-2 py-0.5 rounded bg-zinc-900 border border-zinc-800 hover:border-orange-500/40"
+                >
+                  +{email}@bscse.uiu.ac.bd
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setEmail(`${email}@gmail.com`)}
+                  className="text-[10px] font-medium text-zinc-400 hover:text-orange-400 transition-colors px-2 py-0.5 rounded bg-zinc-900 border border-zinc-800 hover:border-orange-500/40"
+                >
+                  +{email}@gmail.com
+                </button>
+              </div>
             )}
 
+            {/* Primary Orange Send Button: Turns dark gray on hover like official UIU portal */}
             <button
               type="submit"
               disabled={loading || !email.trim()}
-              className="w-full py-2.5 rounded-xl bg-zinc-100 hover:bg-white text-zinc-950 font-semibold text-xs shadow-sm hover:opacity-95 active:scale-[0.98] disabled:opacity-50 disabled:cursor-not-allowed transition-all flex items-center justify-center gap-2"
+              className="w-full py-2.5 rounded-xl bg-orange-600 hover:bg-zinc-800 text-white font-semibold text-xs shadow-sm hover:opacity-95 active:scale-[0.98] disabled:opacity-50 disabled:cursor-not-allowed transition-all flex items-center justify-center gap-2"
             >
               {loading ? (
                 <>
@@ -322,12 +360,12 @@ export default function AuthScreen({ onAuthSuccess, onBypassDev }: AuthScreenPro
             <button
               type="button"
               onClick={handleDevBypass}
-              className="w-full py-2.5 rounded-xl bg-zinc-900 hover:bg-zinc-800 border border-emerald-500/30 hover:border-emerald-500/50 text-emerald-400 font-semibold text-xs transition-colors flex items-center justify-center gap-2 active:scale-[0.98] cursor-pointer shadow-sm"
+              className="w-full py-2.5 rounded-xl bg-zinc-900 hover:bg-zinc-850 border border-orange-500/40 hover:border-orange-500 text-orange-400 hover:text-orange-300 font-semibold text-xs transition-colors flex items-center justify-center gap-2 active:scale-[0.98] cursor-pointer shadow-sm"
             >
-              <Zap className="w-3.5 h-3.5 text-emerald-400" />
+              <Zap className="w-3.5 h-3.5 text-orange-400" />
               <span>Continue as Guest (Dev Preview)</span>
-              <span className="px-1 py-0.2 rounded text-[9px] font-semibold bg-emerald-500/20 text-emerald-300 border border-emerald-500/30 uppercase">
-                Bypass
+              <span className="px-1.5 py-0.2 rounded text-[9px] font-bold bg-orange-500/20 text-orange-300 border border-orange-500/30 uppercase">
+                UIU Mock
               </span>
             </button>
 
@@ -342,7 +380,7 @@ export default function AuthScreen({ onAuthSuccess, onBypassDev }: AuthScreenPro
             {/* Target Email Chip & Edit Button */}
             <div className="flex items-center justify-between p-2.5 rounded-xl bg-zinc-900 border border-zinc-800">
               <div className="flex items-center gap-2 truncate">
-                <Mail className="w-4 h-4 text-zinc-400 shrink-0" />
+                <Mail className="w-4 h-4 text-orange-400 shrink-0" />
                 <span className="text-xs font-medium text-zinc-300 truncate">
                   {email}
                 </span>
@@ -353,7 +391,7 @@ export default function AuthScreen({ onAuthSuccess, onBypassDev }: AuthScreenPro
                   setOtpDigits(["", "", "", "", "", ""]);
                   setErrorMessage("");
                 }}
-                className="text-[11px] font-medium text-zinc-400 hover:text-zinc-200 flex items-center gap-1 shrink-0 ml-2"
+                className="text-[11px] font-medium text-zinc-400 hover:text-orange-400 flex items-center gap-1 shrink-0 ml-2 transition-colors"
               >
                 <Edit2 className="w-3 h-3" />
                 Change
@@ -377,18 +415,18 @@ export default function AuthScreen({ onAuthSuccess, onBypassDev }: AuthScreenPro
                   onKeyDown={(e) => handleKeyDown(index, e)}
                   className={`w-11 sm:w-12 h-13 rounded-xl bg-zinc-900 border text-center text-lg font-bold text-zinc-100 focus:outline-none transition-colors ${
                     digit
-                      ? "border-zinc-400 ring-1 ring-zinc-400/20"
-                      : "border-zinc-800 focus:border-zinc-600"
+                      ? "border-orange-500 ring-1 ring-orange-500/30"
+                      : "border-zinc-800 focus:border-orange-500"
                   }`}
                 />
               ))}
             </div>
 
-            {/* Manual Verify Button */}
+            {/* Manual Verify Button (Orange by default, turns dark gray on hover) */}
             <button
               onClick={() => handleVerifyOtp()}
               disabled={loading || otpDigits.includes("")}
-              className="w-full py-2.5 rounded-xl bg-zinc-100 hover:bg-white text-zinc-950 font-semibold text-xs shadow-sm hover:opacity-95 active:scale-[0.98] disabled:opacity-50 disabled:cursor-not-allowed transition-all flex items-center justify-center gap-2"
+              className="w-full py-2.5 rounded-xl bg-orange-600 hover:bg-zinc-800 text-white font-semibold text-xs shadow-sm hover:opacity-95 active:scale-[0.98] disabled:opacity-50 disabled:cursor-not-allowed transition-all flex items-center justify-center gap-2"
             >
               {loading ? (
                 <>
@@ -407,14 +445,14 @@ export default function AuthScreen({ onAuthSuccess, onBypassDev }: AuthScreenPro
             <div className="text-center pt-1">
               {resendCooldown > 0 ? (
                 <p className="text-xs text-zinc-400">
-                  Resend code in <span className="font-semibold text-zinc-200">{resendCooldown}s</span>
+                  Resend code in <span className="font-semibold text-orange-400">{resendCooldown}s</span>
                 </p>
               ) : (
                 <button
                   type="button"
                   disabled={loading}
                   onClick={() => handleSendCode()}
-                  className="text-xs font-medium text-zinc-400 hover:text-zinc-200 transition-colors"
+                  className="text-xs font-medium text-zinc-400 hover:text-orange-400 transition-colors"
                 >
                   Didn&apos;t receive code? Resend Email
                 </button>

@@ -1,16 +1,28 @@
 @import "tailwindcss";
 
 @layer base {
-  :root {
+  :root,
+  [data-campus="uiu"] {
     --safe-top: env(safe-area-inset-top, 0px);
     --safe-bottom: env(safe-area-inset-bottom, 0px);
     --safe-left: env(safe-area-inset-left, 0px);
     --safe-right: env(safe-area-inset-right, 0px);
+
+    --uiu-orange: #ea580c;
+    --uiu-orange-vibrant: #f97316;
+    --uiu-orange-deep: #c2410c;
+    --uiu-dark: #090a0f;
+    --uiu-slate: #0f1117;
   }
 
   * {
     -webkit-tap-highlight-color: transparent;
     box-sizing: border-box;
+  }
+
+  ::selection {
+    background: #ea580c;
+    color: #ffffff;
   }
 
   html,
@@ -23,6 +35,151 @@
     user-select: none;
     -webkit-user-select: none;
     letter-spacing: -0.011em;
+  }
+}
+
+/* UIU Primary Action Button: Vibrant Orange by default, turns Dark Charcoal/Gray on hover like the official UIU portal */
+.btn-uiu-orange {
+  background-color: #ea580c !important;
+  color: #ffffff !important;
+  transition: all 0.18s cubic-bezier(0.16, 1, 0.3, 1) !important;
+}
+.btn-uiu-orange:hover {
+  background-color: #27272a !important; /* turns dark gray like official UIU website */
+  color: #ffffff !important;
+}
+.btn-uiu-orange:active {
+  transform: scale(0.97) !important;
+}
+
+/* UIU Option / Tab / Pill hover: Turns UIU Orange on hover like official UIU site menu */
+.nav-uiu-option {
+  transition: all 0.15s ease-in-out;
+}
+.nav-uiu-option:hover {
+  color: #f97316 !important;
+}
+
+/* ========================================================
+   LIGHT MODE DESIGN SYSTEM (Clean, Hand-Crafted UIU Portal)
+   ======================================================== */
+html.light,
+body.light,
+[data-theme="light"],
+[data-theme="light"] body {
+  background-color: #f8fafc !important;
+  color: #0f172a !important;
+}
+
+[data-theme="light"] {
+  /* Override dark surfaces to clean crisp white cards */
+  .bg-\[\#090a0f\],
+  .bg-zinc-950,
+  .bg-zinc-950\/95,
+  .bg-zinc-950\/90 {
+    background-color: #ffffff !important;
+  }
+
+  .bg-zinc-900,
+  .bg-zinc-900\/90,
+  .bg-zinc-900\/80,
+  .bg-zinc-900\/60,
+  .bg-zinc-900\/50,
+  .bg-zinc-900\/40,
+  .bg-zinc-900\/30 {
+    background-color: #ffffff !important;
+  }
+
+  .bg-zinc-850,
+  .bg-zinc-800,
+  .bg-zinc-800\/80,
+  .bg-zinc-800\/60,
+  .bg-zinc-800\/40 {
+    background-color: #f1f5f9 !important;
+  }
+
+  /* Borders */
+  .border-zinc-800,
+  .border-zinc-800\/90,
+  .border-zinc-800\/80,
+  .border-zinc-800\/70,
+  .border-zinc-800\/60 {
+    border-color: #e2e8f0 !important;
+  }
+
+  .border-zinc-700,
+  .border-zinc-700\/80,
+  .border-zinc-700\/60 {
+    border-color: #cbd5e1 !important;
+  }
+
+  /* Text hierarchy (excluding orange buttons, badges, etc.) */
+  .text-zinc-100:not(.text-white):not([class*="bg-orange-"]):not([class*="bg-rose-"]):not([class*="bg-emerald-"]),
+  .text-zinc-200:not(.text-white):not([class*="bg-orange-"]):not([class*="bg-rose-"]):not([class*="bg-emerald-"]) {
+    color: #0f172a !important;
+  }
+
+  .text-zinc-300:not(.text-white):not([class*="bg-orange-"]):not([class*="bg-rose-"]):not([class*="bg-emerald-"]) {
+    color: #334155 !important;
+  }
+
+  .text-zinc-400:not([class*="bg-orange-"]):not([class*="text-orange-"]) {
+    color: #64748b !important;
+  }
+
+  .text-zinc-500:not([class*="bg-orange-"]):not([class*="text-orange-"]) {
+    color: #94a3b8 !important;
+  }
+
+  /* Header & Docks */
+  header {
+    background-color: rgba(255, 255, 255, 0.95) !important;
+    border-color: #e2e8f0 !important;
+    box-shadow: 0 1px 3px 0 rgba(0, 0, 0, 0.05);
+  }
+
+  /* Inputs & Textareas */
+  input:not([type="checkbox"]):not([type="radio"]),
+  textarea,
+  select {
+    background-color: #ffffff !important;
+    color: #0f172a !important;
+    border-color: #cbd5e1 !important;
+  }
+  input::placeholder,
+  textarea::placeholder {
+    color: #94a3b8 !important;
+  }
+
+  /* Background watermark in light mode */
+  .uiu-watermark {
+    opacity: 0.045 !important;
+    filter: invert(0.85) contrast(180%) !important;
+  }
+
+  /* Glass surfaces & panels in light mode */
+  .glass-panel {
+    background: rgba(255, 255, 255, 0.88) !important;
+    border-color: rgba(226, 232, 240, 0.8) !important;
+    box-shadow: 0 4px 12px -2px rgba(0, 0, 0, 0.05);
+  }
+
+  .glass-dock {
+    background: rgba(255, 255, 255, 0.95) !important;
+    border-color: rgba(226, 232, 240, 0.9) !important;
+    box-shadow: 0 10px 25px -5px rgba(0, 0, 0, 0.08), 0 0 0 1px rgba(0, 0, 0, 0.04) !important;
+  }
+
+  .subtle-surface {
+    background: rgba(248, 250, 252, 0.9) !important;
+    border-color: rgba(226, 232, 240, 0.8) !important;
+  }
+
+  /* Buttons that are orange stay white text */
+  .bg-orange-600,
+  .bg-orange-500,
+  .btn-uiu-orange {
+    color: #ffffff !important;
   }
 }
 

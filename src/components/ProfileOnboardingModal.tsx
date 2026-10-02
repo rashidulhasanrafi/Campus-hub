@@ -161,12 +161,12 @@ export default function ProfileOnboardingModal({
 
         {/* Modal Header */}
         <div className="flex items-center gap-3 mb-5">
-          <div className="w-10 h-10 rounded-xl bg-zinc-900 border border-zinc-700/80 flex items-center justify-center text-zinc-100 shadow-sm shrink-0">
-            <GraduationCap className="w-5 h-5 text-emerald-400" />
+          <div className="w-10 h-10 rounded-xl bg-zinc-900 border border-orange-500/30 flex items-center justify-center text-zinc-100 shadow-sm shrink-0">
+            <GraduationCap className="w-5 h-5 text-orange-400" />
           </div>
           <div>
             <h2 className="text-base font-bold text-zinc-100 tracking-tight">
-              {currentProfile ? "Edit Student Profile" : "Campus Hub Onboarding"}
+              {currentProfile ? "Edit UIU Student Profile" : "UIU Campus Hub Setup"}
             </h2>
             <p className="text-xs text-zinc-400">
               Customize your campus avatar, department, and live status
@@ -181,8 +181,8 @@ export default function ProfileOnboardingModal({
             onClick={() => setAuthMode("instant")}
             className={`flex-1 py-1.5 text-xs font-semibold rounded-lg transition-colors ${
               authMode === "instant"
-                ? "bg-zinc-800 text-zinc-100 shadow-sm"
-                : "text-zinc-400 hover:text-zinc-200"
+                ? "bg-zinc-800 text-orange-400 border border-orange-500/30 shadow-sm"
+                : "text-zinc-400 hover:text-orange-400"
             }`}
           >
             Instant Student ID
@@ -192,8 +192,8 @@ export default function ProfileOnboardingModal({
             onClick={() => setAuthMode("email")}
             className={`flex-1 py-1.5 text-xs font-semibold rounded-lg transition-colors ${
               authMode === "email"
-                ? "bg-zinc-800 text-zinc-100 shadow-sm"
-                : "text-zinc-400 hover:text-zinc-200"
+                ? "bg-zinc-800 text-orange-400 border border-orange-500/30 shadow-sm"
+                : "text-zinc-400 hover:text-orange-400"
             }`}
           >
             Supabase Account
@@ -394,13 +394,13 @@ export default function ProfileOnboardingModal({
             />
           </div>
 
-          {/* Action Button */}
+          {/* Action Button: UIU Orange by default, turns dark gray on hover */}
           <button
             type="submit"
-            className="w-full py-2.5 rounded-lg bg-zinc-100 hover:bg-white text-zinc-950 font-semibold text-xs shadow-sm hover:opacity-95 active:scale-[0.98] transition-all flex items-center justify-center gap-2"
+            className="w-full py-2.5 rounded-lg bg-orange-600 hover:bg-zinc-800 text-white font-semibold text-xs shadow-sm hover:opacity-95 active:scale-[0.98] transition-all flex items-center justify-center gap-2"
           >
-            <span>{currentProfile ? "Save Profile Changes" : "Enter Campus Lounge"}</span>
-            <ArrowRight className="w-3.5 h-3.5" />
+            <span>{currentProfile ? "Save Profile Changes" : "Enter UIU Campus Lounge"}</span>
+            <ArrowRight className="w-3.5 h-3.5 text-white" />
           </button>
         </form>
       </div>

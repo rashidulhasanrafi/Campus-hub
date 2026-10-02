@@ -272,16 +272,29 @@ export const DEV_SESSION_KEY = "campus_hub_dev_preview_session";
 
 export const DEV_MOCK_PROFILE: UserProfile = {
   id: "dev-preview-user",
-  email: "dev.preview@university.edu",
-  full_name: "Test Student (Dev)",
+  email: "student@bscse.uiu.ac.bd",
+  full_name: "Test Student (UIU)",
   department: "Computer Science & Eng (CSE)",
   batch: "Batch '24 (Junior)",
   avatar: "https://images.unsplash.com/photo-1535713875002-d1d0cf377fde?w=150&auto=format&fit=crop&q=80",
   status: "Ready to chat 💬",
-  bio: "Campus Hub Dev Preview • Testing real-time video, 1-on-1 match & hangout rooms.",
+  bio: "UIU Campus Hub • Testing real-time video, 1-on-1 match & hangout rooms.",
   is_online: true,
   last_seen: new Date().toISOString(),
 };
+
+/**
+ * Detect campus theme based on student email domain or active session.
+ * Defaults to 'uiu' for UIU domain, guest preview, or fallback.
+ */
+export function detectCampusTheme(email?: string): string {
+  if (!email) return "uiu";
+  const normalized = email.toLowerCase().trim();
+  if (normalized.endsWith("uiu.ac.bd") || normalized.includes("@uiu.ac.bd") || normalized.includes(".uiu.ac.bd")) {
+    return "uiu";
+  }
+  return "uiu"; // Active campus fallback
+}
 
 export function isDevPreviewActive(): boolean {
   if (typeof window === "undefined") return false;

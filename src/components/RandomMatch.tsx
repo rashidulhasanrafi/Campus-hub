@@ -215,8 +215,8 @@ export default function RandomMatch({
                     onClick={() => setSelectedTopic(topic.id)}
                     className={`flex items-center gap-1.5 px-3 py-1.5 rounded-xl text-xs font-medium transition-colors ${
                       isSelected
-                        ? "bg-zinc-800 text-zinc-100 border border-zinc-700 shadow-sm"
-                        : "bg-zinc-900/80 hover:bg-zinc-800/60 text-zinc-400 hover:text-zinc-200 border border-zinc-800"
+                        ? "bg-orange-600 hover:bg-zinc-800 text-white border border-orange-600 shadow-sm"
+                        : "bg-zinc-900/80 text-zinc-400 hover:text-orange-400 hover:border-orange-500/40 border border-zinc-800"
                     }`}
                   >
                     <Icon className="w-3.5 h-3.5 text-zinc-300" />
@@ -227,12 +227,12 @@ export default function RandomMatch({
             </div>
           </div>
 
-          {/* Start Matching Big Button */}
+          {/* Start Matching Big Button: UIU Orange by default, turns dark gray on hover */}
           <button
             onClick={startFindingMatch}
-            className="w-full sm:w-auto px-8 py-3 rounded-xl bg-zinc-100 hover:bg-white text-zinc-950 font-semibold text-sm shadow-sm active:scale-95 transition-all flex items-center justify-center gap-2 cursor-pointer"
+            className="w-full sm:w-auto px-8 py-3 rounded-xl bg-orange-600 hover:bg-zinc-800 text-white font-semibold text-sm shadow-sm active:scale-95 transition-all flex items-center justify-center gap-2 cursor-pointer"
           >
-            <Sparkles className="w-4 h-4 text-zinc-900" />
+            <Sparkles className="w-4 h-4 text-white" />
             <span>Start Matching Students</span>
           </button>
 
@@ -490,7 +490,7 @@ function ConnectedMatchContent({
               />
               <button
                 type="submit"
-                className="p-2 rounded-lg bg-zinc-100 hover:bg-white text-zinc-950 transition-colors"
+                className="p-2 rounded-lg bg-orange-600 hover:bg-zinc-800 text-white transition-colors"
               >
                 <Send className="w-3.5 h-3.5" />
               </button>
@@ -502,12 +502,12 @@ function ConnectedMatchContent({
       {/* Floating Responsive Control Dock */}
       <div className="h-14 flex items-center justify-center">
         <div className="flex items-center gap-2 px-3 py-1.5 rounded-xl bg-zinc-900/90 border border-zinc-800/90 backdrop-blur-xl shadow-xl">
-          {/* Skip / Next Match */}
+          {/* Skip / Next Match: Orange by default, turns dark gray on hover */}
           <button
             onClick={onSkip}
-            className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-zinc-100 hover:bg-white text-zinc-950 font-semibold text-xs shadow-sm active:scale-95 transition-all"
+            className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-orange-600 hover:bg-zinc-800 text-white font-semibold text-xs shadow-sm active:scale-95 transition-all"
           >
-            <SkipForward className="w-3.5 h-3.5" />
+            <SkipForward className="w-3.5 h-3.5 text-white" />
             <span>Next / Skip</span>
           </button>
 

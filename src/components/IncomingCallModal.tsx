@@ -32,13 +32,13 @@ export default function IncomingCallModal({
         </div>
 
         {/* Status indicator badge */}
-        <div className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full bg-zinc-900 border border-zinc-800 text-zinc-300 text-xs font-medium mb-3">
+        <div className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full bg-orange-500/10 border border-orange-500/30 text-orange-400 text-xs font-medium mb-3">
           <span className="relative flex h-2 w-2">
-            <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-emerald-400 opacity-75"></span>
-            <span className="relative inline-flex rounded-full h-2 w-2 bg-emerald-500"></span>
+            <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-orange-400 opacity-75"></span>
+            <span className="relative inline-flex rounded-full h-2 w-2 bg-orange-500"></span>
           </span>
-          <Video className="w-3.5 h-3.5 text-zinc-400 ml-0.5" />
-          <span>Incoming Video Call</span>
+          <Video className="w-3.5 h-3.5 text-orange-400 ml-0.5" />
+          <span>Incoming UIU Video Call</span>
         </div>
 
         <h3 className="text-lg font-semibold text-zinc-100 tracking-tight">
@@ -48,11 +48,14 @@ export default function IncomingCallModal({
           {invite.fromDepartment} • {invite.fromBatch}
         </p>
 
-        {/* Action Buttons */}
+        {/* Action Buttons:
+            - 'Decline': Secondary option button
+            - 'Accept Call': Orange by default, turns Dark Gray on hover
+        */}
         <div className="flex items-center justify-center gap-3">
           <button
             onClick={() => onDecline(invite)}
-            className="flex-1 py-2.5 px-4 rounded-xl bg-zinc-900 hover:bg-zinc-800/80 border border-zinc-800 text-zinc-300 hover:text-rose-400 font-medium text-xs transition-colors flex items-center justify-center gap-2 active:scale-95"
+            className="flex-1 py-2.5 px-4 rounded-xl bg-zinc-900 hover:bg-zinc-850 border border-zinc-800 text-zinc-300 hover:text-rose-400 font-medium text-xs transition-colors flex items-center justify-center gap-2 active:scale-95"
           >
             <PhoneOff className="w-4 h-4 text-zinc-400" />
             <span>Decline</span>
@@ -60,9 +63,9 @@ export default function IncomingCallModal({
 
           <button
             onClick={() => onAccept(invite)}
-            className="flex-1 py-2.5 px-4 rounded-xl bg-white hover:bg-zinc-100 text-zinc-950 font-semibold text-xs shadow-sm transition-all flex items-center justify-center gap-2 active:scale-95"
+            className="flex-1 py-2.5 px-4 rounded-xl bg-orange-600 hover:bg-zinc-800 text-white font-semibold text-xs shadow-sm transition-all flex items-center justify-center gap-2 active:scale-95"
           >
-            <PhoneCall className="w-4 h-4 text-zinc-950" />
+            <PhoneCall className="w-4 h-4 text-white" />
             <span>Accept Call</span>
           </button>
         </div>

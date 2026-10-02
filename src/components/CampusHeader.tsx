@@ -7,8 +7,8 @@ import {
   syncProfileWithSupabase,
 } from "@/lib/supabase";
 import StudentAvatar from "@/components/StudentAvatar";
+import { useTheme } from "@/context/ThemeContext";
 import {
-  Sparkles,
   Wifi,
   ChevronDown,
   User,
@@ -18,6 +18,8 @@ import {
   MessageSquare,
   Video,
   Users,
+  Sun,
+  Moon,
 } from "lucide-react";
 
 interface CampusHeaderProps {
@@ -39,6 +41,7 @@ export default function CampusHeader({
   currentTab,
   onTabChange,
 }: CampusHeaderProps) {
+  const { isDark, toggleTheme } = useTheme();
   const [statusDropdownOpen, setStatusDropdownOpen] = useState(false);
 
   const handleSelectStatus = async (statusLabel: string) => {
@@ -56,35 +59,47 @@ export default function CampusHeader({
   ];
 
   return (
-    <header className="sticky top-0 z-40 w-full border-b border-zinc-800/80 bg-zinc-950/90 backdrop-blur-xl pt-safe">
+    <header className="sticky top-0 z-40 w-full border-b border-zinc-800/80 bg-zinc-950/95 backdrop-blur-xl pt-safe">
+      {/* UIU Orange Accent Strip - Inspired by official UIU web portal header */}
+      <div className="h-[2.5px] w-full bg-gradient-to-r from-orange-600 via-orange-500 to-amber-500" />
+
       <div className="max-w-7xl mx-auto px-4 sm:px-6 h-14 flex items-center justify-between gap-3">
-        {/* Brand Logo & Campus Badge */}
+        {/* Brand Logo & UIU Campus Badge */}
         <div className="flex items-center gap-3">
-          <div className="relative flex items-center justify-center w-8 h-8 rounded-lg bg-zinc-900 border border-zinc-700/80 text-zinc-100 shadow-sm">
-            <Sparkles className="w-4 h-4 text-emerald-400" />
+          <div className="relative flex items-center justify-center w-9 h-9 rounded-xl bg-zinc-900 border border-orange-500/40 p-1 shadow-sm shrink-0 group">
+            <img
+              src="/images/uiu-logo-tight.png"
+              alt="UIU Crest Logo"
+              className="w-full h-full object-contain filter drop-shadow-sm transition-transform group-hover:scale-105"
+            />
             <span className="absolute -top-0.5 -right-0.5 flex h-2.5 w-2.5">
-              <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-emerald-400 opacity-75"></span>
-              <span className="relative inline-flex rounded-full h-2.5 w-2.5 bg-emerald-500 border border-zinc-950"></span>
+              <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-orange-400 opacity-75"></span>
+              <span className="relative inline-flex rounded-full h-2.5 w-2.5 bg-orange-500 border border-zinc-950"></span>
             </span>
           </div>
 
-          <div className="flex items-center gap-2">
-            <h1 className="text-sm font-bold tracking-tight text-zinc-100">
-              CAMPUS HUB
-            </h1>
-            <span className="hidden xs:inline-flex items-center gap-1 px-1.5 py-0.5 rounded-md text-[10px] font-semibold bg-emerald-500/10 text-emerald-400 border border-emerald-500/20">
-              <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-pulse" />
-              LIVE
-            </span>
-            {profile?.id === "dev-preview-user" && (
-              <span className="hidden sm:inline-flex items-center px-1.5 py-0.5 rounded-md text-[9px] font-semibold bg-amber-500/10 text-amber-300 border border-amber-500/25">
-                GUEST PREVIEW
+          <div className="flex flex-col">
+            <div className="flex items-center gap-2">
+              <h1 className="text-sm font-bold tracking-tight text-zinc-100">
+                CAMPUS HUB
+              </h1>
+              <span className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded-md text-[10px] font-bold bg-orange-500/15 text-orange-400 border border-orange-500/30">
+                <span className="w-1.5 h-1.5 rounded-full bg-orange-500 animate-pulse" />
+                UIU
               </span>
-            )}
+              {profile?.id === "dev-preview-user" && (
+                <span className="hidden sm:inline-flex items-center px-1.5 py-0.5 rounded-md text-[9px] font-semibold bg-zinc-800 text-zinc-300 border border-zinc-700">
+                  GUEST PREVIEW
+                </span>
+              )}
+            </div>
+            <span className="text-[10px] text-zinc-400 font-medium tracking-wide hidden xs:inline">
+              United International University
+            </span>
           </div>
         </div>
 
-        {/* Center: Desktop Navigation & Online Pill */}
+        {/* Center: Desktop Navigation (Options turn Orange on hover like photo) & Online Pill */}
         <div className="hidden md:flex items-center gap-3">
           {onTabChange && currentTab && (
             <div className="flex items-center gap-1 p-1 bg-zinc-900/90 rounded-lg border border-zinc-800">
@@ -97,14 +112,14 @@ export default function CampusHeader({
                     onClick={() => onTabChange(item.id)}
                     className={`flex items-center gap-1.5 px-3 py-1 rounded-md text-xs font-medium transition-colors ${
                       isActive
-                        ? "bg-zinc-800 text-zinc-100 shadow-sm"
-                        : "text-zinc-400 hover:text-zinc-200 hover:bg-zinc-800/40"
+                        ? "bg-zinc-800 text-orange-400 border border-orange-500/30 shadow-sm"
+                        : "text-zinc-300 hover:text-orange-500 hover:bg-orange-500/10"
                     }`}
                   >
                     <Icon className="w-3.5 h-3.5" />
                     <span>{item.label}</span>
                     {item.badge && (
-                      <span className="px-1 py-0.2 rounded text-[9px] font-bold bg-rose-500/20 text-rose-400 border border-rose-500/30">
+                      <span className="px-1 py-0.2 rounded text-[9px] font-bold bg-orange-500/20 text-orange-400 border border-orange-500/30">
                         {item.badge}
                       </span>
                     )}
@@ -114,17 +129,17 @@ export default function CampusHeader({
             </div>
           )}
 
-          <div className="flex items-center gap-1.5 px-2.5 py-1 rounded-md bg-zinc-900 border border-zinc-800 text-xs text-zinc-400">
+          <div className="flex items-center gap-1.5 px-2.5 py-1 rounded-md bg-zinc-900 border border-zinc-800 text-xs text-zinc-400 hover:text-orange-400 transition-colors">
             <Wifi className="w-3 h-3 text-emerald-400" />
             <span className="font-medium text-zinc-200">{onlineCount}</span> online
           </div>
 
-          {/* Quick Status Dropdown */}
+          {/* Quick Status Dropdown (Options turn Orange on hover) */}
           {profile && (
             <div className="relative">
               <button
                 onClick={() => setStatusDropdownOpen(!statusDropdownOpen)}
-                className="flex items-center gap-1.5 px-2.5 py-1 rounded-md bg-zinc-900 border border-zinc-800 hover:border-zinc-700 text-xs text-zinc-300 transition-colors"
+                className="flex items-center gap-1.5 px-2.5 py-1 rounded-md bg-zinc-900 border border-zinc-800 hover:border-orange-500/40 hover:text-orange-400 text-xs text-zinc-300 transition-colors"
               >
                 <span className="truncate max-w-[120px] text-xs font-medium">{profile.status}</span>
                 <ChevronDown className="w-3 h-3 text-zinc-400" />
@@ -133,7 +148,7 @@ export default function CampusHeader({
               {statusDropdownOpen && (
                 <div className="absolute right-0 mt-1.5 w-52 rounded-xl bg-zinc-900 border border-zinc-800 p-1 shadow-2xl z-50 animate-in fade-in zoom-in-95 duration-100">
                   <div className="px-2.5 py-1 text-[10px] font-semibold text-zinc-400 uppercase tracking-wider">
-                    Status
+                    Campus Status
                   </div>
                   <div className="space-y-0.5">
                     {CAMPUS_STATUS_OPTIONS.map((opt) => (
@@ -142,13 +157,13 @@ export default function CampusHeader({
                         onClick={() => handleSelectStatus(opt.label)}
                         className={`w-full flex items-center justify-between px-2.5 py-1.5 rounded-lg text-xs text-left transition-colors ${
                           profile.status === opt.label
-                            ? "bg-zinc-800 text-zinc-100 font-medium"
-                            : "text-zinc-300 hover:bg-zinc-800/60"
+                            ? "bg-zinc-800 text-orange-400 font-medium border border-orange-500/30"
+                            : "text-zinc-300 hover:text-orange-400 hover:bg-orange-500/10"
                         }`}
                       >
                         <span className="truncate">{opt.label}</span>
                         {profile.status === opt.label && (
-                          <Check className="w-3 h-3 text-emerald-400" />
+                          <Check className="w-3 h-3 text-orange-400" />
                         )}
                       </button>
                     ))}
@@ -159,12 +174,26 @@ export default function CampusHeader({
           )}
         </div>
 
-        {/* Right: User Profile Chip & Log Out */}
+        {/* Right: Theme Toggle, User Profile Chip & Log Out */}
         <div className="flex items-center gap-2">
+          {/* Light / Dark Mode Toggle Button */}
+          <button
+            onClick={toggleTheme}
+            title={isDark ? "Switch to Light Mode" : "Switch to Dark Mode"}
+            aria-label="Toggle light or dark mode"
+            className="p-1.5 sm:p-2 rounded-lg bg-zinc-900 hover:bg-zinc-800 text-zinc-400 hover:text-orange-400 border border-zinc-800 hover:border-orange-500/40 transition-all flex items-center justify-center active:scale-95 shadow-sm"
+          >
+            {isDark ? (
+              <Sun className="w-4 h-4 text-amber-400 transition-transform duration-200 hover:rotate-45" />
+            ) : (
+              <Moon className="w-4 h-4 text-orange-500 transition-transform duration-200 hover:-rotate-12" />
+            )}
+          </button>
+
           {profile ? (
             <button
               onClick={onOpenProfileModal}
-              className="flex items-center gap-2 p-1 sm:px-2.5 sm:py-1 rounded-lg bg-zinc-900 hover:bg-zinc-800 border border-zinc-800 hover:border-zinc-700 transition-colors text-left group"
+              className="flex items-center gap-2 p-1 sm:px-2.5 sm:py-1 rounded-lg bg-zinc-900 hover:bg-zinc-800/80 border border-zinc-800 hover:border-orange-500/40 transition-colors text-left group"
             >
               <StudentAvatar
                 avatar={profile.avatar}
@@ -173,22 +202,22 @@ export default function CampusHeader({
                 showOnlineBadge={false}
               />
               <div className="hidden sm:block text-left">
-                <div className="text-xs font-semibold text-zinc-200 leading-tight">
+                <div className="text-xs font-semibold text-zinc-200 group-hover:text-orange-400 transition-colors leading-tight">
                   <span className="truncate max-w-[100px]">{profile.full_name}</span>
                 </div>
                 <div className="text-[10px] text-zinc-400 truncate max-w-[110px]">
                   {profile.batch.split(" ")[0]} • {profile.department.split(" ")[0]}
                 </div>
               </div>
-              <Sliders className="w-3 h-3 text-zinc-500 hidden sm:block group-hover:text-zinc-300 transition-colors" />
+              <Sliders className="w-3 h-3 text-zinc-500 hidden sm:block group-hover:text-orange-400 transition-colors" />
             </button>
           ) : (
             <button
               onClick={onOpenProfileModal}
-              className="px-3 py-1.5 rounded-lg text-xs font-medium bg-zinc-100 text-zinc-900 hover:bg-white active:scale-95 transition-all flex items-center gap-1.5 shadow-sm"
+              className="px-3 py-1.5 rounded-lg text-xs font-semibold bg-orange-600 hover:bg-zinc-800 text-white active:scale-95 transition-all flex items-center gap-1.5 shadow-sm"
             >
               <User className="w-3.5 h-3.5" />
-              Join Campus
+              Join UIU Hub
             </button>
           )}
 
@@ -197,7 +226,7 @@ export default function CampusHeader({
             <button
               onClick={onSignOut}
               title="Log Out / Switch Account"
-              className="p-1.5 sm:px-2.5 sm:py-1.5 rounded-lg bg-zinc-900 hover:bg-zinc-800 text-zinc-400 hover:text-zinc-200 border border-zinc-800 hover:border-zinc-700 transition-colors flex items-center gap-1.5 text-xs active:scale-95"
+              className="p-1.5 sm:px-2.5 sm:py-1.5 rounded-lg bg-zinc-900 hover:bg-zinc-800 text-zinc-400 hover:text-rose-400 border border-zinc-800 hover:border-rose-500/30 transition-colors flex items-center gap-1.5 text-xs active:scale-95"
             >
               <LogOut className="w-3.5 h-3.5" />
               <span className="hidden lg:inline font-medium text-[11px]">Log Out</span>

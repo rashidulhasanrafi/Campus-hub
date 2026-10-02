@@ -198,9 +198,9 @@ export default function GroupHangout({
 
               <button
                 onClick={() => setCreateModalOpen(true)}
-                className="w-full sm:w-auto px-4 py-2.5 rounded-xl bg-zinc-100 hover:bg-white text-zinc-950 font-semibold text-xs sm:text-sm shadow-sm active:scale-95 transition-all flex items-center justify-center gap-2 shrink-0"
+                className="w-full sm:w-auto px-4 py-2.5 rounded-xl bg-orange-600 hover:bg-zinc-800 text-white font-semibold text-xs sm:text-sm shadow-sm active:scale-95 transition-all flex items-center justify-center gap-2 shrink-0"
               >
-                <Plus className="w-4 h-4" />
+                <Plus className="w-4 h-4 text-white" />
                 Create Custom Room
               </button>
             </div>
@@ -212,21 +212,24 @@ export default function GroupHangout({
             </div>
           )}
 
-          {/* Tag Filter Pills */}
+          {/* Tag Filter Pills (Options turn Orange on hover; active turns dark gray on hover) */}
           <div className="flex items-center gap-1.5 overflow-x-auto pb-1 scrollbar-none">
-            {["All", "Casual", "Academic", "Focus", "Music", "Gaming", "Mentorship"].map((tag) => (
-              <button
-                key={tag}
-                onClick={() => setSelectedTag(tag)}
-                className={`px-3 py-1.5 rounded-lg text-xs font-medium whitespace-nowrap transition-colors ${
-                  selectedTag === tag
-                    ? "bg-zinc-800 text-zinc-100 border border-zinc-700"
-                    : "bg-zinc-900/80 text-zinc-400 hover:text-zinc-200 border border-zinc-800/80 hover:border-zinc-700"
-                }`}
-              >
-                {tag}
-              </button>
-            ))}
+            {["All", "Casual", "Academic", "Focus", "Music", "Gaming", "Mentorship"].map((tag) => {
+              const isSelected = selectedTag === tag;
+              return (
+                <button
+                  key={tag}
+                  onClick={() => setSelectedTag(tag)}
+                  className={`px-3 py-1.5 rounded-lg text-xs font-medium whitespace-nowrap transition-colors ${
+                    isSelected
+                      ? "bg-orange-600 hover:bg-zinc-800 text-white border border-orange-600 shadow-sm"
+                      : "bg-zinc-900/80 text-zinc-400 hover:text-orange-400 hover:border-orange-500/40 border border-zinc-800/80"
+                  }`}
+                >
+                  {tag}
+                </button>
+              );
+            })}
           </div>
 
           {/* Rooms Grid */}
@@ -234,7 +237,7 @@ export default function GroupHangout({
             {filteredRooms.map((room) => (
               <div
                 key={room.id}
-                className="rounded-xl p-5 border border-zinc-800/80 bg-zinc-900/40 hover:border-zinc-700/80 transition-colors flex flex-col justify-between group"
+                className="rounded-xl p-5 border border-zinc-800/80 bg-zinc-900/40 hover:border-orange-500/40 transition-colors flex flex-col justify-between group"
               >
                 <div>
                   <div className="flex items-start justify-between gap-3 mb-3">
@@ -247,7 +250,7 @@ export default function GroupHangout({
                     </span>
                   </div>
 
-                  <h3 className="text-sm font-semibold text-zinc-100 group-hover:text-white transition-colors">
+                  <h3 className="text-sm font-semibold text-zinc-100 group-hover:text-orange-400 transition-colors">
                     {room.name}
                   </h3>
                   <p className="text-xs text-zinc-400 mt-1 line-clamp-2">
@@ -260,11 +263,12 @@ export default function GroupHangout({
                     {room.tag}
                   </span>
 
+                  {/* Join Hangout: Orange by default, turns dark gray on hover */}
                   <button
                     onClick={() => handleJoinRoom(room)}
-                    className="px-3.5 py-1.5 rounded-lg bg-zinc-100 hover:bg-white text-zinc-950 text-xs font-semibold transition-colors shadow-sm flex items-center gap-1.5 active:scale-95"
+                    className="px-3.5 py-1.5 rounded-lg bg-orange-600 hover:bg-zinc-800 text-white text-xs font-semibold transition-all shadow-sm flex items-center gap-1.5 active:scale-95"
                   >
-                    <Video className="w-3.5 h-3.5 text-zinc-900" />
+                    <Video className="w-3.5 h-3.5 text-white" />
                     Join Hangout
                   </button>
                 </div>
@@ -356,7 +360,7 @@ export default function GroupHangout({
 
               <button
                 type="submit"
-                className="w-full py-2.5 rounded-lg bg-zinc-100 hover:bg-white text-zinc-950 font-semibold text-xs shadow-sm transition-colors"
+                className="w-full py-2.5 rounded-lg bg-orange-600 hover:bg-zinc-800 text-white font-semibold text-xs shadow-sm transition-all active:scale-[0.98]"
               >
                 Launch Room & Join
               </button>
