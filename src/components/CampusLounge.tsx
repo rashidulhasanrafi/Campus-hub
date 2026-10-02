@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useState, useEffect } from "react";
+import React, { useState } from "react";
 import {
   UserProfile,
   DirectCallInvite,
@@ -9,6 +9,7 @@ import {
   CAMPUS_STATUS_OPTIONS,
   supabase,
 } from "@/lib/supabase";
+import StudentAvatar from "@/components/StudentAvatar";
 import {
   Search,
   MessageCircle,
@@ -19,9 +20,8 @@ import {
   Send,
   Users,
   Radio,
-  Flame,
   Coffee,
-  BookOpen,
+  Check,
 } from "lucide-react";
 import confetti from "canvas-confetti";
 
@@ -69,13 +69,12 @@ export default function CampusLounge({
   });
 
   const handleSayHi = (targetStudent: UserProfile) => {
-    // Fire festive micro-confetti
     try {
       confetti({
-        particleCount: 25,
-        spread: 45,
+        particleCount: 20,
+        spread: 40,
         origin: { y: 0.7 },
-        colors: ["#6366f1", "#06b6d4", "#10b981", "#f59e0b"],
+        colors: ["#10b981", "#38bdf8", "#818cf8"],
       });
     } catch {}
 
@@ -84,7 +83,6 @@ export default function CampusLounge({
       avatar: targetStudent.avatar,
     });
 
-    // Broadcast across Supabase Realtime channel
     try {
       const channel = supabase.channel("campus-lounge");
       channel.send({
@@ -99,7 +97,7 @@ export default function CampusLounge({
 
     setTimeout(() => {
       setSayHiToast(null);
-    }, 3500);
+    }, 3200);
   };
 
   const handlePostShoutout = (e: React.FormEvent) => {
@@ -111,7 +109,9 @@ export default function CampusLounge({
       userId: currentProfile?.id || "anon",
       userName: currentProfile?.full_name || "Campus Student",
       userDepartment: currentProfile?.department || "General",
-      userAvatar: currentProfile?.avatar || "⚡",
+      userAvatar:
+        currentProfile?.avatar ||
+        "https://images.unsplash.com/photo-1534528741775-53994a69daeb?w=150&auto=format&fit=crop&q=80",
       content: newPostContent.trim(),
       tag: newPostTag,
       likes: 1,
@@ -121,7 +121,6 @@ export default function CampusLounge({
     setShoutouts([newPost, ...shoutouts]);
     setNewPostContent("");
 
-    // Broadcast on Supabase channel
     try {
       const channel = supabase.channel("campus-lounge");
       channel.send({
@@ -139,77 +138,79 @@ export default function CampusLounge({
   };
 
   return (
-    <div className="w-full max-w-5xl mx-auto px-4 sm:px-6 py-4 pb-28 md:pb-12 space-y-6">
+    <div className="w-full max-w-6xl mx-auto px-4 sm:px-6 py-5 pb-28 md:pb-12 space-y-5">
       {/* Toast notification for 'Say Hi' */}
       {sayHiToast && (
-        <div className="fixed top-20 left-1/2 -translate-x-1/2 z-50 flex items-center gap-2.5 px-4 py-2.5 rounded-2xl glass-dock border border-cyan-400/40 text-xs font-semibold text-white shadow-2xl animate-in fade-in slide-in-from-top-4 duration-200">
-          <span className="text-base">{sayHiToast.avatar}</span>
+        <div className="fixed top-16 left-1/2 -translate-x-1/2 z-50 flex items-center gap-2.5 px-3.5 py-2 rounded-xl bg-zinc-900 border border-zinc-700/80 text-xs font-medium text-zinc-100 shadow-2xl animate-in fade-in slide-in-from-top-3 duration-150">
+          <StudentAvatar
+            avatar={sayHiToast.avatar}
+            name={sayHiToast.toName}
+            size="sm"
+            showOnlineBadge={false}
+          />
           <span>
-            You waved & said Hi to <span className="text-cyan-400">{sayHiToast.toName}</span>! 👋
+            You waved & said Hi to <span className="text-zinc-100 font-semibold">{sayHiToast.toName}</span> 👋
           </span>
         </div>
       )}
 
-      {/* Hero Banner with Instant Match CTA */}
-      <div className="relative overflow-hidden rounded-3xl p-6 sm:p-8 bg-gradient-to-r from-indigo-900/60 via-purple-900/40 to-slate-900/80 border border-indigo-500/20 shadow-2xl">
-        <div className="absolute -right-12 -top-12 w-48 h-48 bg-indigo-500/20 rounded-full blur-3xl pointer-events-none" />
-        <div className="absolute right-32 -bottom-12 w-40 h-40 bg-cyan-500/15 rounded-full blur-2xl pointer-events-none" />
-
-        <div className="relative z-10 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4">
-          <div className="space-y-1.5 max-w-lg">
-            <div className="inline-flex items-center gap-2 px-3 py-1 rounded-full bg-indigo-500/20 text-indigo-300 text-xs font-semibold border border-indigo-500/30">
-              <Radio className="w-3.5 h-3.5 text-cyan-400 animate-pulse" />
+      {/* Hero Banner with Instant Match CTA - Linear / Discord sleek lounge banner */}
+      <div className="relative overflow-hidden rounded-2xl p-6 sm:p-7 bg-zinc-900/60 border border-zinc-800/80 backdrop-blur-md shadow-sm">
+        <div className="relative z-10 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-5">
+          <div className="space-y-1.5 max-w-xl">
+            <div className="inline-flex items-center gap-2 px-2.5 py-0.5 rounded-md bg-zinc-800/80 text-zinc-300 text-xs font-medium border border-zinc-700/60">
+              <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-pulse" />
               Campus Social Frequency
             </div>
-            <h2 className="text-xl sm:text-2xl font-black text-white tracking-tight">
+            <h2 className="text-lg sm:text-xl font-bold text-zinc-100 tracking-tight">
               Connect With Fellow Students in Real-Time
             </h2>
-            <p className="text-xs sm:text-sm text-slate-300">
+            <p className="text-xs sm:text-sm text-zinc-400 leading-relaxed">
               Jump into an anonymous 1-on-1 video match or meet peers at the library, canteen, and project rooms.
             </p>
           </div>
 
-          <div className="flex flex-wrap items-center gap-2.5 w-full sm:w-auto">
+          <div className="flex flex-wrap items-center gap-2.5 w-full sm:w-auto shrink-0">
             <button
               onClick={onOpen1on1Match}
-              className="flex-1 sm:flex-initial px-5 py-3 rounded-2xl bg-gradient-to-r from-rose-500 via-purple-600 to-indigo-600 text-white font-bold text-xs sm:text-sm shadow-xl shadow-purple-600/30 hover:opacity-95 active:scale-95 transition-all flex items-center justify-center gap-2"
+              className="w-full sm:w-auto px-4 py-2.5 rounded-xl bg-zinc-100 hover:bg-white text-zinc-950 font-semibold text-xs sm:text-sm shadow-sm active:scale-95 transition-all flex items-center justify-center gap-2"
             >
-              <Sparkles className="w-4 h-4 text-cyan-300 animate-spin" />
+              <Sparkles className="w-3.5 h-3.5 text-zinc-900" />
               1-on-1 Random Match
             </button>
           </div>
         </div>
       </div>
 
-      {/* Tabs: Online Students vs Campus Bulletin */}
-      <div className="flex items-center justify-between gap-2 border-b border-slate-800 pb-3">
-        <div className="flex items-center gap-2">
+      {/* Segmented Control Tabs: Online Students vs Campus Bulletin */}
+      <div className="flex items-center justify-between gap-3 border-b border-zinc-800/80 pb-3">
+        <div className="flex items-center gap-1.5 p-1 bg-zinc-900/90 rounded-xl border border-zinc-800">
           <button
             onClick={() => setActiveTab("students")}
-            className={`flex items-center gap-2 px-4 py-2 rounded-2xl text-xs font-bold transition-all ${
+            className={`flex items-center gap-2 px-3.5 py-1.5 rounded-lg text-xs font-medium transition-colors ${
               activeTab === "students"
-                ? "bg-indigo-600 text-white shadow-lg shadow-indigo-600/25"
-                : "text-slate-400 hover:text-white hover:bg-white/5"
+                ? "bg-zinc-800 text-zinc-100 shadow-sm"
+                : "text-zinc-400 hover:text-zinc-200"
             }`}
           >
-            <Users className="w-4 h-4" />
-            Online Students
-            <span className="px-1.5 py-0.5 rounded-full text-[10px] bg-indigo-950 text-indigo-300 border border-indigo-500/30">
+            <Users className="w-3.5 h-3.5" />
+            <span>Online Students</span>
+            <span className="px-1.5 py-0.2 rounded-md text-[10px] font-semibold bg-zinc-900 text-zinc-300 border border-zinc-700/60">
               {filteredStudents.length}
             </span>
           </button>
 
           <button
             onClick={() => setActiveTab("feed")}
-            className={`flex items-center gap-2 px-4 py-2 rounded-2xl text-xs font-bold transition-all ${
+            className={`flex items-center gap-2 px-3.5 py-1.5 rounded-lg text-xs font-medium transition-colors ${
               activeTab === "feed"
-                ? "bg-indigo-600 text-white shadow-lg shadow-indigo-600/25"
-                : "text-slate-400 hover:text-white hover:bg-white/5"
+                ? "bg-zinc-800 text-zinc-100 shadow-sm"
+                : "text-zinc-400 hover:text-zinc-200"
             }`}
           >
-            <MessageCircle className="w-4 h-4" />
-            Campus Bulletin
-            <span className="px-1.5 py-0.5 rounded-full text-[10px] bg-indigo-950 text-indigo-300 border border-indigo-500/30">
+            <MessageCircle className="w-3.5 h-3.5" />
+            <span>Campus Bulletin</span>
+            <span className="px-1.5 py-0.2 rounded-md text-[10px] font-semibold bg-zinc-900 text-zinc-300 border border-zinc-700/60">
               {shoutouts.length}
             </span>
           </button>
@@ -219,15 +220,15 @@ export default function CampusLounge({
       {activeTab === "students" ? (
         <div className="space-y-4">
           {/* Search & Filter Bar */}
-          <div className="flex flex-col sm:flex-row items-stretch sm:items-center gap-3">
+          <div className="flex flex-col sm:flex-row items-stretch sm:items-center gap-2.5">
             <div className="relative flex-1">
-              <Search className="absolute left-3.5 top-3 w-4 h-4 text-slate-500" />
+              <Search className="absolute left-3.5 top-2.5 w-4 h-4 text-zinc-500" />
               <input
                 type="text"
                 value={searchQuery}
                 onChange={(e) => setSearchQuery(e.target.value)}
                 placeholder="Search students by name, department, or keyword..."
-                className="w-full pl-10 pr-4 py-2.5 rounded-2xl bg-slate-900/80 border border-slate-800 text-xs text-white placeholder-slate-500 focus:outline-none focus:border-indigo-500 transition-colors"
+                className="w-full pl-10 pr-4 py-2 rounded-xl bg-zinc-900/90 border border-zinc-800 text-xs text-zinc-100 placeholder-zinc-500 focus:outline-none focus:border-zinc-600 transition-colors"
               />
             </div>
 
@@ -238,10 +239,10 @@ export default function CampusLounge({
                   <button
                     key={filter}
                     onClick={() => setSelectedFilter(filter)}
-                    className={`px-3 py-1.5 rounded-xl text-[11px] font-semibold whitespace-nowrap transition-all ${
+                    className={`px-3 py-1.5 rounded-lg text-xs font-medium whitespace-nowrap transition-colors ${
                       selectedFilter === filter
-                        ? "bg-cyan-500/20 text-cyan-300 border border-cyan-500/40"
-                        : "bg-slate-900/60 text-slate-400 hover:text-slate-200 border border-slate-800"
+                        ? "bg-zinc-800 text-zinc-100 border border-zinc-700"
+                        : "bg-zinc-900/80 text-zinc-400 hover:text-zinc-200 border border-zinc-800/80 hover:border-zinc-700"
                     }`}
                   >
                     {filter}
@@ -256,57 +257,57 @@ export default function CampusLounge({
             {filteredStudents.map((student) => (
               <div
                 key={student.id}
-                className="group relative rounded-2xl glass-panel p-4 border border-slate-800/80 hover:border-indigo-500/40 transition-all duration-200 hover:shadow-xl hover:shadow-indigo-500/10 flex flex-col justify-between"
+                className="group rounded-xl bg-zinc-900/40 border border-zinc-800/80 hover:border-zinc-700/90 p-4 transition-colors duration-150 flex flex-col justify-between"
               >
                 <div>
-                  <div className="flex items-start justify-between gap-3 mb-2.5">
-                    {/* Avatar & Online Dot */}
-                    <div className="relative shrink-0">
-                      <div className="w-12 h-12 rounded-2xl bg-gradient-to-tr from-indigo-500 to-purple-600 flex items-center justify-center text-xl shadow-md">
-                        {student.avatar}
-                      </div>
-                      <span className="absolute -bottom-0.5 -right-0.5 w-3.5 h-3.5 rounded-full bg-emerald-500 border-2 border-slate-950" />
-                    </div>
+                  <div className="flex items-start justify-between gap-3 mb-3">
+                    {/* High-Resolution Portrait Avatar with Live Green Dot */}
+                    <StudentAvatar
+                      avatar={student.avatar}
+                      name={student.full_name}
+                      size="md"
+                      isOnline={student.is_online !== false}
+                    />
 
                     {/* Status Badge */}
-                    <div className="px-2.5 py-1 rounded-xl text-[11px] font-semibold bg-indigo-950/70 border border-indigo-500/30 text-indigo-200 truncate max-w-[170px]">
+                    <div className="px-2 py-0.5 rounded-md text-[11px] font-medium bg-zinc-800/80 border border-zinc-700/60 text-zinc-300 truncate max-w-[170px]">
                       {student.status}
                     </div>
                   </div>
 
                   {/* Student Details */}
-                  <h3 className="text-sm font-bold text-white group-hover:text-cyan-300 transition-colors truncate">
+                  <h3 className="text-sm font-semibold text-zinc-100 group-hover:text-white transition-colors truncate">
                     {student.full_name}
                   </h3>
-                  <p className="text-[11px] text-slate-400 truncate mt-0.5">
+                  <p className="text-xs text-zinc-400 truncate mt-0.5">
                     {student.department}
                   </p>
-                  <p className="text-[10px] text-indigo-400/80 font-medium">
+                  <p className="text-[11px] text-zinc-500 font-medium mt-0.5">
                     {student.batch}
                   </p>
 
                   {student.bio && (
-                    <p className="text-[11px] text-slate-300 mt-2 line-clamp-2 italic bg-slate-900/40 p-2 rounded-xl border border-slate-800/40">
+                    <p className="text-xs text-zinc-300 mt-2.5 line-clamp-2 italic bg-zinc-900/60 p-2 rounded-lg border border-zinc-800/60">
                       &quot;{student.bio}&quot;
                     </p>
                   )}
                 </div>
 
-                {/* Quick Action Buttons */}
-                <div className="flex items-center gap-2 mt-4 pt-3 border-t border-slate-800/60">
+                {/* Quick Action Buttons: Sleek Zinc Ghost Button for 'Say Hi', Solid Crisp Button for 'Invite Call' */}
+                <div className="flex items-center gap-2 mt-4 pt-3 border-t border-zinc-800/70">
                   <button
                     onClick={() => handleSayHi(student)}
-                    className="flex-1 py-2 px-3 rounded-xl bg-slate-800/80 hover:bg-slate-700/90 text-slate-200 text-xs font-semibold transition-all flex items-center justify-center gap-1.5 active:scale-95 border border-slate-700/50"
+                    className="flex-1 py-1.5 px-3 rounded-lg bg-zinc-800/80 hover:bg-zinc-800 text-zinc-300 hover:text-zinc-100 text-xs font-medium transition-colors flex items-center justify-center gap-1.5 border border-zinc-700/60 active:scale-95"
                   >
-                    <Hand className="w-3.5 h-3.5 text-amber-400" />
+                    <Hand className="w-3.5 h-3.5 text-zinc-400" />
                     Say Hi
                   </button>
 
                   <button
                     onClick={() => onInviteToCall(student)}
-                    className="flex-1 py-2 px-3 rounded-xl bg-gradient-to-r from-indigo-600 to-cyan-600 hover:opacity-90 text-white text-xs font-semibold transition-all flex items-center justify-center gap-1.5 active:scale-95 shadow-md shadow-indigo-600/25"
+                    className="flex-1 py-1.5 px-3 rounded-lg bg-zinc-100 hover:bg-white text-zinc-950 text-xs font-semibold transition-colors flex items-center justify-center gap-1.5 shadow-sm active:scale-95"
                   >
-                    <Video className="w-3.5 h-3.5 text-cyan-200" />
+                    <Video className="w-3.5 h-3.5 text-zinc-900" />
                     Invite Call
                   </button>
                 </div>
@@ -315,12 +316,12 @@ export default function CampusLounge({
           </div>
 
           {filteredStudents.length === 0 && (
-            <div className="text-center py-12 rounded-3xl glass-panel border border-slate-800 p-8">
-              <Users className="w-10 h-10 text-slate-600 mx-auto mb-3" />
-              <p className="text-sm text-slate-300 font-semibold">
+            <div className="text-center py-12 rounded-xl bg-zinc-900/30 border border-zinc-800/80 p-8">
+              <Users className="w-8 h-8 text-zinc-600 mx-auto mb-2.5" />
+              <p className="text-sm text-zinc-300 font-medium">
                 No campus students found matching &quot;{searchQuery}&quot;
               </p>
-              <p className="text-xs text-slate-500 mt-1">
+              <p className="text-xs text-zinc-500 mt-1">
                 Try a different search keyword or status filter.
               </p>
             </div>
@@ -332,35 +333,38 @@ export default function CampusLounge({
           {/* Create Shoutout Box */}
           <form
             onSubmit={handlePostShoutout}
-            className="rounded-2xl glass-panel p-4 border border-indigo-500/20 space-y-3"
+            className="rounded-xl bg-zinc-900/50 border border-zinc-800/80 p-4 space-y-3"
           >
             <div className="flex items-start gap-3">
-              <div className="w-9 h-9 rounded-xl bg-indigo-600 flex items-center justify-center text-lg shrink-0">
-                {currentProfile?.avatar || "⚡"}
-              </div>
+              <StudentAvatar
+                avatar={currentProfile?.avatar}
+                name={currentProfile?.full_name || "Me"}
+                size="sm"
+                showOnlineBadge={false}
+              />
               <div className="flex-1">
                 <textarea
                   rows={2}
                   value={newPostContent}
                   onChange={(e) => setNewPostContent(e.target.value)}
                   placeholder="Drop a quick campus shoutout, study group request, or canteen meet invite..."
-                  className="w-full bg-slate-900/90 border border-slate-800 rounded-xl p-2.5 text-xs text-white placeholder-slate-500 focus:outline-none focus:border-indigo-500 transition-colors resize-none"
+                  className="w-full bg-zinc-900 border border-zinc-800 rounded-lg p-2.5 text-xs text-zinc-100 placeholder-zinc-500 focus:outline-none focus:border-zinc-600 transition-colors resize-none"
                 />
               </div>
             </div>
 
             <div className="flex items-center justify-between gap-2 pt-1">
               <div className="flex items-center gap-1.5">
-                <span className="text-[10px] text-slate-400 font-medium">Tag:</span>
+                <span className="text-[10px] text-zinc-400 font-medium">Tag:</span>
                 {["Study Jam", "Chit Chat", "Hackathon", "Canteen"].map((tag) => (
                   <button
                     key={tag}
                     type="button"
                     onClick={() => setNewPostTag(tag)}
-                    className={`px-2 py-0.5 rounded-lg text-[10px] font-semibold transition-all ${
+                    className={`px-2 py-0.5 rounded-md text-[10px] font-medium transition-colors ${
                       newPostTag === tag
-                        ? "bg-indigo-600 text-white"
-                        : "bg-slate-900 text-slate-400 hover:text-white"
+                        ? "bg-zinc-800 text-zinc-100 border border-zinc-700"
+                        : "bg-zinc-900 text-zinc-400 hover:text-zinc-200 border border-zinc-800"
                     }`}
                   >
                     {tag}
@@ -371,7 +375,7 @@ export default function CampusLounge({
               <button
                 type="submit"
                 disabled={!newPostContent.trim()}
-                className="px-4 py-1.5 rounded-xl bg-gradient-to-r from-indigo-600 to-cyan-500 text-white text-xs font-semibold shadow-md shadow-indigo-600/30 hover:opacity-90 disabled:opacity-40 disabled:cursor-not-allowed transition-all flex items-center gap-1.5"
+                className="px-3.5 py-1.5 rounded-lg bg-zinc-100 hover:bg-white text-zinc-950 text-xs font-semibold shadow-sm hover:opacity-90 disabled:opacity-40 disabled:cursor-not-allowed transition-all flex items-center gap-1.5"
               >
                 <Send className="w-3.5 h-3.5" />
                 Post
@@ -384,34 +388,37 @@ export default function CampusLounge({
             {shoutouts.map((post) => (
               <div
                 key={post.id}
-                className="rounded-2xl glass-panel p-4 border border-slate-800 hover:border-slate-700 transition-all space-y-2.5"
+                className="rounded-xl bg-zinc-900/40 border border-zinc-800/80 hover:border-zinc-700/80 transition-colors p-4 space-y-2.5"
               >
                 <div className="flex items-center justify-between gap-3">
                   <div className="flex items-center gap-2.5">
-                    <div className="w-8 h-8 rounded-xl bg-slate-800 flex items-center justify-center text-base">
-                      {post.userAvatar}
-                    </div>
+                    <StudentAvatar
+                      avatar={post.userAvatar}
+                      name={post.userName}
+                      size="sm"
+                      showOnlineBadge={false}
+                    />
                     <div>
-                      <div className="text-xs font-bold text-white flex items-center gap-2">
+                      <div className="text-xs font-semibold text-zinc-200 flex items-center gap-2">
                         <span>{post.userName}</span>
-                        <span className="px-2 py-0.5 rounded-md text-[9px] font-bold bg-indigo-500/10 text-indigo-300 border border-indigo-500/20">
+                        <span className="px-1.5 py-0.2 rounded-md text-[9px] font-semibold bg-zinc-800 text-zinc-300 border border-zinc-700/60">
                           {post.tag}
                         </span>
                       </div>
-                      <p className="text-[10px] text-slate-400">{post.userDepartment}</p>
+                      <p className="text-[10px] text-zinc-400">{post.userDepartment}</p>
                     </div>
                   </div>
-                  <span className="text-[10px] text-slate-500">{post.timeAgo}</span>
+                  <span className="text-[10px] text-zinc-500">{post.timeAgo}</span>
                 </div>
 
-                <p className="text-xs text-slate-200 leading-relaxed pl-10">
+                <p className="text-xs text-zinc-300 leading-relaxed pl-10">
                   {post.content}
                 </p>
 
                 <div className="flex items-center justify-between pl-10 pt-1">
                   <button
                     onClick={() => handleLikePost(post.id)}
-                    className="flex items-center gap-1.5 text-xs text-slate-400 hover:text-rose-400 transition-colors"
+                    className="flex items-center gap-1.5 text-xs text-zinc-400 hover:text-rose-400 transition-colors"
                   >
                     <Heart className="w-3.5 h-3.5 text-rose-500 fill-rose-500/20 hover:fill-rose-500" />
                     <span className="text-[11px] font-medium">{post.likes}</span>
@@ -419,7 +426,7 @@ export default function CampusLounge({
 
                   <button
                     onClick={onOpen1on1Match}
-                    className="text-[11px] font-semibold text-cyan-400 hover:text-cyan-300 flex items-center gap-1"
+                    className="text-xs font-medium text-zinc-400 hover:text-zinc-200 flex items-center gap-1"
                   >
                     Connect Now →
                   </button>

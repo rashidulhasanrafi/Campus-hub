@@ -16,6 +16,7 @@ import {
   HangoutRoomConfig,
   fetchLiveKitToken,
 } from "@/lib/livekit";
+import StudentAvatar from "@/components/StudentAvatar";
 import {
   Users,
   Video,
@@ -24,17 +25,8 @@ import {
   MicOff,
   ScreenShare,
   PhoneOff,
-  Sparkles,
   Plus,
-  MessageSquare,
-  Send,
   X,
-  Smile,
-  Shield,
-  Radio,
-  Flame,
-  Coffee,
-  BookOpen,
 } from "lucide-react";
 import confetti from "canvas-confetti";
 
@@ -86,8 +78,8 @@ export default function GroupHangout({
 
       try {
         confetti({
-          particleCount: 25,
-          spread: 45,
+          particleCount: 20,
+          spread: 40,
           origin: { y: 0.6 },
         });
       } catch {}
@@ -116,7 +108,7 @@ export default function GroupHangout({
       tag: newRoomTag,
       maxParticipants: 8,
       initialParticipants: 1,
-      gradient: "from-indigo-500/20 to-cyan-500/10 border-indigo-500/30",
+      gradient: "from-zinc-900 to-zinc-900/60 border-zinc-800",
     };
 
     setRooms([newRoom, ...rooms]);
@@ -127,23 +119,23 @@ export default function GroupHangout({
   };
 
   return (
-    <div className="w-full max-w-7xl mx-auto px-4 sm:px-6 py-4 pb-28 md:pb-12 space-y-6">
+    <div className="w-full max-w-6xl mx-auto px-4 sm:px-6 py-5 pb-28 md:pb-12 space-y-5">
       {/* If connected to an active room */}
       {activeRoom && livekitToken ? (
         <div className="space-y-3">
           {/* Room Header bar */}
-          <div className="flex items-center justify-between p-3 sm:p-4 rounded-2xl glass-dock border border-slate-700/80">
+          <div className="flex items-center justify-between p-3 sm:p-4 rounded-xl bg-zinc-900/90 border border-zinc-800">
             <div className="flex items-center gap-3">
               <span className="text-2xl">{activeRoom.emoji}</span>
               <div>
-                <h2 className="text-sm sm:text-base font-bold text-white flex items-center gap-2">
+                <h2 className="text-sm sm:text-base font-bold text-zinc-100 flex items-center gap-2">
                   <span>{activeRoom.name}</span>
-                  <span className="px-2 py-0.5 rounded-full text-[10px] font-bold bg-emerald-500/20 text-emerald-400 border border-emerald-500/30 flex items-center gap-1">
+                  <span className="px-1.5 py-0.2 rounded-md text-[10px] font-semibold bg-emerald-500/10 text-emerald-400 border border-emerald-500/20 flex items-center gap-1">
                     <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-pulse" />
                     LIVE
                   </span>
                 </h2>
-                <p className="text-xs text-slate-400 hidden sm:block truncate max-w-md">
+                <p className="text-xs text-zinc-400 hidden sm:block truncate max-w-md">
                   {activeRoom.topic}
                 </p>
               </div>
@@ -151,7 +143,7 @@ export default function GroupHangout({
 
             <button
               onClick={handleLeaveRoom}
-              className="px-3.5 py-1.5 rounded-xl bg-rose-600/80 hover:bg-rose-500 text-white font-bold text-xs flex items-center gap-1.5 transition-all shadow-md shadow-rose-600/20 active:scale-95"
+              className="px-3 py-1.5 rounded-lg bg-rose-600 hover:bg-rose-500 text-white font-semibold text-xs flex items-center gap-1.5 transition-colors shadow-sm active:scale-95"
             >
               <PhoneOff className="w-3.5 h-3.5" />
               <span>Leave Room</span>
@@ -165,7 +157,7 @@ export default function GroupHangout({
             connect={true}
             video={!isVideoOff}
             audio={!isMuted}
-            className="relative w-full min-h-[550px] md:min-h-[600px] flex flex-col justify-between overflow-hidden rounded-3xl border border-slate-800/80 bg-slate-950 p-2 sm:p-4"
+            className="relative w-full min-h-[520px] md:min-h-[580px] flex flex-col justify-between overflow-hidden rounded-2xl border border-zinc-800/90 bg-zinc-950 p-2 sm:p-3"
           >
             <RoomAudioRenderer />
             <GroupHangoutSession
@@ -187,26 +179,26 @@ export default function GroupHangout({
         </div>
       ) : (
         /* LOBBY VIEW */
-        <div className="space-y-6">
+        <div className="space-y-5">
           {/* Lobby Hero */}
-          <div className="relative overflow-hidden rounded-3xl p-6 sm:p-8 bg-gradient-to-r from-blue-900/60 via-indigo-900/40 to-slate-900/80 border border-blue-500/20 shadow-2xl">
-            <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4">
-              <div className="space-y-1.5 max-w-lg">
-                <div className="inline-flex items-center gap-2 px-3 py-1 rounded-full bg-blue-500/20 text-blue-300 text-xs font-semibold border border-blue-500/30">
-                  <Users className="w-3.5 h-3.5 text-cyan-400" />
+          <div className="relative overflow-hidden rounded-2xl p-6 sm:p-7 bg-zinc-900/60 border border-zinc-800/80 backdrop-blur-md shadow-sm">
+            <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-5">
+              <div className="space-y-1.5 max-w-xl">
+                <div className="inline-flex items-center gap-2 px-2.5 py-0.5 rounded-md bg-zinc-800/80 text-zinc-300 text-xs font-medium border border-zinc-700/60">
+                  <Users className="w-3.5 h-3.5 text-zinc-300" />
                   Campus Hangouts • Up to 8 Peers
                 </div>
-                <h2 className="text-xl sm:text-2xl font-black text-white tracking-tight">
+                <h2 className="text-lg sm:text-xl font-bold text-zinc-100 tracking-tight">
                   Themed Campus Video Rooms
                 </h2>
-                <p className="text-xs sm:text-sm text-slate-300">
-                  Hop into open multi-seat rooms. Turn cameras on to study together, play chess, jam songs, or talk university politics.
+                <p className="text-xs sm:text-sm text-zinc-400 leading-relaxed">
+                  Hop into open multi-seat rooms. Turn cameras on to study together, play chess, jam songs, or talk university life.
                 </p>
               </div>
 
               <button
                 onClick={() => setCreateModalOpen(true)}
-                className="px-5 py-3 rounded-2xl bg-gradient-to-r from-indigo-600 to-cyan-500 text-white font-bold text-xs sm:text-sm shadow-xl shadow-indigo-600/30 hover:opacity-90 active:scale-95 transition-all flex items-center gap-2"
+                className="w-full sm:w-auto px-4 py-2.5 rounded-xl bg-zinc-100 hover:bg-white text-zinc-950 font-semibold text-xs sm:text-sm shadow-sm active:scale-95 transition-all flex items-center justify-center gap-2 shrink-0"
               >
                 <Plus className="w-4 h-4" />
                 Create Custom Room
@@ -215,21 +207,21 @@ export default function GroupHangout({
           </div>
 
           {errorMsg && (
-            <div className="p-3 rounded-2xl bg-rose-500/10 border border-rose-500/30 text-xs text-rose-300">
+            <div className="p-2.5 rounded-xl bg-rose-500/10 border border-rose-500/20 text-xs text-rose-400">
               {errorMsg}
             </div>
           )}
 
           {/* Tag Filter Pills */}
-          <div className="flex items-center gap-2 overflow-x-auto pb-1 scrollbar-none">
+          <div className="flex items-center gap-1.5 overflow-x-auto pb-1 scrollbar-none">
             {["All", "Casual", "Academic", "Focus", "Music", "Gaming", "Mentorship"].map((tag) => (
               <button
                 key={tag}
                 onClick={() => setSelectedTag(tag)}
-                className={`px-4 py-2 rounded-2xl text-xs font-bold whitespace-nowrap transition-all ${
+                className={`px-3 py-1.5 rounded-lg text-xs font-medium whitespace-nowrap transition-colors ${
                   selectedTag === tag
-                    ? "bg-indigo-600 text-white shadow-lg shadow-indigo-600/25"
-                    : "bg-slate-900/80 text-slate-400 hover:text-white border border-slate-800"
+                    ? "bg-zinc-800 text-zinc-100 border border-zinc-700"
+                    : "bg-zinc-900/80 text-zinc-400 hover:text-zinc-200 border border-zinc-800/80 hover:border-zinc-700"
                 }`}
               >
                 {tag}
@@ -238,41 +230,41 @@ export default function GroupHangout({
           </div>
 
           {/* Rooms Grid */}
-          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
+          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3.5">
             {filteredRooms.map((room) => (
               <div
                 key={room.id}
-                className={`relative rounded-3xl p-5 border bg-gradient-to-br ${room.gradient} bg-slate-900/70 hover:shadow-xl hover:shadow-indigo-500/10 transition-all flex flex-col justify-between group`}
+                className="rounded-xl p-5 border border-zinc-800/80 bg-zinc-900/40 hover:border-zinc-700/80 transition-colors flex flex-col justify-between group"
               >
                 <div>
                   <div className="flex items-start justify-between gap-3 mb-3">
-                    <span className="text-3xl p-2 rounded-2xl bg-white/5 border border-white/10 group-hover:scale-110 transition-transform">
+                    <span className="text-2xl p-2 rounded-xl bg-zinc-800/80 border border-zinc-700/60">
                       {room.emoji}
                     </span>
-                    <span className="flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-bold bg-slate-950/80 text-slate-200 border border-white/10">
-                      <span className="w-2 h-2 rounded-full bg-emerald-400 animate-pulse" />
+                    <span className="flex items-center gap-1.5 px-2.5 py-1 rounded-md text-xs font-medium bg-zinc-800/80 text-zinc-300 border border-zinc-700/60">
+                      <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-pulse" />
                       {room.initialParticipants || 2} / {room.maxParticipants} Seats
                     </span>
                   </div>
 
-                  <h3 className="text-base font-bold text-white group-hover:text-cyan-300 transition-colors">
+                  <h3 className="text-sm font-semibold text-zinc-100 group-hover:text-white transition-colors">
                     {room.name}
                   </h3>
-                  <p className="text-xs text-slate-300 mt-1 line-clamp-2">
+                  <p className="text-xs text-zinc-400 mt-1 line-clamp-2">
                     {room.topic}
                   </p>
                 </div>
 
-                <div className="mt-5 pt-3 border-t border-white/10 flex items-center justify-between">
-                  <span className="px-2 py-0.5 rounded-lg text-[10px] font-bold bg-white/5 text-slate-400 uppercase">
+                <div className="mt-4 pt-3 border-t border-zinc-800/70 flex items-center justify-between">
+                  <span className="px-2 py-0.5 rounded-md text-[10px] font-medium bg-zinc-800 text-zinc-400 uppercase">
                     {room.tag}
                   </span>
 
                   <button
                     onClick={() => handleJoinRoom(room)}
-                    className="px-4 py-2 rounded-xl bg-gradient-to-r from-indigo-600 to-cyan-600 text-white text-xs font-bold hover:opacity-90 transition-all shadow-md shadow-indigo-600/20 flex items-center gap-1.5 active:scale-95"
+                    className="px-3.5 py-1.5 rounded-lg bg-zinc-100 hover:bg-white text-zinc-950 text-xs font-semibold transition-colors shadow-sm flex items-center gap-1.5 active:scale-95"
                   >
-                    <Video className="w-3.5 h-3.5" />
+                    <Video className="w-3.5 h-3.5 text-zinc-900" />
                     Join Hangout
                   </button>
                 </div>
@@ -285,22 +277,22 @@ export default function GroupHangout({
       {/* Create Room Modal */}
       {createModalOpen && (
         <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/80 backdrop-blur-md animate-in fade-in duration-150">
-          <div className="relative w-full max-w-md rounded-3xl glass-dock border border-slate-700 p-6 bg-slate-950/95 shadow-2xl">
+          <div className="relative w-full max-w-md rounded-2xl border border-zinc-800 p-6 bg-zinc-950 shadow-2xl">
             <button
               onClick={() => setCreateModalOpen(false)}
-              className="absolute top-5 right-5 p-2 rounded-full text-slate-400 hover:text-white"
+              className="absolute top-5 right-5 p-1.5 rounded-lg text-zinc-400 hover:text-zinc-200"
             >
-              <X className="w-5 h-5" />
+              <X className="w-4 h-4" />
             </button>
 
-            <h3 className="text-lg font-bold text-white mb-4 flex items-center gap-2">
-              <Plus className="w-5 h-5 text-cyan-400" />
+            <h3 className="text-base font-bold text-zinc-100 mb-4 flex items-center gap-2">
+              <Plus className="w-4 h-4 text-emerald-400" />
               Create Campus Hangout Room
             </h3>
 
             <form onSubmit={handleCreateRoom} className="space-y-4">
               <div>
-                <label className="block text-xs font-medium text-slate-300 mb-1">
+                <label className="block text-xs font-medium text-zinc-300 mb-1">
                   Room Name
                 </label>
                 <input
@@ -309,12 +301,12 @@ export default function GroupHangout({
                   value={newRoomTitle}
                   onChange={(e) => setNewRoomTitle(e.target.value)}
                   placeholder="e.g. Midnight Code & Coffee"
-                  className="w-full px-3 py-2 rounded-xl bg-slate-900 border border-slate-700 text-xs text-white placeholder-slate-500 focus:outline-none focus:border-indigo-500"
+                  className="w-full px-3 py-2 rounded-lg bg-zinc-900 border border-zinc-800 text-xs text-zinc-100 placeholder-zinc-500 focus:outline-none focus:border-zinc-600"
                 />
               </div>
 
               <div>
-                <label className="block text-xs font-medium text-slate-300 mb-1">
+                <label className="block text-xs font-medium text-zinc-300 mb-1">
                   Room Topic
                 </label>
                 <input
@@ -322,19 +314,19 @@ export default function GroupHangout({
                   value={newRoomTopic}
                   onChange={(e) => setNewRoomTopic(e.target.value)}
                   placeholder="What is this room about?"
-                  className="w-full px-3 py-2 rounded-xl bg-slate-900 border border-slate-700 text-xs text-white placeholder-slate-500 focus:outline-none focus:border-indigo-500"
+                  className="w-full px-3 py-2 rounded-lg bg-zinc-900 border border-zinc-800 text-xs text-zinc-100 placeholder-zinc-500 focus:outline-none focus:border-zinc-600"
                 />
               </div>
 
               <div className="grid grid-cols-2 gap-3">
                 <div>
-                  <label className="block text-xs font-medium text-slate-300 mb-1">
+                  <label className="block text-xs font-medium text-zinc-300 mb-1">
                     Category Tag
                   </label>
                   <select
                     value={newRoomTag}
                     onChange={(e) => setNewRoomTag(e.target.value)}
-                    className="w-full px-3 py-2 rounded-xl bg-slate-900 border border-slate-700 text-xs text-white focus:outline-none focus:border-indigo-500"
+                    className="w-full px-3 py-2 rounded-lg bg-zinc-900 border border-zinc-800 text-xs text-zinc-100 focus:outline-none focus:border-zinc-600"
                   >
                     {["Casual", "Academic", "Focus", "Music", "Gaming", "Mentorship"].map((t) => (
                       <option key={t} value={t}>
@@ -345,13 +337,13 @@ export default function GroupHangout({
                 </div>
 
                 <div>
-                  <label className="block text-xs font-medium text-slate-300 mb-1">
+                  <label className="block text-xs font-medium text-zinc-300 mb-1">
                     Icon Emoji
                   </label>
                   <select
                     value={newRoomEmoji}
                     onChange={(e) => setNewRoomEmoji(e.target.value)}
-                    className="w-full px-3 py-2 rounded-xl bg-slate-900 border border-slate-700 text-xs text-white focus:outline-none focus:border-indigo-500"
+                    className="w-full px-3 py-2 rounded-lg bg-zinc-900 border border-zinc-800 text-xs text-zinc-100 focus:outline-none focus:border-zinc-600"
                   >
                     {["🍔", "💻", "📚", "🎸", "🎮", "☕", "🧠", "🔥"].map((em) => (
                       <option key={em} value={em}>
@@ -364,7 +356,7 @@ export default function GroupHangout({
 
               <button
                 type="submit"
-                className="w-full py-3 rounded-2xl bg-gradient-to-r from-indigo-600 to-cyan-500 text-white font-bold text-xs shadow-lg shadow-indigo-600/30 hover:opacity-90 transition-all"
+                className="w-full py-2.5 rounded-lg bg-zinc-100 hover:bg-white text-zinc-950 font-semibold text-xs shadow-sm transition-colors"
               >
                 Launch Room & Join
               </button>
@@ -412,7 +404,6 @@ function GroupHangoutSession({
   const { localParticipant } = useLocalParticipant();
   const tracks = useTracks([Track.Source.Camera, Track.Source.ScreenShare]);
 
-  // Quick Emoji Reactions
   const handleEmojiReaction = (emoji: string) => {
     try {
       confetti({
@@ -423,20 +414,19 @@ function GroupHangoutSession({
     } catch {}
   };
 
-  // 2x4 responsive grid classes based on participant count
   const getGridClasses = (count: number) => {
     if (count <= 1) return "grid-cols-1";
     if (count === 2) return "grid-cols-1 sm:grid-cols-2";
     if (count <= 4) return "grid-cols-2";
     if (count <= 6) return "grid-cols-2 sm:grid-cols-3";
-    return "grid-cols-2 sm:grid-cols-4"; // 2x4 dynamic grid for up to 8
+    return "grid-cols-2 sm:grid-cols-4";
   };
 
   return (
-    <div className="relative w-full flex-1 flex flex-col justify-between space-y-4">
+    <div className="relative w-full flex-1 flex flex-col justify-between space-y-3">
       {/* 2x4 Dynamic Video Feeds Grid */}
       <div
-        className={`w-full flex-1 grid gap-2.5 sm:gap-3.5 min-h-[440px] max-h-[640px] overflow-y-auto ${getGridClasses(
+        className={`w-full flex-1 grid gap-2.5 sm:gap-3 min-h-[420px] max-h-[620px] overflow-y-auto ${getGridClasses(
           Math.max(participants.length, 1)
         )}`}
       >
@@ -447,41 +437,50 @@ function GroupHangoutSession({
           return (
             <div
               key={p.identity}
-              className={`relative rounded-2xl overflow-hidden bg-slate-900 border transition-all duration-200 flex items-center justify-center min-h-[160px] sm:min-h-[190px] ${
+              className={`relative rounded-xl overflow-hidden bg-zinc-900 border transition-all duration-150 flex items-center justify-center min-h-[160px] sm:min-h-[180px] ${
                 isSpeaking
-                  ? "border-emerald-400 active-speaker-ring ring-2 ring-emerald-400/50"
-                  : "border-slate-800"
+                  ? "border-emerald-400 ring-1 ring-emerald-400/40"
+                  : "border-zinc-800"
               }`}
             >
               {participantTrack && !participantTrack.publication?.isMuted ? (
                 <VideoTrack
                   trackRef={participantTrack}
-                  className={`w-full h-full object-cover rounded-2xl ${
+                  className={`w-full h-full object-cover rounded-xl ${
                     p.isLocal ? "-scale-x-100" : ""
                   }`}
                 />
               ) : (
                 <div className="flex flex-col items-center justify-center p-3 text-center space-y-1">
-                  <div className="w-12 h-12 rounded-full bg-slate-800 border border-slate-700 flex items-center justify-center text-2xl shadow-inner">
-                    {p.isLocal ? currentProfile?.avatar || "⚡" : "🎓"}
+                  <div className="w-12 h-12 rounded-full bg-zinc-800 border border-zinc-700 flex items-center justify-center text-xl">
+                    {p.isLocal ? (
+                      <StudentAvatar
+                        avatar={currentProfile?.avatar}
+                        name={currentProfile?.full_name}
+                        size="md"
+                        showOnlineBadge={false}
+                      />
+                    ) : (
+                      "🎓"
+                    )}
                   </div>
-                  <p className="text-xs font-bold text-white truncate max-w-[120px]">
+                  <p className="text-xs font-semibold text-zinc-200 truncate max-w-[120px]">
                     {p.name || p.identity}
                   </p>
-                  <p className="text-[10px] text-slate-500">
+                  <p className="text-[10px] text-zinc-500">
                     {p.isLocal && isVideoOff ? "Cam off" : "Connected"}
                   </p>
                 </div>
               )}
 
               {/* Participant Pill */}
-              <div className="absolute bottom-2 left-2 flex items-center gap-1.5 px-2.5 py-1 rounded-xl glass-dock border border-white/10 text-[10px] font-semibold text-white">
+              <div className="absolute bottom-2 left-2 flex items-center gap-1.5 px-2 py-0.5 rounded-md bg-zinc-900/90 backdrop-blur-md border border-zinc-700/80 text-[10px] font-medium text-zinc-200">
                 <span
-                  className={`w-2 h-2 rounded-full ${
-                    isSpeaking ? "bg-emerald-400 animate-pulse" : "bg-slate-400"
+                  className={`w-1.5 h-1.5 rounded-full ${
+                    isSpeaking ? "bg-emerald-400 animate-pulse" : "bg-zinc-500"
                   }`}
                 />
-                <span className="truncate max-w-[100px]">
+                <span className="truncate max-w-[90px]">
                   {p.name || p.identity} {p.isLocal && "(You)"}
                 </span>
                 {!p.isMicrophoneEnabled && <MicOff className="w-3 h-3 text-rose-400 shrink-0" />}
@@ -492,15 +491,15 @@ function GroupHangoutSession({
       </div>
 
       {/* Floating In-Room Media Controls Dock */}
-      <div className="h-16 flex items-center justify-center">
-        <div className="flex items-center gap-2 sm:gap-3 px-4 py-2.5 rounded-3xl glass-dock border border-slate-700/80 shadow-2xl">
+      <div className="h-14 flex items-center justify-center">
+        <div className="flex items-center gap-2 px-3 py-1.5 rounded-xl bg-zinc-900/90 border border-zinc-800/90 backdrop-blur-xl shadow-xl">
           {/* Mic */}
           <button
             onClick={onToggleMic}
-            className={`p-2.5 rounded-2xl border transition-all ${
+            className={`p-2 rounded-lg border transition-colors ${
               isMuted
                 ? "bg-rose-500/20 border-rose-500/40 text-rose-400"
-                : "bg-slate-800 border-slate-700 text-white hover:bg-slate-700"
+                : "bg-zinc-800/80 border-zinc-700/60 text-zinc-200 hover:bg-zinc-800"
             }`}
           >
             {isMuted ? <MicOff className="w-4 h-4" /> : <Mic className="w-4 h-4" />}
@@ -509,10 +508,10 @@ function GroupHangoutSession({
           {/* Video */}
           <button
             onClick={onToggleVideo}
-            className={`p-2.5 rounded-2xl border transition-all ${
+            className={`p-2 rounded-lg border transition-colors ${
               isVideoOff
                 ? "bg-rose-500/20 border-rose-500/40 text-rose-400"
-                : "bg-slate-800 border-slate-700 text-white hover:bg-slate-700"
+                : "bg-zinc-800/80 border-zinc-700/60 text-zinc-200 hover:bg-zinc-800"
             }`}
           >
             {isVideoOff ? <VideoOff className="w-4 h-4" /> : <Video className="w-4 h-4" />}
@@ -521,22 +520,22 @@ function GroupHangoutSession({
           {/* Screen Share */}
           <button
             onClick={onToggleScreenShare}
-            className={`p-2.5 rounded-2xl border transition-all ${
+            className={`p-2 rounded-lg border transition-colors ${
               isScreenSharing
-                ? "bg-cyan-500/20 border-cyan-400 text-cyan-300"
-                : "bg-slate-800 border-slate-700 text-white hover:bg-slate-700"
+                ? "bg-zinc-800 border-zinc-700 text-zinc-100"
+                : "bg-zinc-800/80 border-zinc-700/60 text-zinc-200 hover:bg-zinc-800"
             }`}
           >
             <ScreenShare className="w-4 h-4" />
           </button>
 
           {/* Emoji Reactions Bar */}
-          <div className="hidden sm:flex items-center gap-1 px-1.5 py-1 rounded-2xl bg-slate-900 border border-slate-800">
+          <div className="hidden sm:flex items-center gap-0.5 px-1 py-0.5 rounded-lg bg-zinc-800 border border-zinc-700/60">
             {["🎉", "🔥", "👏", "☕", "❤️"].map((em) => (
               <button
                 key={em}
                 onClick={() => handleEmojiReaction(em)}
-                className="hover:scale-125 active:scale-95 transition-transform p-1 text-sm"
+                className="hover:scale-125 active:scale-95 transition-transform p-1 text-xs"
               >
                 {em}
               </button>
@@ -546,10 +545,10 @@ function GroupHangoutSession({
           {/* Participants Drawer Trigger */}
           <button
             onClick={onToggleParticipants}
-            className={`p-2.5 rounded-2xl border transition-all ${
+            className={`p-2 rounded-lg border transition-colors ${
               showParticipantsList
-                ? "bg-indigo-600/30 border-indigo-400 text-indigo-200"
-                : "bg-slate-800 border-slate-700 text-white hover:bg-slate-700"
+                ? "bg-zinc-800 border-zinc-700 text-zinc-100"
+                : "bg-zinc-800/80 border-zinc-700/60 text-zinc-200 hover:bg-zinc-800"
             }`}
           >
             <Users className="w-4 h-4" />
@@ -558,7 +557,7 @@ function GroupHangoutSession({
           {/* Leave */}
           <button
             onClick={onLeave}
-            className="p-2.5 rounded-2xl bg-rose-600 hover:bg-rose-500 text-white border border-rose-500/40 active:scale-95 transition-all shadow-md shadow-rose-600/30"
+            className="p-2 rounded-lg bg-rose-600 hover:bg-rose-500 text-white border border-rose-500/40 active:scale-95 transition-colors shadow-sm"
           >
             <PhoneOff className="w-4 h-4" />
           </button>
@@ -567,16 +566,16 @@ function GroupHangoutSession({
 
       {/* Participants Drawer */}
       {showParticipantsList && (
-        <div className="absolute top-0 right-0 bottom-20 w-72 glass-dock border border-slate-700 rounded-3xl p-4 z-40 animate-in slide-in-from-right duration-200 flex flex-col justify-between">
+        <div className="absolute top-0 right-0 bottom-16 w-72 bg-zinc-900/95 backdrop-blur-xl border border-zinc-800 rounded-xl p-4 z-40 animate-in slide-in-from-right duration-150 flex flex-col justify-between shadow-2xl">
           <div>
-            <div className="flex items-center justify-between pb-3 border-b border-slate-800">
-              <span className="text-xs font-bold text-white flex items-center gap-2">
-                <Users className="w-4 h-4 text-cyan-400" />
+            <div className="flex items-center justify-between pb-3 border-b border-zinc-800">
+              <span className="text-xs font-semibold text-zinc-200 flex items-center gap-2">
+                <Users className="w-4 h-4 text-zinc-400" />
                 Room Participants ({participants.length}/8)
               </span>
               <button
                 onClick={onToggleParticipants}
-                className="p-1 rounded-lg text-slate-400 hover:text-white"
+                className="p-1 rounded-md text-zinc-400 hover:text-zinc-200"
               >
                 <X className="w-4 h-4" />
               </button>
@@ -586,17 +585,17 @@ function GroupHangoutSession({
               {participants.map((p) => (
                 <div
                   key={p.identity}
-                  className="flex items-center justify-between p-2 rounded-xl bg-slate-900/60 border border-slate-800"
+                  className="flex items-center justify-between p-2 rounded-lg bg-zinc-900 border border-zinc-800"
                 >
                   <div className="flex items-center gap-2">
-                    <div className="w-7 h-7 rounded-lg bg-indigo-600/40 flex items-center justify-center text-xs">
-                      {p.isLocal ? currentProfile?.avatar || "⚡" : "🎓"}
+                    <div className="w-7 h-7 rounded-md bg-zinc-800 flex items-center justify-center text-xs">
+                      {p.isLocal ? "👤" : "🎓"}
                     </div>
                     <div>
-                      <p className="text-xs font-semibold text-white">
+                      <p className="text-xs font-semibold text-zinc-200">
                         {p.name || p.identity}
                       </p>
-                      <p className="text-[10px] text-slate-400">
+                      <p className="text-[10px] text-zinc-400">
                         {p.isLocal ? "Host (You)" : "Campus Student"}
                       </p>
                     </div>
@@ -609,7 +608,7 @@ function GroupHangoutSession({
             </div>
           </div>
 
-          <div className="text-[11px] text-slate-500 text-center">
+          <div className="text-[11px] text-zinc-500 text-center">
             Max 8 participants per hangout room
           </div>
         </div>

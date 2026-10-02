@@ -235,17 +235,14 @@ export default function CampusHubHome() {
   // 1. Initial Auth Loading Splash
   if (authLoading) {
     return (
-      <div className="min-h-screen flex flex-col items-center justify-center bg-[#0b0f19] text-white">
-        <div className="relative flex items-center justify-center w-20 h-20 mb-4">
-          <div className="absolute inset-0 rounded-3xl bg-indigo-600/30 animate-ping" />
-          <div className="w-16 h-16 rounded-2xl bg-gradient-to-tr from-indigo-500 to-cyan-400 p-[2px] shadow-2xl flex items-center justify-center">
-            <div className="w-full h-full bg-slate-950 rounded-[14px] flex items-center justify-center">
-              <Sparkles className="w-8 h-8 text-cyan-400 animate-pulse" />
-            </div>
+      <div className="min-h-screen flex flex-col items-center justify-center bg-[#090a0f] text-zinc-100">
+        <div className="relative flex items-center justify-center w-14 h-14 mb-4">
+          <div className="w-12 h-12 rounded-xl bg-zinc-900 border border-zinc-800 flex items-center justify-center shadow-lg">
+            <Sparkles className="w-6 h-6 text-zinc-300 animate-pulse" />
           </div>
         </div>
-        <div className="inline-flex items-center gap-2 px-3 py-1 rounded-full bg-slate-900 border border-slate-800 text-xs text-slate-300">
-          <Radio className="w-3.5 h-3.5 text-cyan-400 animate-pulse" />
+        <div className="inline-flex items-center gap-2 px-3 py-1.5 rounded-full bg-zinc-900 border border-zinc-800 text-xs text-zinc-400">
+          <Radio className="w-3.5 h-3.5 text-emerald-400 animate-pulse" />
           Verifying Campus Access...
         </div>
       </div>
@@ -274,7 +271,7 @@ export default function CampusHubHome() {
 
   // 4. Authenticated & Profile Ready: Render Campus Hub Application
   return (
-    <div className="min-h-screen flex flex-col bg-[#0b0f19] text-slate-100 selection:bg-indigo-500 selection:text-white">
+    <div className="min-h-screen flex flex-col bg-[#090a0f] text-zinc-100 selection:bg-zinc-800 selection:text-white">
       {/* Global Campus Header with Active Status & Sign Out */}
       <CampusHeader
         profile={profile}
@@ -282,6 +279,11 @@ export default function CampusHubHome() {
         onOpenProfileModal={() => setEditProfileOpen(true)}
         onStatusChange={handleStatusChange}
         onSignOut={handleSignOut}
+        currentTab={currentTab}
+        onTabChange={(tab) => {
+          if (tab !== "match") setDirectRoomToJoin(null);
+          setCurrentTab(tab);
+        }}
       />
 
       {/* Main Workspace View Router */}

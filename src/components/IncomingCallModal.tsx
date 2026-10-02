@@ -2,7 +2,8 @@
 
 import React from "react";
 import { DirectCallInvite } from "@/lib/supabase";
-import { PhoneCall, PhoneOff, Video, Sparkles } from "lucide-react";
+import StudentAvatar from "@/components/StudentAvatar";
+import { PhoneCall, PhoneOff, Video } from "lucide-react";
 
 interface IncomingCallModalProps {
   invite: DirectCallInvite | null;
@@ -18,50 +19,51 @@ export default function IncomingCallModal({
   if (!invite) return null;
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/80 backdrop-blur-md animate-in fade-in zoom-in-95 duration-200">
-      <div className="relative w-full max-w-sm rounded-3xl glass-dock border border-indigo-500/40 p-6 shadow-2xl bg-slate-950/95 text-center overflow-hidden">
-        {/* Animated background glow ring */}
-        <div className="absolute -top-12 -left-12 w-32 h-32 bg-indigo-600/30 rounded-full blur-2xl pointer-events-none" />
-        <div className="absolute -bottom-12 -right-12 w-32 h-32 bg-rose-600/30 rounded-full blur-2xl pointer-events-none" />
-
-        {/* Pulsing Avatar */}
-        <div className="relative mx-auto w-24 h-24 mb-5 flex items-center justify-center">
-          <div className="absolute inset-0 rounded-full bg-emerald-500/20 animate-ping" />
-          <div className="relative w-20 h-20 rounded-full bg-gradient-to-tr from-indigo-600 via-purple-600 to-cyan-400 p-[3px] shadow-xl">
-            <div className="w-full h-full rounded-full bg-slate-900 flex items-center justify-center text-3xl">
-              {invite.fromAvatar}
-            </div>
-          </div>
+    <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/75 backdrop-blur-sm animate-in fade-in duration-150">
+      <div className="relative w-full max-w-sm rounded-2xl border border-zinc-800 bg-zinc-950 p-6 shadow-2xl text-center overflow-hidden">
+        {/* Caller Avatar */}
+        <div className="relative mx-auto mb-4 flex justify-center">
+          <StudentAvatar
+            size="xl"
+            avatar={invite.fromAvatar}
+            name={invite.fromName}
+            isOnline={true}
+          />
         </div>
 
-        <div className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full bg-indigo-500/20 text-indigo-300 text-xs font-semibold mb-2 border border-indigo-500/30">
-          <Video className="w-3.5 h-3.5 text-cyan-400 animate-pulse" />
-          Incoming Campus Video Call
+        {/* Status indicator badge */}
+        <div className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full bg-zinc-900 border border-zinc-800 text-zinc-300 text-xs font-medium mb-3">
+          <span className="relative flex h-2 w-2">
+            <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-emerald-400 opacity-75"></span>
+            <span className="relative inline-flex rounded-full h-2 w-2 bg-emerald-500"></span>
+          </span>
+          <Video className="w-3.5 h-3.5 text-zinc-400 ml-0.5" />
+          <span>Incoming Video Call</span>
         </div>
 
-        <h3 className="text-xl font-bold text-white tracking-tight">
+        <h3 className="text-lg font-semibold text-zinc-100 tracking-tight">
           {invite.fromName}
         </h3>
-        <p className="text-xs text-slate-400 mt-1 mb-6">
+        <p className="text-xs text-zinc-400 mt-1 mb-6">
           {invite.fromDepartment} • {invite.fromBatch}
         </p>
 
         {/* Action Buttons */}
-        <div className="flex items-center justify-center gap-4">
+        <div className="flex items-center justify-center gap-3">
           <button
             onClick={() => onDecline(invite)}
-            className="flex-1 py-3 px-4 rounded-2xl bg-rose-500/20 hover:bg-rose-500/30 border border-rose-500/40 text-rose-300 font-semibold text-xs transition-all flex items-center justify-center gap-2 active:scale-95"
+            className="flex-1 py-2.5 px-4 rounded-xl bg-zinc-900 hover:bg-zinc-800/80 border border-zinc-800 text-zinc-300 hover:text-rose-400 font-medium text-xs transition-colors flex items-center justify-center gap-2 active:scale-95"
           >
-            <PhoneOff className="w-4 h-4 text-rose-400" />
-            Decline
+            <PhoneOff className="w-4 h-4 text-zinc-400" />
+            <span>Decline</span>
           </button>
 
           <button
             onClick={() => onAccept(invite)}
-            className="flex-1 py-3 px-4 rounded-2xl bg-gradient-to-r from-emerald-500 to-teal-500 text-white font-semibold text-xs shadow-lg shadow-emerald-500/30 hover:opacity-95 transition-all flex items-center justify-center gap-2 active:scale-95 animate-pulse"
+            className="flex-1 py-2.5 px-4 rounded-xl bg-white hover:bg-zinc-100 text-zinc-950 font-semibold text-xs shadow-sm transition-all flex items-center justify-center gap-2 active:scale-95"
           >
-            <PhoneCall className="w-4 h-4" />
-            Accept Call
+            <PhoneCall className="w-4 h-4 text-zinc-950" />
+            <span>Accept Call</span>
           </button>
         </div>
       </div>

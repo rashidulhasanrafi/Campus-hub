@@ -1,7 +1,7 @@
 "use client";
 
 import React from "react";
-import { MessageSquare, Video, Users, User, Flame } from "lucide-react";
+import { MessageSquare, Video, Users, User } from "lucide-react";
 
 export type NavTab = "lounge" | "match" | "hangouts" | "profile";
 
@@ -19,7 +19,7 @@ export default function BottomNavigation({
   const tabs = [
     {
       id: "lounge" as NavTab,
-      label: "Lounge & Feed",
+      label: "Lounge",
       icon: MessageSquare,
       badge: null,
     },
@@ -32,7 +32,7 @@ export default function BottomNavigation({
     },
     {
       id: "hangouts" as NavTab,
-      label: "Hangout Rooms",
+      label: "Hangouts",
       icon: Users,
       badge: "8 Max",
     },
@@ -46,7 +46,7 @@ export default function BottomNavigation({
 
   return (
     <div className="fixed bottom-0 left-0 right-0 z-40 md:hidden pb-safe">
-      <div className="mx-3 mb-2 rounded-3xl glass-dock border border-slate-700/60 bg-slate-950/90 shadow-2xl p-1.5 flex items-center justify-around">
+      <div className="mx-3 mb-2 rounded-2xl border border-zinc-800/90 bg-zinc-950/95 backdrop-blur-xl shadow-2xl p-1.5 flex items-center justify-around">
         {tabs.map((tab) => {
           const isActive = currentTab === tab.id;
           const Icon = tab.icon;
@@ -56,26 +56,26 @@ export default function BottomNavigation({
               <button
                 key={tab.id}
                 onClick={() => onTabChange(tab.id)}
-                className="relative flex flex-col items-center justify-center -mt-5 group focus:outline-none"
+                className="relative flex flex-col items-center justify-center -mt-4 group focus:outline-none"
               >
                 <div
-                  className={`w-14 h-14 rounded-2xl flex items-center justify-center shadow-xl transition-all duration-300 ${
+                  className={`w-12 h-12 rounded-xl flex items-center justify-center shadow-md transition-transform duration-200 ${
                     isActive
-                      ? "bg-gradient-to-tr from-rose-500 via-purple-600 to-indigo-500 text-white scale-105 shadow-purple-500/40 ring-4 ring-purple-500/30"
-                      : "bg-gradient-to-tr from-indigo-600 to-violet-600 text-white shadow-indigo-600/30 hover:scale-105"
+                      ? "bg-white text-zinc-950 scale-105 border border-white"
+                      : "bg-zinc-100 hover:bg-white text-zinc-900 active:scale-95"
                   }`}
                 >
-                  <Icon className="w-6 h-6 animate-pulse" />
+                  <Icon className="w-5 h-5 text-zinc-950" />
                 </div>
                 <span
-                  className={`text-[10px] font-bold mt-1 tracking-tight ${
-                    isActive ? "text-indigo-400" : "text-slate-400"
+                  className={`text-[10px] font-semibold mt-1 tracking-tight ${
+                    isActive ? "text-zinc-100" : "text-zinc-400"
                   }`}
                 >
                   {tab.label}
                 </span>
                 {tab.badge && (
-                  <span className="absolute -top-1 right-0 px-1.5 py-0.2 rounded-full text-[9px] font-black bg-rose-500 text-white shadow-md animate-bounce">
+                  <span className="absolute -top-1 right-0 px-1 py-0.2 rounded-md text-[8px] font-bold bg-rose-500 text-white shadow-sm">
                     {tab.badge}
                   </span>
                 )}
@@ -87,16 +87,16 @@ export default function BottomNavigation({
             <button
               key={tab.id}
               onClick={() => onTabChange(tab.id)}
-              className={`flex-1 flex flex-col items-center justify-center py-1.5 px-1 rounded-2xl transition-all duration-200 relative ${
+              className={`flex-1 flex flex-col items-center justify-center py-1.5 px-1 rounded-xl transition-colors duration-150 relative ${
                 isActive
-                  ? "text-indigo-400 font-semibold bg-white/5"
-                  : "text-slate-400 hover:text-slate-200 active:scale-95"
+                  ? "text-zinc-100 font-medium bg-zinc-900/60"
+                  : "text-zinc-400 hover:text-zinc-200 active:scale-95"
               }`}
             >
-              <Icon className={`w-5 h-5 mb-0.5 ${isActive ? "text-indigo-400" : "text-slate-400"}`} />
-              <span className="text-[10px] truncate max-w-[70px]">{tab.label}</span>
+              <Icon className={`w-4 h-4 mb-0.5 ${isActive ? "text-zinc-100" : "text-zinc-400"}`} />
+              <span className="text-[10px] truncate max-w-[65px]">{tab.label}</span>
               {isActive && (
-                <span className="w-1.5 h-1.5 rounded-full bg-indigo-500 mt-0.5" />
+                <span className="w-1 h-1 rounded-full bg-emerald-400 mt-0.5" />
               )}
             </button>
           );

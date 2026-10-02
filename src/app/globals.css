@@ -15,13 +15,14 @@
 
   html,
   body {
-    background-color: #0b0f19;
-    color: #f1f5f9;
+    background-color: #090a0f;
+    color: #f4f4f5;
     overflow-x: hidden;
     min-height: 100%;
     font-family: var(--font-geist-sans), -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
     user-select: none;
     -webkit-user-select: none;
+    letter-spacing: -0.011em;
   }
 }
 
@@ -38,47 +39,53 @@
   margin-bottom: max(env(safe-area-inset-bottom, 0px), 16px);
 }
 
-/* Modern sleek custom scrollbar */
+/* Refined Linear-style subtle scrollbar */
 ::-webkit-scrollbar {
-  width: 6px;
-  height: 6px;
+  width: 5px;
+  height: 5px;
 }
 ::-webkit-scrollbar-track {
-  background: rgba(15, 23, 42, 0.6);
+  background: transparent;
 }
 ::-webkit-scrollbar-thumb {
-  background: rgba(99, 102, 241, 0.4);
+  background: rgba(113, 113, 122, 0.25);
   border-radius: 9999px;
 }
 ::-webkit-scrollbar-thumb:hover {
-  background: rgba(99, 102, 241, 0.8);
+  background: rgba(113, 113, 122, 0.5);
 }
 
-/* Glassmorphism primitives */
+/* Linear & Discord inspired surfaces */
 .glass-panel {
-  background: rgba(15, 23, 42, 0.75);
+  background: rgba(15, 17, 23, 0.65);
   backdrop-filter: blur(16px);
   -webkit-backdrop-filter: blur(16px);
-  border: 1px solid rgba(255, 255, 255, 0.08);
+  border: 1px solid rgba(255, 255, 255, 0.07);
 }
 
 .glass-dock {
-  background: rgba(15, 23, 42, 0.88);
+  background: rgba(12, 14, 20, 0.88);
   backdrop-filter: blur(20px);
   -webkit-backdrop-filter: blur(20px);
-  border: 1px solid rgba(255, 255, 255, 0.12);
-  box-shadow: 0 10px 30px -5px rgba(0, 0, 0, 0.5);
+  border: 1px solid rgba(255, 255, 255, 0.09);
+  box-shadow: 0 16px 36px -8px rgba(0, 0, 0, 0.6), 0 0 0 1px rgba(255, 255, 255, 0.04);
 }
 
-/* Live speaker glow pulse */
+/* Subtle card container */
+.subtle-surface {
+  background: rgba(20, 22, 31, 0.5);
+  border: 1px solid rgba(255, 255, 255, 0.06);
+}
+
+/* Live speaker ring */
 @keyframes speaker-glow {
   0%, 100% {
-    box-shadow: 0 0 15px rgba(16, 185, 129, 0.5), inset 0 0 15px rgba(16, 185, 129, 0.2);
-    border-color: rgba(52, 211, 153, 0.9);
+    box-shadow: 0 0 0 2px rgba(34, 197, 94, 0.7);
+    border-color: rgba(34, 197, 94, 0.9);
   }
   50% {
-    box-shadow: 0 0 25px rgba(16, 185, 129, 0.8), inset 0 0 25px rgba(16, 185, 129, 0.35);
-    border-color: rgba(16, 185, 129, 1);
+    box-shadow: 0 0 0 3px rgba(34, 197, 94, 0.95);
+    border-color: rgba(74, 222, 128, 1);
   }
 }
 
@@ -90,14 +97,14 @@
 @keyframes radar-pulse {
   0% {
     transform: scale(0.6);
-    opacity: 0.8;
+    opacity: 0.7;
   }
   50% {
-    transform: scale(1.4);
-    opacity: 0.3;
+    transform: scale(1.3);
+    opacity: 0.25;
   }
   100% {
-    transform: scale(2.2);
+    transform: scale(2.0);
     opacity: 0;
   }
 }
@@ -119,5 +126,5 @@
   object-fit: cover !important;
   width: 100% !important;
   height: 100% !important;
-  border-radius: 1rem;
+  border-radius: 0.875rem;
 }

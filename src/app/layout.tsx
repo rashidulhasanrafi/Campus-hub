@@ -19,7 +19,7 @@ export const viewport: Viewport = {
   maximumScale: 1,
   userScalable: false,
   viewportFit: "cover",
-  themeColor: "#0b0f19",
+  themeColor: "#090a0f",
 };
 
 export const metadata: Metadata = {
@@ -42,6 +42,7 @@ export default function RootLayout({
   return (
     <html
       lang="en"
+      suppressHydrationWarning
       className={`${geistSans.variable} ${geistMono.variable} dark h-full antialiased`}
     >
       <head>
@@ -49,7 +50,10 @@ export default function RootLayout({
         <meta name="apple-mobile-web-app-capable" content="yes" />
         <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
       </head>
-      <body className="min-h-full flex flex-col bg-[#0b0f19] text-slate-100 select-none">
+      <body
+        suppressHydrationWarning
+        className="min-h-full flex flex-col bg-[#090a0f] text-zinc-100 select-none"
+      >
         {children}
       </body>
     </html>

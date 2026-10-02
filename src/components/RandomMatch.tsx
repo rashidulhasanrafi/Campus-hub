@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useState, useEffect, useRef, useCallback } from "react";
+import React, { useState, useEffect, useRef } from "react";
 import {
   LiveKitRoom,
   RoomAudioRenderer,
@@ -12,6 +12,7 @@ import {
 import { Track } from "livekit-client";
 import { UserProfile } from "@/lib/supabase";
 import { fetchLiveKitToken } from "@/lib/livekit";
+import StudentAvatar from "@/components/StudentAvatar";
 import {
   Video,
   VideoOff,
@@ -26,8 +27,6 @@ import {
   X,
   FlipHorizontal,
   RefreshCw,
-  Volume2,
-  ShieldAlert,
   Flame,
   Coffee,
   Code,
@@ -98,12 +97,12 @@ export default function RandomMatch({
           setMatchState("connected");
           try {
             confetti({
-              particleCount: 30,
-              spread: 60,
+              particleCount: 20,
+              spread: 50,
               origin: { y: 0.6 },
             });
           } catch {}
-        }, 1800);
+        }, 1600);
       } else {
         setMatchState("connected");
       }
@@ -119,9 +118,7 @@ export default function RandomMatch({
     setMatchState("searching");
     setSearchTimer(0);
 
-    // Dynamic pairing room generator based on chosen topic
-    // Pairs students on the same topic bucket
-    const roomBucket = Math.floor(Date.now() / (1000 * 60 * 30)); // 30-min window
+    const roomBucket = Math.floor(Date.now() / (1000 * 60 * 30));
     const randomSalt = Math.floor(Math.random() * 4);
     const newRoomName = `campus_match_${selectedTopic}_${roomBucket}_${randomSalt}`;
 
@@ -130,7 +127,6 @@ export default function RandomMatch({
       setSearchTimer((prev) => prev + 1);
     }, 1000);
 
-    // Connect after 1.5s search
     setTimeout(() => {
       if (searchingIntervalRef.current) clearInterval(searchingIntervalRef.current);
       connectToRoom(newRoomName);
@@ -176,42 +172,40 @@ export default function RandomMatch({
   };
 
   return (
-    <div className="relative w-full h-[calc(100vh-4rem-4rem)] md:h-[calc(100vh-4.5rem)] max-w-6xl mx-auto p-2 sm:p-4 flex flex-col justify-between">
+    <div className="relative w-full h-[calc(100vh-3.5rem-4rem)] md:h-[calc(100vh-3.5rem)] max-w-6xl mx-auto p-2 sm:p-4 flex flex-col justify-between">
       {/* 1. IDLE STATE: TOPIC SELECTOR & START BUTTON */}
       {matchState === "idle" && (
-        <div className="flex-1 flex flex-col items-center justify-center text-center max-w-xl mx-auto px-4 space-y-6 animate-in fade-in zoom-in-95 duration-200">
+        <div className="flex-1 flex flex-col items-center justify-center text-center max-w-xl mx-auto px-4 space-y-6 animate-in fade-in zoom-in-95 duration-150">
           <div className="relative">
-            <div className="w-24 h-24 rounded-3xl bg-gradient-to-tr from-rose-500 via-purple-600 to-indigo-600 p-[2.5px] shadow-2xl shadow-purple-500/30 flex items-center justify-center">
-              <div className="w-full h-full bg-slate-950 rounded-[22px] flex items-center justify-center">
-                <Video className="w-10 h-10 text-cyan-400 animate-pulse" />
-              </div>
+            <div className="w-16 h-16 rounded-2xl bg-zinc-900 border border-zinc-700/80 shadow-md flex items-center justify-center">
+              <Video className="w-7 h-7 text-zinc-100" />
             </div>
-            <span className="absolute -bottom-1 -right-1 px-2.5 py-0.5 rounded-full text-[10px] font-black bg-rose-500 text-white shadow-lg animate-bounce">
-              OMEGLE VIBE
+            <span className="absolute -bottom-1 -right-1 px-2 py-0.2 rounded-md text-[9px] font-bold bg-rose-500/20 text-rose-400 border border-rose-500/30">
+              1-ON-1 LIVE
             </span>
           </div>
 
-          <div className="space-y-2">
-            <h2 className="text-2xl sm:text-3xl font-black text-white tracking-tight">
+          <div className="space-y-1.5">
+            <h2 className="text-xl sm:text-2xl font-bold text-zinc-100 tracking-tight">
               1-on-1 Campus Video Roulette
             </h2>
-            <p className="text-xs sm:text-sm text-slate-300 leading-relaxed">
+            <p className="text-xs sm:text-sm text-zinc-400 leading-relaxed max-w-md mx-auto">
               Match instantly with verified campus students. Skip anytime with one tap. Talk about classes, career, or late-night banter.
             </p>
           </div>
 
           {errorMsg && (
-            <div className="p-3 rounded-2xl bg-rose-500/10 border border-rose-500/30 text-xs text-rose-300">
+            <div className="p-2.5 rounded-xl bg-rose-500/10 border border-rose-500/20 text-xs text-rose-400">
               {errorMsg}
             </div>
           )}
 
           {/* Topic Selector Chips */}
           <div className="w-full space-y-2">
-            <p className="text-xs font-semibold text-slate-400 uppercase tracking-wider">
+            <p className="text-[11px] font-semibold text-zinc-400 uppercase tracking-wider">
               Select Discussion Mood
             </p>
-            <div className="flex flex-wrap items-center justify-center gap-2">
+            <div className="flex flex-wrap items-center justify-center gap-1.5">
               {MATCH_TOPICS.map((topic) => {
                 const Icon = topic.icon;
                 const isSelected = selectedTopic === topic.id;
@@ -219,13 +213,13 @@ export default function RandomMatch({
                   <button
                     key={topic.id}
                     onClick={() => setSelectedTopic(topic.id)}
-                    className={`flex items-center gap-1.5 px-3.5 py-2 rounded-2xl text-xs font-semibold transition-all ${
+                    className={`flex items-center gap-1.5 px-3 py-1.5 rounded-xl text-xs font-medium transition-colors ${
                       isSelected
-                        ? "bg-gradient-to-r from-indigo-600 to-purple-600 text-white shadow-lg shadow-indigo-600/30 ring-2 ring-cyan-400/40 scale-105"
-                        : "bg-slate-900/80 hover:bg-slate-800 text-slate-400 hover:text-white border border-slate-800"
+                        ? "bg-zinc-800 text-zinc-100 border border-zinc-700 shadow-sm"
+                        : "bg-zinc-900/80 hover:bg-zinc-800/60 text-zinc-400 hover:text-zinc-200 border border-zinc-800"
                     }`}
                   >
-                    <Icon className="w-3.5 h-3.5 text-cyan-300" />
+                    <Icon className="w-3.5 h-3.5 text-zinc-300" />
                     <span>{topic.label}</span>
                   </button>
                 );
@@ -236,13 +230,13 @@ export default function RandomMatch({
           {/* Start Matching Big Button */}
           <button
             onClick={startFindingMatch}
-            className="w-full sm:w-auto px-10 py-4 rounded-3xl bg-gradient-to-r from-rose-500 via-purple-600 to-indigo-600 text-white font-extrabold text-base shadow-2xl shadow-purple-600/40 hover:opacity-95 active:scale-95 transition-all flex items-center justify-center gap-3 cursor-pointer"
+            className="w-full sm:w-auto px-8 py-3 rounded-xl bg-zinc-100 hover:bg-white text-zinc-950 font-semibold text-sm shadow-sm active:scale-95 transition-all flex items-center justify-center gap-2 cursor-pointer"
           >
-            <Sparkles className="w-5 h-5 text-cyan-300 animate-spin" />
+            <Sparkles className="w-4 h-4 text-zinc-900" />
             <span>Start Matching Students</span>
           </button>
 
-          <p className="text-[11px] text-slate-500">
+          <p className="text-[11px] text-zinc-500">
             Powered by LiveKit Cloud WebRTC • Camera & Mic enabled on join
           </p>
         </div>
@@ -250,34 +244,34 @@ export default function RandomMatch({
 
       {/* 2. SEARCHING / RADAR STATE */}
       {matchState === "searching" && (
-        <div className="flex-1 flex flex-col items-center justify-center text-center space-y-8 animate-in fade-in duration-300">
+        <div className="flex-1 flex flex-col items-center justify-center text-center space-y-6 animate-in fade-in duration-200">
           {/* Concentric Radar Rings */}
-          <div className="relative flex items-center justify-center w-52 h-52">
-            <div className="absolute inset-0 rounded-full border border-indigo-500/20 radar-wave-1" />
-            <div className="absolute inset-0 rounded-full border border-cyan-500/20 radar-wave-2" />
-            <div className="absolute inset-0 rounded-full border border-purple-500/20 radar-wave-3" />
+          <div className="relative flex items-center justify-center w-48 h-48">
+            <div className="absolute inset-0 rounded-full border border-zinc-800/80 radar-wave-1" />
+            <div className="absolute inset-0 rounded-full border border-zinc-700/60 radar-wave-2" />
+            <div className="absolute inset-0 rounded-full border border-zinc-600/40 radar-wave-3" />
 
-            <div className="relative w-28 h-28 rounded-full bg-slate-900/90 border border-indigo-500/50 shadow-2xl flex flex-col items-center justify-center p-2 z-10">
-              <Search className="w-8 h-8 text-cyan-400 animate-bounce mb-1" />
-              <span className="text-[11px] font-bold text-slate-300">
+            <div className="relative w-24 h-24 rounded-full bg-zinc-900 border border-zinc-700/80 shadow-xl flex flex-col items-center justify-center p-2 z-10">
+              <Search className="w-6 h-6 text-zinc-300 animate-pulse mb-1" />
+              <span className="text-[11px] font-semibold text-zinc-300">
                 {searchTimer}s
               </span>
             </div>
           </div>
 
-          <div className="space-y-1.5 max-w-sm">
-            <h3 className="text-xl font-bold text-white tracking-tight">
+          <div className="space-y-1 max-w-sm">
+            <h3 className="text-base font-bold text-zinc-100 tracking-tight">
               Looking for a campus peer...
             </h3>
-            <p className="text-xs text-slate-400">
-              Matching for: <span className="text-cyan-400 font-semibold">{MATCH_TOPICS.find((t) => t.id === selectedTopic)?.label}</span>
+            <p className="text-xs text-zinc-400">
+              Matching for: <span className="text-zinc-200 font-medium">{MATCH_TOPICS.find((t) => t.id === selectedTopic)?.label}</span>
             </p>
           </div>
 
-          <div className="flex items-center gap-3">
+          <div className="flex items-center gap-2.5">
             <button
               onClick={skipToNextMatch}
-              className="px-5 py-2.5 rounded-2xl bg-indigo-600/30 hover:bg-indigo-600/50 border border-indigo-500/40 text-xs font-bold text-indigo-200 transition-all flex items-center gap-2"
+              className="px-4 py-2 rounded-xl bg-zinc-800 hover:bg-zinc-700 border border-zinc-700 text-xs font-semibold text-zinc-200 transition-colors flex items-center gap-1.5"
             >
               <RefreshCw className="w-3.5 h-3.5 animate-spin" />
               Retry Next Room
@@ -285,7 +279,7 @@ export default function RandomMatch({
 
             <button
               onClick={cancelSearch}
-              className="px-5 py-2.5 rounded-2xl bg-slate-900 hover:bg-slate-800 border border-slate-700 text-xs font-bold text-slate-300 transition-all"
+              className="px-4 py-2 rounded-xl bg-zinc-900 hover:bg-zinc-800 border border-zinc-800 text-xs font-semibold text-zinc-400 hover:text-zinc-200 transition-colors"
             >
               Cancel
             </button>
@@ -301,7 +295,7 @@ export default function RandomMatch({
           connect={true}
           video={!isVideoOff}
           audio={!isMuted}
-          className="relative w-full h-full flex flex-col justify-between overflow-hidden rounded-3xl border border-slate-800/80 bg-slate-950"
+          className="relative w-full h-full flex flex-col justify-between overflow-hidden rounded-2xl border border-zinc-800/90 bg-zinc-950"
         >
           <RoomAudioRenderer />
           <ConnectedMatchContent
@@ -367,90 +361,92 @@ function ConnectedMatchContent({
   const { localParticipant } = useLocalParticipant();
   const tracks = useTracks([Track.Source.Camera]);
 
-  // Separate remote peer from local peer
   const remoteParticipant = participants.find((p) => !p.isLocal);
   const remoteTrack = tracks.find((t) => !t.participant.isLocal);
   const localTrack = tracks.find((t) => t.participant.isLocal);
 
   return (
-    <div className="relative w-full h-full flex flex-col justify-between p-2 sm:p-4">
+    <div className="relative w-full h-full flex flex-col justify-between p-2 sm:p-3">
       {/* Split Video Container */}
-      <div className="relative flex-1 grid grid-cols-1 md:grid-cols-2 gap-2 sm:gap-3 w-full h-[calc(100%-5rem)] overflow-hidden">
+      <div className="relative flex-1 grid grid-cols-1 md:grid-cols-2 gap-2 sm:gap-3 w-full h-[calc(100%-4.5rem)] overflow-hidden">
         {/* Feed A: Stranger / Remote Peer */}
-        <div className="relative w-full h-full rounded-2xl overflow-hidden bg-slate-900 border border-slate-800 flex items-center justify-center">
+        <div className="relative w-full h-full rounded-xl overflow-hidden bg-zinc-900 border border-zinc-800 flex items-center justify-center">
           {remoteTrack && remoteTrack.publication?.isSubscribed && !remoteTrack.publication.isMuted ? (
             <VideoTrack
               trackRef={remoteTrack}
-              className="w-full h-full object-cover rounded-2xl"
+              className="w-full h-full object-cover rounded-xl"
             />
           ) : (
             <div className="flex flex-col items-center justify-center p-4 text-center space-y-2">
-              <div className="w-16 h-16 rounded-full bg-indigo-600/30 border border-indigo-500/40 flex items-center justify-center text-3xl">
+              <div className="w-14 h-14 rounded-full bg-zinc-800 border border-zinc-700 flex items-center justify-center text-2xl">
                 {remoteParticipant ? "🎓" : "⏳"}
               </div>
-              <p className="text-xs font-bold text-white">
+              <p className="text-xs font-semibold text-zinc-200">
                 {remoteParticipant?.name || remoteParticipant?.identity || "Connecting Campus Stranger..."}
               </p>
-              <p className="text-[10px] text-slate-400">
+              <p className="text-[10px] text-zinc-500">
                 {remoteParticipant ? "Live in 1-on-1 Room" : "Waiting for peer WebRTC stream..."}
               </p>
             </div>
           )}
 
           {/* Stranger Tag */}
-          <div className="absolute top-3 left-3 flex items-center gap-1.5 px-3 py-1 rounded-full glass-dock border border-white/10 text-xs font-semibold text-white">
+          <div className="absolute top-3 left-3 flex items-center gap-1.5 px-2.5 py-1 rounded-md bg-zinc-900/90 backdrop-blur-md border border-zinc-700/80 text-xs font-medium text-zinc-200">
             <span className="w-2 h-2 rounded-full bg-rose-500 animate-pulse" />
-            <span>Stranger (Campus Peer)</span>
+            <span>Stranger</span>
           </div>
         </div>
 
         {/* Feed B: Local Self Preview */}
-        <div className="relative w-full h-full rounded-2xl overflow-hidden bg-slate-900 border border-slate-800 flex items-center justify-center">
+        <div className="relative w-full h-full rounded-xl overflow-hidden bg-zinc-900 border border-zinc-800 flex items-center justify-center">
           {localTrack && !isVideoOff ? (
             <VideoTrack
               trackRef={localTrack}
-              className="w-full h-full object-cover rounded-2xl -scale-x-100"
+              className="w-full h-full object-cover rounded-xl -scale-x-100"
             />
           ) : (
             <div className="flex flex-col items-center justify-center p-4 text-center space-y-2">
-              <div className="w-16 h-16 rounded-full bg-slate-800 flex items-center justify-center text-3xl">
-                {currentProfile?.avatar || "⚡"}
-              </div>
-              <p className="text-xs font-bold text-white">
+              <StudentAvatar
+                avatar={currentProfile?.avatar}
+                name={currentProfile?.full_name || "Me"}
+                size="lg"
+                showOnlineBadge={false}
+              />
+              <p className="text-xs font-semibold text-zinc-200">
                 {currentProfile?.full_name || "You (Local Preview)"}
               </p>
-              <p className="text-[10px] text-slate-400">
+              <p className="text-[10px] text-zinc-500">
                 {isVideoOff ? "Camera turned off" : "Camera active"}
               </p>
             </div>
           )}
 
           {/* Local User Tag */}
-          <div className="absolute top-3 left-3 flex items-center gap-1.5 px-3 py-1 rounded-full glass-dock border border-white/10 text-xs font-semibold text-white">
+          <div className="absolute top-3 left-3 flex items-center gap-1.5 px-2.5 py-1 rounded-md bg-zinc-900/90 backdrop-blur-md border border-zinc-700/80 text-xs font-medium text-zinc-200">
             <span className="w-2 h-2 rounded-full bg-emerald-400" />
-            <span>You ({currentProfile?.full_name?.split(" ")[0] || "Me"})</span>
+            <span>You</span>
           </div>
 
           {/* Layout Flip Button on mobile */}
           <button
             onClick={onToggleSwap}
-            className="absolute top-3 right-3 p-2 rounded-full glass-dock border border-white/10 text-slate-300 hover:text-white"
+            className="absolute top-3 right-3 p-1.5 rounded-lg bg-zinc-900/90 border border-zinc-700/80 text-zinc-400 hover:text-zinc-200"
           >
-            <FlipHorizontal className="w-4 h-4" />
+            <FlipHorizontal className="w-3.5 h-3.5" />
           </button>
         </div>
 
         {/* In-Call Text Chat Drawer Overlay */}
         {chatOpen && (
-          <div className="absolute top-0 right-0 bottom-16 w-full sm:w-80 glass-dock border border-slate-700/80 rounded-2xl p-3 z-30 flex flex-col justify-between animate-in slide-in-from-right duration-200">
-            <div className="flex items-center justify-between pb-2 border-b border-slate-800">
-              <span className="text-xs font-bold text-white flex items-center gap-1.5">
-                <MessageSquare className="w-3.5 h-3.5 text-cyan-400" />
+          <div className="absolute top-0 right-0 bottom-16 w-full sm:w-80 bg-zinc-900/95 backdrop-blur-xl border border-zinc-800 rounded-xl p-3 z-30 flex flex-col justify-between animate-in slide-in-from-right duration-150 shadow-2xl">
+            <div className="flex items-center justify-between pb-2 border-b border-zinc-800">
+              <span className="text-xs font-semibold text-zinc-200 flex items-center gap-1.5">
+                <MessageSquare className="w-3.5 h-3.5 text-zinc-400" />
                 Live In-Call Chat
               </span>
               <button
                 onClick={onToggleChat}
-                className="p-1 rounded-lg text-slate-400 hover:text-white"
+                className="p-1 rounded-md text-zinc-400 hover:text-zinc-200"
               >
                 <X className="w-4 h-4" />
               </button>
@@ -459,7 +455,7 @@ function ConnectedMatchContent({
             {/* Chat Messages */}
             <div className="flex-1 overflow-y-auto py-2 space-y-2 text-xs">
               {chatMessages.length === 0 ? (
-                <p className="text-[11px] text-slate-500 text-center py-8">
+                <p className="text-[11px] text-zinc-500 text-center py-8">
                   Say hi to your campus match!
                 </p>
               ) : (
@@ -469,32 +465,32 @@ function ConnectedMatchContent({
                     className={`flex flex-col ${m.isSelf ? "items-end" : "items-start"}`}
                   >
                     <div
-                      className={`max-w-[85%] px-3 py-1.5 rounded-2xl ${
+                      className={`max-w-[85%] px-3 py-1.5 rounded-xl ${
                         m.isSelf
-                          ? "bg-indigo-600 text-white rounded-br-xs"
-                          : "bg-slate-800 text-slate-200 rounded-bl-xs"
+                          ? "bg-zinc-100 text-zinc-950 font-medium"
+                          : "bg-zinc-800 text-zinc-200"
                       }`}
                     >
                       <p>{m.text}</p>
                     </div>
-                    <span className="text-[9px] text-slate-500 mt-0.5">{m.time}</span>
+                    <span className="text-[9px] text-zinc-500 mt-0.5">{m.time}</span>
                   </div>
                 ))
               )}
             </div>
 
             {/* Message Input */}
-            <form onSubmit={onSendMessage} className="flex items-center gap-2 pt-2 border-t border-slate-800">
+            <form onSubmit={onSendMessage} className="flex items-center gap-2 pt-2 border-t border-zinc-800">
               <input
                 type="text"
                 value={chatInput}
                 onChange={(e) => onChatInputChange(e.target.value)}
                 placeholder="Type a message..."
-                className="flex-1 px-3 py-1.5 rounded-xl bg-slate-900 border border-slate-700 text-xs text-white placeholder-slate-500 focus:outline-none focus:border-indigo-500"
+                className="flex-1 px-3 py-1.5 rounded-lg bg-zinc-900 border border-zinc-800 text-xs text-zinc-100 placeholder-zinc-500 focus:outline-none focus:border-zinc-600"
               />
               <button
                 type="submit"
-                className="p-2 rounded-xl bg-indigo-600 text-white hover:bg-indigo-500 transition-all"
+                className="p-2 rounded-lg bg-zinc-100 hover:bg-white text-zinc-950 transition-colors"
               >
                 <Send className="w-3.5 h-3.5" />
               </button>
@@ -504,24 +500,24 @@ function ConnectedMatchContent({
       </div>
 
       {/* Floating Responsive Control Dock */}
-      <div className="h-16 flex items-center justify-center">
-        <div className="flex items-center gap-2 sm:gap-3 px-4 py-2.5 rounded-3xl glass-dock border border-slate-700/80 shadow-2xl">
+      <div className="h-14 flex items-center justify-center">
+        <div className="flex items-center gap-2 px-3 py-1.5 rounded-xl bg-zinc-900/90 border border-zinc-800/90 backdrop-blur-xl shadow-xl">
           {/* Skip / Next Match */}
           <button
             onClick={onSkip}
-            className="flex items-center gap-1.5 px-4 py-2 rounded-2xl bg-gradient-to-r from-amber-500 to-orange-500 hover:from-amber-600 hover:to-orange-600 text-white font-bold text-xs shadow-lg shadow-orange-500/25 active:scale-95 transition-all"
+            className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-zinc-100 hover:bg-white text-zinc-950 font-semibold text-xs shadow-sm active:scale-95 transition-all"
           >
-            <SkipForward className="w-4 h-4" />
+            <SkipForward className="w-3.5 h-3.5" />
             <span>Next / Skip</span>
           </button>
 
           {/* Mic Toggle */}
           <button
             onClick={onToggleMic}
-            className={`p-2.5 rounded-2xl border transition-all ${
+            className={`p-2 rounded-lg border transition-colors ${
               isMuted
                 ? "bg-rose-500/20 border-rose-500/40 text-rose-400"
-                : "bg-slate-800/80 border-slate-700 text-white hover:bg-slate-700"
+                : "bg-zinc-800/80 border-zinc-700/60 text-zinc-200 hover:bg-zinc-800"
             }`}
           >
             {isMuted ? <MicOff className="w-4 h-4" /> : <Mic className="w-4 h-4" />}
@@ -530,10 +526,10 @@ function ConnectedMatchContent({
           {/* Camera Toggle */}
           <button
             onClick={onToggleVideo}
-            className={`p-2.5 rounded-2xl border transition-all ${
+            className={`p-2 rounded-lg border transition-colors ${
               isVideoOff
                 ? "bg-rose-500/20 border-rose-500/40 text-rose-400"
-                : "bg-slate-800/80 border-slate-700 text-white hover:bg-slate-700"
+                : "bg-zinc-800/80 border-zinc-700/60 text-zinc-200 hover:bg-zinc-800"
             }`}
           >
             {isVideoOff ? <VideoOff className="w-4 h-4" /> : <Video className="w-4 h-4" />}
@@ -542,10 +538,10 @@ function ConnectedMatchContent({
           {/* Text Chat Toggle */}
           <button
             onClick={onToggleChat}
-            className={`p-2.5 rounded-2xl border transition-all ${
+            className={`p-2 rounded-lg border transition-colors ${
               chatOpen
-                ? "bg-cyan-500/20 border-cyan-400 text-cyan-300"
-                : "bg-slate-800/80 border-slate-700 text-white hover:bg-slate-700"
+                ? "bg-zinc-800 border-zinc-700 text-zinc-100"
+                : "bg-zinc-800/80 border-zinc-700/60 text-zinc-200 hover:bg-zinc-800"
             }`}
           >
             <MessageSquare className="w-4 h-4" />
@@ -554,7 +550,7 @@ function ConnectedMatchContent({
           {/* End Call */}
           <button
             onClick={onEndCall}
-            className="p-2.5 rounded-2xl bg-rose-600 hover:bg-rose-500 text-white border border-rose-500/40 active:scale-95 transition-all shadow-md shadow-rose-600/30"
+            className="p-2 rounded-lg bg-rose-600 hover:bg-rose-500 text-white border border-rose-500/40 active:scale-95 transition-colors shadow-sm"
           >
             <PhoneOff className="w-4 h-4" />
           </button>
