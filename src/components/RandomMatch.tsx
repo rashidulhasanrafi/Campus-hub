@@ -9,6 +9,7 @@ import {
   VideoTrack,
   useLocalParticipant,
   useRoomContext,
+  isTrackReference,
 } from "@livekit/components-react";
 import { Track } from "livekit-client";
 import { UserProfile } from "@/lib/supabase";
@@ -294,17 +295,18 @@ export default function RandomMatch({
           serverUrl={livekitUrl}
           token={livekitToken}
           connect={true}
-          video={!isVideoOff}
-          audio={!isMuted}
+          video={true}
+          audio={true}
+          onError={(err) => setErrorMsg(err.message || "LiveKit connection error")}
+          onMediaDeviceFailure={(failure) => {
+            console.warn("Media device failure:", failure);
+            setErrorMsg("Could not access camera or microphone. Please check browser permissions.");
+          }}
           className="relative w-full h-full flex flex-col justify-between overflow-hidden rounded-2xl border border-zinc-800/90 bg-zinc-950"
         >
           <RoomAudioRenderer />
           <ConnectedMatchContent
             currentProfile={currentProfile}
-            isMuted={isMuted}
-            isVideoOff={isVideoOff}
-            onToggleMic={() => setIsMuted(!isMuted)}
-            onToggleVideo={() => setIsVideoOff(!isVideoOff)}
             onSkip={skipToNextMatch}
             onEndCall={handleEndCall}
             chatOpen={chatOpen}
@@ -325,10 +327,6 @@ export default function RandomMatch({
 // Subcomponent inside LiveKitRoom to access participant tracks
 interface ConnectedMatchContentProps {
   currentProfile: UserProfile | null;
-  isMuted: boolean;
-  isVideoOff: boolean;
-  onToggleMic: () => void;
-  onToggleVideo: () => void;
   onSkip: () => void;
   onEndCall: () => void;
   chatOpen: boolean;
@@ -343,10 +341,6 @@ interface ConnectedMatchContentProps {
 
 function ConnectedMatchContent({
   currentProfile,
-  isMuted,
-  isVideoOff,
-  onToggleMic,
-  onToggleVideo,
   onSkip,
   onEndCall,
   chatOpen,
@@ -360,50 +354,58 @@ function ConnectedMatchContent({
 }: ConnectedMatchContentProps) {
   const room = useRoomContext();
   const participants = useParticipants();
-  const { localParticipant } = useLocalParticipant();
+  const { localParticipant, isCameraEnabled, isMicrophoneEnabled, cameraTrack } = useLocalParticipant();
   const tracks = useTracks([Track.Source.Camera]);
-
-  useEffect(() => {
-    return () => {
-      if (room) {
-        try {
-          room.localParticipant.trackPublications.forEach((pub) => {
-            if (pub.track) pub.track.stop();
-          });
-          room.disconnect();
-        } catch (e) {}
-      }
-    };
-  }, [room]);
+  const [isCamToggling, setIsCamToggling] = useState(false);
+  const [isMicToggling, setIsMicToggling] = useState(false);
 
   const handleToggleCam = async () => {
-    if (room && room.localParticipant) {
-      try {
-        const nextState = isVideoOff;
-        if (!nextState) {
-          const camPub = room.localParticipant.getTrackPublication(Track.Source.Camera);
-          if (camPub && camPub.track) camPub.track.stop();
-          await room.localParticipant.setCameraEnabled(false);
-        } else {
-          await room.localParticipant.setCameraEnabled(true);
-        }
-      } catch (e) {}
+    if (!room || !room.localParticipant || isCamToggling) return;
+    setIsCamToggling(true);
+    try {
+      await room.localParticipant.setCameraEnabled(!isCameraEnabled);
+    } catch (e) {
+      console.error("Camera toggle error:", e);
+    } finally {
+      setIsCamToggling(false);
     }
-    onToggleVideo();
   };
 
   const handleToggleMicrophone = async () => {
-    if (room && room.localParticipant) {
-      try {
-        await room.localParticipant.setMicrophoneEnabled(isMuted);
-      } catch (e) {}
+    if (!room || !room.localParticipant || isMicToggling) return;
+    setIsMicToggling(true);
+    try {
+      await room.localParticipant.setMicrophoneEnabled(!isMicrophoneEnabled);
+    } catch (e) {
+      console.error("Mic toggle error:", e);
+    } finally {
+      setIsMicToggling(false);
     }
-    onToggleMic();
   };
 
   const remoteParticipant = participants.find((p) => !p.isLocal);
-  const remoteTrack = tracks.find((t) => !t.participant.isLocal);
-  const localTrack = tracks.find((t) => t.participant.isLocal);
+  const remoteTrack = tracks.find(
+    (t) =>
+      !t.participant.isLocal &&
+      t.source === Track.Source.Camera &&
+      isTrackReference(t) &&
+      !t.publication?.isMuted
+  );
+
+  const localInTracks = tracks.find(
+    (t) =>
+      t.participant.isLocal &&
+      t.source === Track.Source.Camera &&
+      isTrackReference(t) &&
+      !t.publication?.isMuted
+  );
+
+  const localTrackRef =
+    isCameraEnabled && cameraTrack && !cameraTrack.isMuted
+      ? { participant: localParticipant, source: Track.Source.Camera, publication: cameraTrack }
+      : isCameraEnabled && localInTracks
+      ? localInTracks
+      : null;
 
   return (
     <div className="relative w-full h-full flex flex-col justify-between p-2 sm:p-3">
@@ -411,7 +413,7 @@ function ConnectedMatchContent({
       <div className="relative flex-1 grid grid-cols-1 md:grid-cols-2 gap-2 sm:gap-3 w-full h-[calc(100%-4.5rem)] overflow-hidden">
         {/* Feed A: Stranger / Remote Peer */}
         <div className="relative w-full h-full rounded-xl overflow-hidden bg-zinc-900 border border-zinc-800 flex items-center justify-center">
-          {remoteTrack && remoteTrack.publication?.isSubscribed && !remoteTrack.publication.isMuted ? (
+          {remoteTrack && remoteTrack.publication?.track ? (
             <VideoTrack
               trackRef={remoteTrack}
               className="w-full h-full object-cover rounded-xl"
@@ -439,9 +441,9 @@ function ConnectedMatchContent({
 
         {/* Feed B: Local Self Preview */}
         <div className="relative w-full h-full rounded-xl overflow-hidden bg-zinc-900 border border-zinc-800 flex items-center justify-center">
-          {localTrack && !isVideoOff ? (
+          {localTrackRef ? (
             <VideoTrack
-              trackRef={localTrack}
+              trackRef={localTrackRef}
               className="w-full h-full object-cover rounded-xl -scale-x-100"
             />
           ) : (
@@ -456,7 +458,7 @@ function ConnectedMatchContent({
                 {currentProfile?.full_name || "You (Local Preview)"}
               </p>
               <p className="text-[10px] text-zinc-500">
-                {isVideoOff ? "Camera turned off" : "Camera active"}
+                {!isCameraEnabled ? "Camera turned off" : "Camera starting..."}
               </p>
             </div>
           )}
@@ -554,25 +556,29 @@ function ConnectedMatchContent({
           {/* Mic Toggle */}
           <button
             onClick={handleToggleMicrophone}
+            disabled={isMicToggling}
+            title={isMicrophoneEnabled ? "Mute Microphone" : "Unmute Microphone"}
             className={`p-2 rounded-lg border transition-colors ${
-              isMuted
+              !isMicrophoneEnabled
                 ? "bg-rose-500/20 border-rose-500/40 text-rose-400"
                 : "bg-zinc-800/80 border-zinc-700/60 text-zinc-200 hover:bg-zinc-800"
             }`}
           >
-            {isMuted ? <MicOff className="w-4 h-4" /> : <Mic className="w-4 h-4" />}
+            {!isMicrophoneEnabled ? <MicOff className="w-4 h-4" /> : <Mic className="w-4 h-4" />}
           </button>
 
           {/* Camera Toggle */}
           <button
             onClick={handleToggleCam}
+            disabled={isCamToggling}
+            title={isCameraEnabled ? "Stop Camera" : "Start Camera"}
             className={`p-2 rounded-lg border transition-colors ${
-              isVideoOff
+              !isCameraEnabled
                 ? "bg-rose-500/20 border-rose-500/40 text-rose-400"
                 : "bg-zinc-800/80 border-zinc-700/60 text-zinc-200 hover:bg-zinc-800"
             }`}
           >
-            {isVideoOff ? <VideoOff className="w-4 h-4" /> : <Video className="w-4 h-4" />}
+            {!isCameraEnabled ? <VideoOff className="w-4 h-4" /> : <Video className="w-4 h-4" />}
           </button>
 
           {/* Text Chat Toggle */}

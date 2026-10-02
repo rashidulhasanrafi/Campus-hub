@@ -9,6 +9,7 @@ import {
   VideoTrack,
   useLocalParticipant,
   useRoomContext,
+  isTrackReference,
 } from "@livekit/components-react";
 import { Track, RoomEvent, RemoteParticipant } from "livekit-client";
 import { UserProfile } from "@/lib/supabase";
@@ -225,6 +226,14 @@ export default function GroupHangout({
             connect={true}
             video={true}
             audio={true}
+            onError={(err) => {
+              console.error("LiveKit error:", err);
+              setErrorMsg(err.message || "Failed to connect to LiveKit room");
+            }}
+            onMediaDeviceFailure={(failure) => {
+              console.warn("Media device failure:", failure);
+              setErrorMsg("Could not access camera or microphone. Please check browser permissions.");
+            }}
             className="relative w-full min-h-[580px] lg:min-h-[660px] flex flex-col justify-between overflow-hidden rounded-2xl border border-zinc-800/90 bg-[#090D16] shadow-2xl"
           >
             <RoomAudioRenderer />
@@ -559,7 +568,7 @@ function GroupHangoutSession({
 }: GroupHangoutSessionProps) {
   const livekitRoom = useRoomContext();
   const participants = useParticipants();
-  const { localParticipant, isCameraEnabled, isMicrophoneEnabled, isScreenShareEnabled } =
+  const { localParticipant, isCameraEnabled, isMicrophoneEnabled, isScreenShareEnabled, cameraTrack } =
     useLocalParticipant();
   const tracks = useTracks([Track.Source.Camera, Track.Source.ScreenShare]);
 
@@ -589,8 +598,9 @@ function GroupHangoutSession({
   // Reactions state
   const [reactionsOpen, setReactionsOpen] = useState(false);
   const [isCamToggling, setIsCamToggling] = useState(false);
+  const [isMicToggling, setIsMicToggling] = useState(false);
 
-  // 1. CLEANUP ON LEAVE & UNMOUNT: release hardware camera/mic immediately
+  // 1. Leave session
   const handleLeaveSession = useCallback(() => {
     if (livekitRoom) {
       try {
@@ -599,46 +609,19 @@ function GroupHangoutSession({
             pub.track.stop();
           }
         });
-        livekitRoom.disconnect();
       } catch (err) {
-        console.error("Error during room disconnect:", err);
+        console.error("Error stopping tracks on leave:", err);
       }
     }
     onLeave();
   }, [livekitRoom, onLeave]);
 
-  useEffect(() => {
-    return () => {
-      if (livekitRoom) {
-        try {
-          livekitRoom.localParticipant.trackPublications.forEach((pub) => {
-            if (pub.track) {
-              pub.track.stop();
-            }
-          });
-          livekitRoom.disconnect();
-        } catch (e) {}
-      }
-    };
-  }, [livekitRoom]);
-
-  // 2. TOGGLE CAMERA: properly set camera enabled, stop track when off, republish when on
+  // 2. TOGGLE CAMERA: properly set camera enabled via LiveKit
   const handleToggleCamera = async () => {
     if (!livekitRoom || !livekitRoom.localParticipant || isCamToggling) return;
     setIsCamToggling(true);
     try {
-      const nextState = !isCameraEnabled;
-      if (!nextState) {
-        // Turning camera OFF: stop local track immediately to release hardware
-        const camPub = livekitRoom.localParticipant.getTrackPublication(Track.Source.Camera);
-        if (camPub && camPub.track) {
-          camPub.track.stop();
-        }
-        await livekitRoom.localParticipant.setCameraEnabled(false);
-      } else {
-        // Turning camera ON: re-publish camera without leaving/re-joining
-        await livekitRoom.localParticipant.setCameraEnabled(true);
-      }
+      await livekitRoom.localParticipant.setCameraEnabled(!isCameraEnabled);
     } catch (err) {
       console.error("Camera toggle error:", err);
     } finally {
@@ -646,13 +629,16 @@ function GroupHangoutSession({
     }
   };
 
-  // 3. TOGGLE MIC
+  // 3. TOGGLE MIC: properly set microphone enabled via LiveKit
   const handleToggleMic = async () => {
-    if (!livekitRoom || !livekitRoom.localParticipant) return;
+    if (!livekitRoom || !livekitRoom.localParticipant || isMicToggling) return;
+    setIsMicToggling(true);
     try {
       await livekitRoom.localParticipant.setMicrophoneEnabled(!isMicrophoneEnabled);
     } catch (err) {
       console.error("Mic toggle error:", err);
+    } finally {
+      setIsMicToggling(false);
     }
   };
 
@@ -768,6 +754,37 @@ function GroupHangoutSession({
     } catch {}
   };
 
+  // Helper to reliably get active video TrackReference for any participant
+  const getParticipantVideoTrack = (p: { identity: string; isLocal: boolean }) => {
+    if (p.isLocal) {
+      if (isCameraEnabled && cameraTrack && !cameraTrack.isMuted) {
+        return {
+          participant: localParticipant,
+          source: Track.Source.Camera,
+          publication: cameraTrack,
+        };
+      }
+      const localInTracks = tracks.find(
+        (t) =>
+          t.participant.isLocal &&
+          (t.source === Track.Source.Camera || t.source === Track.Source.ScreenShare) &&
+          isTrackReference(t) &&
+          !t.publication?.isMuted
+      );
+      if (isCameraEnabled && localInTracks) return localInTracks;
+      return null;
+    } else {
+      const remoteInTracks = tracks.find(
+        (t) =>
+          t.participant.identity === p.identity &&
+          (t.source === Track.Source.ScreenShare || t.source === Track.Source.Camera) &&
+          isTrackReference(t) &&
+          !t.publication?.isMuted
+      );
+      return remoteInTracks || null;
+    }
+  };
+
   // Determine Focus Participant:
   // If user pinned a participant -> pinned
   // Else if anyone is speaking -> active speaker
@@ -778,7 +795,7 @@ function GroupHangoutSession({
     participants.find((p) => p.isSpeaking && p.identity !== localParticipant.identity) ||
     participants.find((p) => p.isSpeaking);
   const remoteWithCam = participants.find(
-    (p) => !p.isLocal && tracks.some((t) => t.participant.identity === p.identity && !t.publication?.isMuted)
+    (p) => !p.isLocal && Boolean(getParticipantVideoTrack(p))
   );
 
   const focusedParticipant =
@@ -788,17 +805,8 @@ function GroupHangoutSession({
     participants.find((p) => !p.isLocal) ||
     localParticipant;
 
-  const focusedTrack = tracks.find(
-    (t) =>
-      t.participant.identity === focusedParticipant?.identity &&
-      (t.source === Track.Source.ScreenShare || t.source === Track.Source.Camera) &&
-      !t.publication?.isMuted
-  );
-
-  const isFocusedCamOff =
-    focusedParticipant?.isLocal
-      ? !isCameraEnabled || !focusedTrack
-      : !focusedTrack || Boolean(focusedTrack.publication?.isMuted);
+  const focusedTrack = focusedParticipant ? getParticipantVideoTrack(focusedParticipant) : null;
+  const isFocusedCamOff = !focusedTrack;
 
   return (
     <div className="relative w-full flex-1 flex flex-col lg:flex-row overflow-hidden min-h-0 bg-[#090D16]">
@@ -928,13 +936,8 @@ function GroupHangoutSession({
         {/* 2. BOTTOM STRIP: Horizontal Peer Video Thumbnails (16:9 Aspect Ratio) */}
         <div className="h-20 sm:h-24 shrink-0 flex items-center gap-2.5 overflow-x-auto py-1 px-1 scrollbar-thin">
           {participants.map((p) => {
-            const pTrack = tracks.find(
-              (t) =>
-                t.participant.identity === p.identity &&
-                (t.source === Track.Source.ScreenShare || t.source === Track.Source.Camera) &&
-                !t.publication?.isMuted
-            );
-            const isCamOff = p.isLocal ? !isCameraEnabled || !pTrack : !pTrack;
+            const pVideoTrack = getParticipantVideoTrack(p);
+            const isCamOff = !pVideoTrack;
             const isSelectedFocus = p.identity === focusedParticipant?.identity;
             const isPinned = p.identity === pinnedIdentity;
 
@@ -953,11 +956,11 @@ function GroupHangoutSession({
                     : "border-zinc-800 hover:border-zinc-700 hover:bg-zinc-850"
                 }`}
               >
-                {!isCamOff && pTrack ? (
+                {!isCamOff && pVideoTrack ? (
                   <VideoTrack
-                    trackRef={pTrack}
+                    trackRef={pVideoTrack}
                     className={`w-full h-full object-cover ${
-                      p.isLocal && pTrack.source === Track.Source.Camera ? "-scale-x-100" : ""
+                      p.isLocal && pVideoTrack.source === Track.Source.Camera ? "-scale-x-100" : ""
                     }`}
                   />
                 ) : (
@@ -1003,6 +1006,7 @@ function GroupHangoutSession({
             {/* Audio Toggle */}
             <button
               onClick={handleToggleMic}
+              disabled={isMicToggling}
               title={isMicrophoneEnabled ? "Mute Microphone" : "Unmute Microphone"}
               className={`flex flex-col items-center justify-center p-2 sm:px-3 sm:py-2 rounded-xl border transition-all active:scale-95 ${
                 !isMicrophoneEnabled
