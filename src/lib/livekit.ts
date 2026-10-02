@@ -7,6 +7,7 @@ export interface HangoutRoomConfig {
   maxParticipants: number;
   initialParticipants?: number;
   gradient: string;
+  password?: string;
 }
 
 export const CAMPUS_HANGOUT_ROOMS: HangoutRoomConfig[] = [
@@ -39,6 +40,7 @@ export const CAMPUS_HANGOUT_ROOMS: HangoutRoomConfig[] = [
     maxParticipants: 8,
     initialParticipants: 2,
     gradient: "from-emerald-500/20 to-teal-500/10 border-emerald-500/30",
+    password: "uiu",
   },
   {
     id: "music-acoustic-jam",

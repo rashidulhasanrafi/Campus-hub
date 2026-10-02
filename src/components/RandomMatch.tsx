@@ -8,6 +8,7 @@ import {
   useTracks,
   VideoTrack,
   useLocalParticipant,
+  useRoomContext,
 } from "@livekit/components-react";
 import { Track } from "livekit-client";
 import { UserProfile } from "@/lib/supabase";
@@ -357,9 +358,48 @@ function ConnectedMatchContent({
   isSwappedLayout,
   onToggleSwap,
 }: ConnectedMatchContentProps) {
+  const room = useRoomContext();
   const participants = useParticipants();
   const { localParticipant } = useLocalParticipant();
   const tracks = useTracks([Track.Source.Camera]);
+
+  useEffect(() => {
+    return () => {
+      if (room) {
+        try {
+          room.localParticipant.trackPublications.forEach((pub) => {
+            if (pub.track) pub.track.stop();
+          });
+          room.disconnect();
+        } catch (e) {}
+      }
+    };
+  }, [room]);
+
+  const handleToggleCam = async () => {
+    if (room && room.localParticipant) {
+      try {
+        const nextState = isVideoOff;
+        if (!nextState) {
+          const camPub = room.localParticipant.getTrackPublication(Track.Source.Camera);
+          if (camPub && camPub.track) camPub.track.stop();
+          await room.localParticipant.setCameraEnabled(false);
+        } else {
+          await room.localParticipant.setCameraEnabled(true);
+        }
+      } catch (e) {}
+    }
+    onToggleVideo();
+  };
+
+  const handleToggleMicrophone = async () => {
+    if (room && room.localParticipant) {
+      try {
+        await room.localParticipant.setMicrophoneEnabled(isMuted);
+      } catch (e) {}
+    }
+    onToggleMic();
+  };
 
   const remoteParticipant = participants.find((p) => !p.isLocal);
   const remoteTrack = tracks.find((t) => !t.participant.isLocal);
@@ -513,7 +553,7 @@ function ConnectedMatchContent({
 
           {/* Mic Toggle */}
           <button
-            onClick={onToggleMic}
+            onClick={handleToggleMicrophone}
             className={`p-2 rounded-lg border transition-colors ${
               isMuted
                 ? "bg-rose-500/20 border-rose-500/40 text-rose-400"
@@ -525,7 +565,7 @@ function ConnectedMatchContent({
 
           {/* Camera Toggle */}
           <button
-            onClick={onToggleVideo}
+            onClick={handleToggleCam}
             className={`p-2 rounded-lg border transition-colors ${
               isVideoOff
                 ? "bg-rose-500/20 border-rose-500/40 text-rose-400"
