@@ -125,94 +125,9 @@ export const AVATAR_OPTIONS = [
   },
 ];
 
-export const INITIAL_SHOUTOUTS: ShoutoutPost[] = [
-  {
-    id: "post-1",
-    userId: "campus-bot",
-    userName: "Ayesha Noor",
-    userDepartment: "Computer Science & Eng (CSE)",
-    userAvatar: "/images/avatar-female.png",
-    content: "Algorithms midterm study cram in Room 302! Join in if you're stuck on Dynamic Programming 🚀",
-    tag: "Study Jam",
-    likes: 14,
-    timeAgo: "12m ago",
-  },
-  {
-    id: "post-2",
-    userId: "campus-bot-2",
-    userName: "Tanvir Ahmed",
-    userDepartment: "Business & Economics (BBA)",
-    userAvatar: "/images/avatar-male.png",
-    content: "Central cafeteria coffee is surprisingly good today. Who is around for a quick chat? ☕",
-    tag: "Chit Chat",
-    likes: 9,
-    timeAgo: "25m ago",
-  },
-  {
-    id: "post-3",
-    userId: "campus-bot-3",
-    userName: "Sarah Jenkins",
-    userDepartment: "Data Science & AI (DSAI)",
-    userAvatar: "/images/avatar-female.png",
-    content: "Looking for 1 more teammate for the upcoming Inter-University Hackathon! Drop a DM or call me!",
-    tag: "Hackathon",
-    likes: 22,
-    timeAgo: "45m ago",
-  },
-];
+export const INITIAL_SHOUTOUTS: ShoutoutPost[] = [];
 
-export const MOCK_STUDENTS: UserProfile[] = [
-  {
-    id: "student-farhan",
-    full_name: "Farhan Rahman",
-    department: "Computer Science & Eng (CSE)",
-    batch: "Batch '24 (Junior)",
-    avatar: "/images/avatar-male.png",
-    status: "Ready to chat 💬",
-    bio: "Building mobile apps & playing chess between classes.",
-    is_online: true,
-  },
-  {
-    id: "student-priya",
-    full_name: "Priya Sharma",
-    department: "Data Science & AI (DSAI)",
-    batch: "Batch '25 (Sophomore)",
-    avatar: "/images/avatar-female.png",
-    status: "Free for coffee ☕",
-    bio: "Machine learning enthusiast & cafeteria regular.",
-    is_online: true,
-  },
-  {
-    id: "student-adnan",
-    full_name: "Adnan Chowdhury",
-    department: "Electrical & Electronics (EEE)",
-    batch: "Batch '23 (Senior)",
-    avatar: "/images/avatar-male.png",
-    status: "Studying at Library 📚",
-    bio: "Final year thesis grind. Ask me about microcontrollers.",
-    is_online: true,
-  },
-  {
-    id: "student-anika",
-    full_name: "Anika Tabassum",
-    department: "Architecture & Design (ARCH)",
-    batch: "Batch '24 (Junior)",
-    avatar: "/images/avatar-female.png",
-    status: "Exam prep grind 🔥",
-    bio: "Studio all night, coffee all day ☕",
-    is_online: true,
-  },
-  {
-    id: "student-zayan",
-    full_name: "Zayan Kabir",
-    department: "Software Engineering (SWE)",
-    batch: "Batch '26 (Freshman)",
-    avatar: "/images/avatar-male.png",
-    status: "Chilling at Canteen 🍕",
-    bio: "First year surviving calculus & discovering university bands.",
-    is_online: true,
-  },
-];
+export const MOCK_STUDENTS: UserProfile[] = [];
 
 // Profile storage & Supabase synchronization
 const LOCAL_STORAGE_KEY = "campus_hub_student_profile";
@@ -284,26 +199,16 @@ export function detectCampusTheme(email?: string): string {
 }
 
 export function isDevPreviewActive(): boolean {
-  if (typeof window === "undefined") return false;
-  return localStorage.getItem(DEV_SESSION_KEY) === "true";
+  return false;
 }
 
-export function setDevPreview(active: boolean): void {
-  if (typeof window === "undefined") return;
-  if (active) {
-    localStorage.setItem(DEV_SESSION_KEY, "true");
-    saveLocalProfile(DEV_MOCK_PROFILE);
-  } else {
+export function setDevPreview(_active: boolean): void {
+  if (typeof window !== "undefined") {
     localStorage.removeItem(DEV_SESSION_KEY);
   }
 }
 
 export async function fetchUserProfile(userId: string): Promise<UserProfile | null> {
-  // If dev preview user
-  if (userId === DEV_MOCK_PROFILE.id || isDevPreviewActive()) {
-    const localDev = getLocalProfile(DEV_MOCK_PROFILE.id);
-    return localDev || DEV_MOCK_PROFILE;
-  }
 
   // First check if Supabase has it stored in remote profiles table
   try {
@@ -388,7 +293,7 @@ export async function fetchRemoteProfiles(): Promise<UserProfile[]> {
       .limit(30);
 
     if (error || !data || data.length === 0) {
-      return MOCK_STUDENTS;
+      return [];
     }
 
     return data.map((d) => ({
@@ -404,7 +309,7 @@ export async function fetchRemoteProfiles(): Promise<UserProfile[]> {
       last_seen: d.last_seen,
     }));
   } catch (err) {
-    console.warn("Error fetching remote profiles, using campus pool:", err);
-    return MOCK_STUDENTS;
+    console.warn("Error fetching remote profiles:", err);
+    return [];
   }
 }

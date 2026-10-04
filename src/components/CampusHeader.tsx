@@ -83,11 +83,6 @@ export default function CampusHeader({
                 <span className="w-1.5 h-1.5 rounded-full bg-orange-500 animate-pulse" />
                 UIU
               </span>
-              {profile?.id === "dev-preview-user" && (
-                <span className="hidden sm:inline-flex items-center px-1.5 py-0.5 rounded-md text-[9px] font-semibold bg-zinc-800 text-zinc-300 border border-zinc-700">
-                  GUEST PREVIEW
-                </span>
-              )}
             </div>
             <span className="text-[10px] text-zinc-400 font-medium tracking-wide hidden xs:inline">
               United International University

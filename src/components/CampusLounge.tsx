@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useState } from "react";
+import React, { useState, useEffect } from "react";
 import {
   UserProfile,
   ShoutoutPost,
@@ -47,6 +47,51 @@ export default function CampusLounge({
     toName: string;
     avatar: string;
   } | null>(null);
+
+  // Load real shoutouts from Supabase on mount
+  useEffect(() => {
+    let isMounted = true;
+    const loadShoutouts = async () => {
+      try {
+        const { data, error } = await supabase
+          .from("shoutouts")
+          .select("*")
+          .order("created_at", { ascending: false })
+          .limit(30);
+
+        if (!error && data && data.length > 0 && isMounted) {
+          setShoutouts(
+            data.map((d: any) => ({
+              id: d.id,
+              userId: d.user_id,
+              userName: d.user_name,
+              userDepartment: d.user_department,
+              userAvatar: d.user_avatar,
+              content: d.content,
+              tag: d.category || "Study Jam",
+              likes: d.likes_count || 0,
+              timeAgo: "Recently",
+            }))
+          );
+        }
+      } catch {}
+    };
+
+    loadShoutouts();
+
+    const channel = supabase.channel("campus-lounge-bulletin");
+    channel.on("broadcast", { event: "campus-shoutout" }, (payload) => {
+      if (payload && payload.payload) {
+        setShoutouts((prev) => [payload.payload as ShoutoutPost, ...prev]);
+      }
+    });
+    channel.subscribe();
+
+    return () => {
+      isMounted = false;
+      supabase.removeChannel(channel);
+    };
+  }, []);
 
   // Filter students
   const filteredStudents = students.filter((s) => {
@@ -108,7 +153,7 @@ export default function CampusLounge({
         currentProfile?.avatar || "/images/avatar-male.png",
       content: newPostContent.trim(),
       tag: newPostTag,
-      likes: 1,
+      likes: 0,
       timeAgo: "Just now",
     };
 
@@ -116,7 +161,20 @@ export default function CampusLounge({
     setNewPostContent("");
 
     try {
-      const channel = supabase.channel("campus-lounge");
+      supabase
+        .from("shoutouts")
+        .insert({
+          user_id: newPost.userId,
+          user_name: newPost.userName,
+          user_department: newPost.userDepartment,
+          user_avatar: newPost.userAvatar,
+          content: newPost.content,
+          category: newPost.tag,
+          likes_count: 0,
+        })
+        .then(() => {});
+
+      const channel = supabase.channel("campus-lounge-bulletin");
       channel.send({
         type: "broadcast",
         event: "campus-shoutout",
@@ -323,10 +381,14 @@ export default function CampusLounge({
             <div className="text-center py-12 rounded-xl bg-zinc-900/30 border border-zinc-800/80 p-8">
               <Users className="w-8 h-8 text-zinc-600 mx-auto mb-2.5" />
               <p className="text-sm text-zinc-300 font-medium">
-                No UIU students found matching &quot;{searchQuery}&quot;
+                {searchQuery
+                  ? `No UIU students found matching "${searchQuery}"`
+                  : "No other UIU students online right now"}
               </p>
               <p className="text-xs text-zinc-500 mt-1">
-                Try a different search keyword or status filter.
+                {searchQuery
+                  ? "Try a different search keyword or status filter."
+                  : "Active classmates will appear here when they connect to Campus Hub."}
               </p>
             </div>
           )}
@@ -438,6 +500,18 @@ export default function CampusLounge({
                 </div>
               </div>
             ))}
+
+            {shoutouts.length === 0 && (
+              <div className="text-center py-12 rounded-xl bg-zinc-900/30 border border-zinc-800/80 p-8">
+                <MessageCircle className="w-8 h-8 text-zinc-600 mx-auto mb-2.5" />
+                <p className="text-sm text-zinc-300 font-medium">
+                  No campus shoutouts yet
+                </p>
+                <p className="text-xs text-zinc-500 mt-1">
+                  Be the first UIU student to post a study jam or chat update above!
+                </p>
+              </div>
+            )}
           </div>
         </div>
       )}

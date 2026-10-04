@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useState } from "react";
+import React from "react";
 import {
   UserProfile,
   CAMPUS_STATUS_OPTIONS,
@@ -10,16 +10,18 @@ import StudentAvatar from "@/components/StudentAvatar";
 import {
   GraduationCap,
   Sparkles,
-  Smartphone,
   Check,
   Edit3,
   QrCode,
-  Terminal,
   LogOut,
   Sun,
   Moon,
+  User,
+  BookOpen,
+  Calendar,
+  Mail,
+  FileText,
 } from "lucide-react";
-import confetti from "canvas-confetti";
 import { useTheme } from "@/context/ThemeContext";
 
 interface ProfileViewProps {
@@ -36,28 +38,38 @@ export default function ProfileView({
   onSignOut,
 }: ProfileViewProps) {
   const { isDark, toggleTheme } = useTheme();
-  const [copiedScript, setCopiedScript] = useState<string | null>(null);
 
   if (!profile) return null;
 
-  const copyToClipboard = (text: string, label: string) => {
-    navigator.clipboard.writeText(text);
-    setCopiedScript(label);
-    try {
-      confetti({
-        particleCount: 20,
-        spread: 30,
-        origin: { y: 0.8 },
-        colors: ["#f97316", "#ea580c", "#fbbf24"],
-      });
-    } catch {}
-    setTimeout(() => setCopiedScript(null), 2500);
-  };
-
   return (
-    <div className="w-full max-w-4xl mx-auto px-4 sm:px-6 py-5 pb-28 md:pb-12 space-y-6 animate-in fade-in duration-150">
-      {/* 1. DIGITAL STUDENT ID CARD - Sleek UIU Card */}
-      <div className="relative overflow-hidden rounded-2xl p-6 sm:p-7 bg-zinc-900/60 border border-zinc-800/80 hover:border-orange-500/30 backdrop-blur-md shadow-sm transition-colors">
+    <div className="w-full max-w-4xl mx-auto px-4 sm:px-6 py-5 pb-28 md:pb-12 space-y-5 animate-in fade-in duration-150">
+      {/* 1. TOP HEADER: UIU Student Profile */}
+      <div className="flex items-center justify-between gap-3 pb-1 border-b border-zinc-800/80">
+        <div className="flex items-center gap-2.5">
+          <div className="w-9 h-9 rounded-xl bg-orange-500/10 border border-orange-500/30 flex items-center justify-center text-orange-400 shadow-sm shrink-0">
+            <GraduationCap className="w-5 h-5" />
+          </div>
+          <div>
+            <h1 className="text-base sm:text-lg font-bold text-zinc-100 tracking-tight">
+              UIU Student Profile
+            </h1>
+            <p className="text-[11px] text-zinc-400">
+              Verified campus identity & live student status
+            </p>
+          </div>
+        </div>
+
+        <button
+          onClick={onOpenEditModal}
+          className="px-3 py-1.5 rounded-lg bg-orange-600 hover:bg-zinc-800 text-white text-xs font-semibold transition-all flex items-center gap-1.5 active:scale-95 shadow-sm shrink-0"
+        >
+          <Edit3 className="w-3.5 h-3.5" />
+          <span>Edit Profile</span>
+        </button>
+      </div>
+
+      {/* 2. DIGITAL STUDENT ID CARD - Sleek UIU Badge */}
+      <div className="relative overflow-hidden rounded-2xl p-5 sm:p-7 bg-zinc-900/60 border border-zinc-800/80 hover:border-orange-500/30 backdrop-blur-md shadow-sm transition-colors">
         {/* Subtle Watermark on ID Card */}
         <img
           src="/images/campus-hub-emblem-tight.png"
@@ -65,7 +77,7 @@ export default function ProfileView({
           className="absolute -right-8 -bottom-8 w-56 h-auto opacity-[0.06] pointer-events-none select-none filter contrast-125"
         />
 
-        <div className="relative z-10 flex flex-col sm:flex-row items-center sm:items-start justify-between gap-6">
+        <div className="relative z-10 flex flex-col sm:flex-row items-center sm:items-start justify-between gap-5">
           <div className="flex flex-col sm:flex-row items-center sm:items-start gap-4 text-center sm:text-left">
             {/* Avatar Badge with StudentAvatar */}
             <StudentAvatar
@@ -98,10 +110,9 @@ export default function ProfileView({
             </div>
           </div>
 
-          {/* Edit Profile Button: Orange by default, turns dark gray on hover */}
           <button
             onClick={onOpenEditModal}
-            className="px-3.5 py-2 rounded-lg bg-orange-600 hover:bg-zinc-800 text-white text-xs font-semibold transition-all flex items-center gap-1.5 active:scale-95 shadow-sm"
+            className="hidden sm:flex px-3.5 py-2 rounded-lg bg-orange-600 hover:bg-zinc-800 text-white text-xs font-semibold transition-all items-center gap-1.5 active:scale-95 shadow-sm"
           >
             <Edit3 className="w-3.5 h-3.5 text-white" />
             <span>Edit Profile</span>
@@ -109,7 +120,7 @@ export default function ProfileView({
         </div>
 
         {/* Card Footer with Student UID & Barcode mockup */}
-        <div className="mt-6 pt-4 border-t border-zinc-800/70 flex flex-col sm:flex-row items-center justify-between gap-4">
+        <div className="mt-5 pt-4 border-t border-zinc-800/70 flex flex-col sm:flex-row items-center justify-between gap-3">
           <div className="text-center sm:text-left">
             <span className="text-[10px] text-zinc-400 uppercase tracking-widest font-semibold block">
               UIU Campus Hub Identity Key
@@ -128,7 +139,70 @@ export default function ProfileView({
         </div>
       </div>
 
-      {/* 2. QUICK STATUS UPDATER */}
+      {/* 3. STUDENT PROFILE INFORMATION BREAKDOWN */}
+      <div className="rounded-2xl bg-zinc-900/40 p-4 sm:p-5 border border-zinc-800/80 space-y-3">
+        <div className="flex items-center justify-between">
+          <h3 className="text-xs font-semibold text-zinc-300 uppercase tracking-wider flex items-center gap-2">
+            <User className="w-3.5 h-3.5 text-orange-400" />
+            Student Profile Details
+          </h3>
+          <button
+            onClick={onOpenEditModal}
+            className="text-[11px] font-semibold text-orange-400 hover:text-orange-300 transition-colors flex items-center gap-1"
+          >
+            <Edit3 className="w-3 h-3" />
+            Edit
+          </button>
+        </div>
+
+        <div className="grid grid-cols-1 sm:grid-cols-2 gap-2.5 text-xs">
+          <div className="flex items-center gap-2.5 p-3 rounded-xl bg-zinc-900/60 border border-zinc-800">
+            <User className="w-4 h-4 text-orange-400 shrink-0" />
+            <div>
+              <span className="text-[10px] text-zinc-500 block">Full Name</span>
+              <span className="text-zinc-200 font-medium">{profile.full_name}</span>
+            </div>
+          </div>
+
+          <div className="flex items-center gap-2.5 p-3 rounded-xl bg-zinc-900/60 border border-zinc-800">
+            <BookOpen className="w-4 h-4 text-orange-400 shrink-0" />
+            <div>
+              <span className="text-[10px] text-zinc-500 block">Academic Program</span>
+              <span className="text-zinc-200 font-medium">{profile.department}</span>
+            </div>
+          </div>
+
+          <div className="flex items-center gap-2.5 p-3 rounded-xl bg-zinc-900/60 border border-zinc-800">
+            <Calendar className="w-4 h-4 text-orange-400 shrink-0" />
+            <div>
+              <span className="text-[10px] text-zinc-500 block">Batch / Class Year</span>
+              <span className="text-zinc-200 font-medium">{profile.batch}</span>
+            </div>
+          </div>
+
+          <div className="flex items-center gap-2.5 p-3 rounded-xl bg-zinc-900/60 border border-zinc-800">
+            <Mail className="w-4 h-4 text-orange-400 shrink-0" />
+            <div>
+              <span className="text-[10px] text-zinc-500 block">Student Email</span>
+              <span className="text-zinc-200 font-medium truncate block max-w-[200px]">
+                {profile.email || `${profile.id}@bscse.uiu.ac.bd`}
+              </span>
+            </div>
+          </div>
+        </div>
+
+        {profile.bio && (
+          <div className="p-3 rounded-xl bg-zinc-900/60 border border-zinc-800 flex items-start gap-2.5 text-xs">
+            <FileText className="w-4 h-4 text-orange-400 shrink-0 mt-0.5" />
+            <div>
+              <span className="text-[10px] text-zinc-500 block">Campus Interest / Bio</span>
+              <p className="text-zinc-300 leading-relaxed">{profile.bio}</p>
+            </div>
+          </div>
+        )}
+      </div>
+
+      {/* 4. BROADCAST LIVE CAMPUS STATUS */}
       <div className="space-y-3">
         <h3 className="text-xs font-semibold text-zinc-400 uppercase tracking-wider flex items-center gap-2">
           <Sparkles className="w-3.5 h-3.5 text-orange-400" />
@@ -159,7 +233,7 @@ export default function ProfileView({
         </div>
       </div>
 
-      {/* THEME PREFERENCE (LIGHT / DARK MODE) */}
+      {/* 5. THEME PREFERENCE (LIGHT / DARK MODE) */}
       <div className="space-y-3">
         <h3 className="text-xs font-semibold text-zinc-400 uppercase tracking-wider flex items-center gap-2">
           {isDark ? <Moon className="w-3.5 h-3.5 text-orange-400" /> : <Sun className="w-3.5 h-3.5 text-orange-400" />}
@@ -203,78 +277,7 @@ export default function ProfileView({
         </div>
       </div>
 
-      {/* 3. MOBILE & NATIVE EXPORT GUIDE (Capacitor & Android APK / Xcode iOS) */}
-      <div className="rounded-2xl bg-zinc-900/40 p-6 sm:p-7 border border-zinc-800/80 space-y-4">
-        <div className="flex items-center gap-3">
-          <div className="w-9 h-9 rounded-xl bg-zinc-800 border border-zinc-700/60 flex items-center justify-center">
-            <Smartphone className="w-4 h-4 text-orange-400" />
-          </div>
-          <div>
-            <h3 className="text-sm font-semibold text-zinc-100 tracking-tight">
-              Native Mobile Export Ready (Android APK & iOS)
-            </h3>
-            <p className="text-xs text-zinc-400">
-              Structured with CapacitorJS for zero-friction export to Android Studio & Xcode
-            </p>
-          </div>
-        </div>
-
-        <p className="text-xs text-zinc-400 leading-relaxed">
-          The app is built with mobile-first viewport safe-area padding (<code className="text-zinc-300 font-mono">env(safe-area-inset-top)</code>) and configured for WebRTC video webviews. You can generate native binaries anytime using the pre-configured scripts:
-        </p>
-
-        <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 pt-1">
-          {/* Android Box */}
-          <div className="p-3.5 rounded-xl bg-zinc-900 border border-zinc-800 space-y-2">
-            <div className="flex items-center justify-between">
-              <span className="text-xs font-semibold text-orange-400 flex items-center gap-1.5">
-                <Terminal className="w-3.5 h-3.5 text-orange-400" />
-                Android APK (Android Studio)
-              </span>
-              <button
-                onClick={() =>
-                  copyToClipboard(
-                    "npx cap add android && npx cap sync && npx cap open android",
-                    "android"
-                  )
-                }
-                className="text-[10px] font-semibold text-zinc-400 hover:text-orange-400 transition-colors"
-              >
-                {copiedScript === "android" ? "Copied! ✓" : "Copy Command"}
-              </button>
-            </div>
-            <pre className="p-2.5 rounded-lg bg-zinc-950 text-[11px] font-mono text-zinc-300 overflow-x-auto border border-zinc-800/60">
-              npx cap add android{"\n"}npx cap sync{"\n"}npx cap open android
-            </pre>
-          </div>
-
-          {/* iOS Box */}
-          <div className="p-3.5 rounded-xl bg-zinc-900 border border-zinc-800 space-y-2">
-            <div className="flex items-center justify-between">
-              <span className="text-xs font-semibold text-orange-400 flex items-center gap-1.5">
-                <Terminal className="w-3.5 h-3.5 text-orange-400" />
-                iOS App (Xcode)
-              </span>
-              <button
-                onClick={() =>
-                  copyToClipboard(
-                    "npx cap add ios && npx cap sync && npx cap open ios",
-                    "ios"
-                  )
-                }
-                className="text-[10px] font-semibold text-zinc-400 hover:text-orange-400 transition-colors"
-              >
-                {copiedScript === "ios" ? "Copied! ✓" : "Copy Command"}
-              </button>
-            </div>
-            <pre className="p-2.5 rounded-lg bg-zinc-950 text-[11px] font-mono text-zinc-300 overflow-x-auto border border-zinc-800/60">
-              npx cap add ios{"\n"}npx cap sync{"\n"}npx cap open ios
-            </pre>
-          </div>
-        </div>
-      </div>
-
-      {/* 4. ACCOUNT SESSION & LOG OUT */}
+      {/* 6. ACCOUNT SESSION & LOG OUT */}
       {onSignOut && (
         <div className="rounded-xl bg-zinc-900/40 p-4 border border-zinc-800/80 flex flex-col sm:flex-row items-center justify-between gap-4">
           <div className="flex items-center gap-3 text-center sm:text-left">
@@ -285,8 +288,8 @@ export default function ProfileView({
               <p className="text-xs font-semibold text-zinc-200">
                 Active Student Session
               </p>
-              <p className="text-[11px] text-zinc-400">
-                {profile.email || "Authenticated UIU Student Session"}
+              <p className="text-[11px] text-zinc-400 truncate max-w-[240px]">
+                {profile.email || `${profile.id}@bscse.uiu.ac.bd`}
               </p>
             </div>
           </div>

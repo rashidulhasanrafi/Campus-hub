@@ -10,11 +10,7 @@ import {
   fetchRemoteProfiles,
   syncProfileWithSupabase,
   signOutCampusUser,
-  isDevPreviewActive,
-  setDevPreview,
-  DEV_MOCK_PROFILE,
   supabase,
-  MOCK_STUDENTS,
   detectCampusTheme,
 } from "@/lib/supabase";
 import AuthScreen from "@/components/AuthScreen";
@@ -36,7 +32,7 @@ export default function CampusHubHome() {
   const [profile, setProfile] = useState<UserProfile | null>(null);
 
   // App navigation & state
-  const [students, setStudents] = useState<UserProfile[]>(MOCK_STUDENTS);
+  const [students, setStudents] = useState<UserProfile[]>([]);
   const [currentTab, setCurrentTab] = useState<NavTab>("lounge");
   const [editProfileOpen, setEditProfileOpen] = useState(false);
   const [incomingInvite, setIncomingInvite] = useState<DirectCallInvite | null>(null);
@@ -57,16 +53,8 @@ export default function CampusHubHome() {
   // Check auth session & load user profile
   const checkAuthAndProfile = useCallback(async () => {
     try {
-      // 1. Check if Dev Preview mode is active
-      if (isDevPreviewActive()) {
-        const localDev = (await fetchUserProfile(DEV_MOCK_PROFILE.id)) || DEV_MOCK_PROFILE;
-        setProfile(localDev);
-        setSession({
-          user: { id: DEV_MOCK_PROFILE.id, email: DEV_MOCK_PROFILE.email },
-        } as unknown as Session);
-        setNeedsOnboarding(false);
-        setAuthLoading(false);
-        return;
+      if (typeof window !== "undefined") {
+        localStorage.removeItem("campus_hub_dev_preview_session");
       }
 
       const { data } = await supabase.auth.getSession();
@@ -156,15 +144,7 @@ export default function CampusHubHome() {
           onlineUsers.push(pres);
         }
       });
-      if (onlineUsers.length > 0) {
-        const merged = [...onlineUsers];
-        MOCK_STUDENTS.forEach((mock) => {
-          if (!merged.some((m) => m.id === mock.id)) {
-            merged.push(mock);
-          }
-        });
-        setStudents(merged);
-      }
+      setStudents(onlineUsers);
     });
 
     channel.subscribe(async (status) => {
@@ -187,7 +167,6 @@ export default function CampusHubHome() {
   // Sign out handler
   const handleSignOut = async () => {
     setAuthLoading(true);
-    setDevPreview(false);
     await signOutCampusUser();
     setSession(null);
     setProfile(null);
@@ -244,6 +223,15 @@ export default function CampusHubHome() {
     syncProfileWithSupabase(updated);
   };
 
+  // Tab change handler (always scrolls to top, critical for mobile webviews)
+  const handleTabChange = (tab: NavTab) => {
+    if (tab !== "match") setDirectRoomToJoin(null);
+    setCurrentTab(tab);
+    if (typeof window !== "undefined") {
+      window.scrollTo({ top: 0, behavior: "instant" });
+    }
+  };
+
   // 1. Initial Auth Loading Splash
   if (authLoading) {
     return (
@@ -268,11 +256,6 @@ export default function CampusHubHome() {
         initialInfo={authNotice}
         initialLoginInput={authPreFill}
         onAuthSuccess={() => {
-          setAuthNotice("");
-          setAuthPreFill("");
-          checkAuthAndProfile();
-        }}
-        onBypassDev={() => {
           setAuthNotice("");
           setAuthPreFill("");
           checkAuthAndProfile();
@@ -315,10 +298,7 @@ export default function CampusHubHome() {
           onStatusChange={handleStatusChange}
           onSignOut={handleSignOut}
           currentTab={currentTab}
-          onTabChange={(tab) => {
-            if (tab !== "match") setDirectRoomToJoin(null);
-            setCurrentTab(tab);
-          }}
+          onTabChange={handleTabChange}
         />
 
       {/* Main Workspace View Router */}
@@ -370,10 +350,7 @@ export default function CampusHubHome() {
       {/* Persistent Mobile Bottom Navigation Bar */}
       <BottomNavigation
         currentTab={currentTab}
-        onTabChange={(tab) => {
-          if (tab !== "match") setDirectRoomToJoin(null);
-          setCurrentTab(tab);
-        }}
+        onTabChange={handleTabChange}
       />
 
       {/* Student Profile Edit Modal */}

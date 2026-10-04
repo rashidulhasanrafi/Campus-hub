@@ -384,8 +384,8 @@ export default function GroupHangout({
                           </span>
                         )}
                         <span className="flex items-center gap-1.5 px-2.5 py-1 rounded-md text-xs font-medium bg-zinc-800/80 text-zinc-300 border border-zinc-700/60">
-                          <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-pulse" />
-                          {room.initialParticipants || 2} / {room.maxParticipants} Seats
+                          <span className="w-1.5 h-1.5 rounded-full bg-emerald-400" />
+                          Up to {room.maxParticipants} Seats
                         </span>
                       </div>
                     </div>

@@ -18,7 +18,6 @@ export const CAMPUS_HANGOUT_ROOMS: HangoutRoomConfig[] = [
     emoji: "🍕",
     tag: "Casual",
     maxParticipants: 8,
-    initialParticipants: 3,
     gradient: "from-amber-500/20 to-orange-500/10 border-amber-500/30",
   },
   {
@@ -28,7 +27,6 @@ export const CAMPUS_HANGOUT_ROOMS: HangoutRoomConfig[] = [
     emoji: "⚡",
     tag: "Academic",
     maxParticipants: 8,
-    initialParticipants: 4,
     gradient: "from-blue-500/20 to-cyan-500/10 border-blue-500/30",
   },
   {
@@ -38,7 +36,6 @@ export const CAMPUS_HANGOUT_ROOMS: HangoutRoomConfig[] = [
     emoji: "🤫",
     tag: "Focus",
     maxParticipants: 8,
-    initialParticipants: 2,
     gradient: "from-emerald-500/20 to-teal-500/10 border-emerald-500/30",
     password: "uiu",
   },
@@ -49,7 +46,6 @@ export const CAMPUS_HANGOUT_ROOMS: HangoutRoomConfig[] = [
     emoji: "🎵",
     tag: "Music",
     maxParticipants: 8,
-    initialParticipants: 2,
     gradient: "from-purple-500/20 to-pink-500/10 border-purple-500/30",
   },
   {
@@ -59,7 +55,6 @@ export const CAMPUS_HANGOUT_ROOMS: HangoutRoomConfig[] = [
     emoji: "🕹️",
     tag: "Gaming",
     maxParticipants: 8,
-    initialParticipants: 1,
     gradient: "from-rose-500/20 to-red-500/10 border-rose-500/30",
   },
   {
@@ -69,7 +64,6 @@ export const CAMPUS_HANGOUT_ROOMS: HangoutRoomConfig[] = [
     emoji: "💡",
     tag: "Mentorship",
     maxParticipants: 8,
-    initialParticipants: 3,
     gradient: "from-violet-500/20 to-indigo-500/10 border-violet-500/30",
   },
 ];
