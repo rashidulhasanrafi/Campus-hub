@@ -40,6 +40,7 @@ import {
   Check,
   AlertCircle,
   KeyRound,
+  Search,
 } from "lucide-react";
 import confetti from "canvas-confetti";
 
@@ -57,6 +58,7 @@ export default function GroupHangout({
   const [livekitToken, setLivekitToken] = useState<string>("");
   const [livekitUrl, setLivekitUrl] = useState<string>("");
   const [selectedTag, setSelectedTag] = useState("All");
+  const [searchQuery, setSearchQuery] = useState("");
   const [errorMsg, setErrorMsg] = useState("");
 
   // Create Room Modal state
@@ -89,8 +91,16 @@ export default function GroupHangout({
   }, [initialRoomId, rooms, activeRoom]);
 
   const filteredRooms = rooms.filter((r) => {
-    if (selectedTag === "All") return true;
-    return r.tag.toLowerCase() === selectedTag.toLowerCase();
+    const matchesTag =
+      selectedTag === "All" || r.tag.toLowerCase() === selectedTag.toLowerCase();
+    const query = searchQuery.trim().toLowerCase();
+    const matchesSearch =
+      !query ||
+      r.name.toLowerCase().includes(query) ||
+      r.topic.toLowerCase().includes(query) ||
+      r.tag.toLowerCase().includes(query) ||
+      r.emoji.includes(query);
+    return matchesTag && matchesSearch;
   });
 
   const onInitiateJoin = (room: HangoutRoomConfig) => {
@@ -280,6 +290,28 @@ export default function GroupHangout({
             </div>
           )}
 
+          {/* Room Search Bar */}
+          <div className="relative">
+            <Search className="absolute left-3.5 top-1/2 -translate-y-1/2 w-4 h-4 text-zinc-400" />
+            <input
+              type="text"
+              value={searchQuery}
+              onChange={(e) => setSearchQuery(e.target.value)}
+              placeholder="Search hangout rooms by title, topic, or keyword (e.g. Canteen, Code, Gaming, Music)..."
+              className="w-full pl-10 pr-10 py-2.5 rounded-xl bg-zinc-900/80 border border-zinc-800 text-xs sm:text-sm text-zinc-100 placeholder-zinc-500 focus:outline-none focus:border-orange-500 focus:ring-1 focus:ring-orange-500/30 transition-all shadow-inner"
+            />
+            {searchQuery && (
+              <button
+                type="button"
+                onClick={() => setSearchQuery("")}
+                className="absolute right-3 top-1/2 -translate-y-1/2 text-xs text-zinc-400 hover:text-zinc-200 p-1"
+                title="Clear search"
+              >
+                ✕
+              </button>
+            )}
+          </div>
+
           {/* Tag Filter Pills */}
           <div className="flex items-center gap-1.5 overflow-x-auto pb-1 scrollbar-none">
             {["All", "Casual", "Academic", "Focus", "Music", "Gaming", "Mentorship"].map((tag) => {
@@ -301,7 +333,36 @@ export default function GroupHangout({
           </div>
 
           {/* Rooms Grid */}
-          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3.5">
+          {filteredRooms.length === 0 ? (
+            <div className="rounded-2xl p-8 border border-zinc-800/80 bg-zinc-900/40 text-center space-y-3">
+              <span className="text-3xl block">🔍</span>
+              <h3 className="text-sm font-bold text-zinc-200">No rooms found</h3>
+              <p className="text-xs text-zinc-400 max-w-sm mx-auto">
+                No active hangout rooms match &quot;{searchQuery}&quot; under &quot;{selectedTag}&quot;.
+              </p>
+              <div className="flex items-center justify-center gap-2 pt-1">
+                <button
+                  onClick={() => {
+                    setSearchQuery("");
+                    setSelectedTag("All");
+                  }}
+                  className="px-3 py-1.5 rounded-lg bg-zinc-800 hover:bg-zinc-700 text-xs font-medium text-zinc-300 transition-colors"
+                >
+                  Reset Search
+                </button>
+                <button
+                  onClick={() => {
+                    setNewRoomTitle(searchQuery);
+                    setCreateModalOpen(true);
+                  }}
+                  className="px-3 py-1.5 rounded-lg bg-orange-600 hover:bg-orange-500 text-xs font-semibold text-white transition-colors"
+                >
+                  Create This Room
+                </button>
+              </div>
+            </div>
+          ) : (
+            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3.5">
             {filteredRooms.map((room) => {
               const isLocked = Boolean(room.password && room.password.trim().length > 0);
 
@@ -354,7 +415,8 @@ export default function GroupHangout({
                 </div>
               );
             })}
-          </div>
+            </div>
+          )}
         </div>
       )}
 

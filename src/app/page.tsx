@@ -42,6 +42,8 @@ export default function CampusHubHome() {
   const [incomingInvite, setIncomingInvite] = useState<DirectCallInvite | null>(null);
   const [directRoomToJoin, setDirectRoomToJoin] = useState<string | null>(null);
   const [selectedHangoutRoomId, setSelectedHangoutRoomId] = useState<string | null>(null);
+  const [authNotice, setAuthNotice] = useState("");
+  const [authPreFill, setAuthPreFill] = useState("");
 
   // Apply campus theme attribute on document root (defaults to UIU)
   useEffect(() => {
@@ -263,8 +265,18 @@ export default function CampusHubHome() {
   if (!session || !session.user) {
     return (
       <AuthScreen
-        onAuthSuccess={checkAuthAndProfile}
-        onBypassDev={checkAuthAndProfile}
+        initialInfo={authNotice}
+        initialLoginInput={authPreFill}
+        onAuthSuccess={() => {
+          setAuthNotice("");
+          setAuthPreFill("");
+          checkAuthAndProfile();
+        }}
+        onBypassDev={() => {
+          setAuthNotice("");
+          setAuthPreFill("");
+          checkAuthAndProfile();
+        }}
       />
     );
   }
@@ -373,6 +385,13 @@ export default function CampusHubHome() {
           setProfile(updated);
           saveLocalProfile(updated);
           syncProfileWithSupabase(updated);
+        }}
+        onRequireRelogin={async () => {
+          const userIdentifier = profile?.email || profile?.id || "";
+          setAuthPreFill(userIdentifier);
+          setAuthNotice("Profile updated successfully! For security, please log in with your password again.");
+          setEditProfileOpen(false);
+          await handleSignOut();
         }}
       />
 

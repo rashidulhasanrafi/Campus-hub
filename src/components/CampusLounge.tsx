@@ -105,8 +105,7 @@ export default function CampusLounge({
       userName: currentProfile?.full_name || "UIU Student",
       userDepartment: currentProfile?.department || "CSE",
       userAvatar:
-        currentProfile?.avatar ||
-        "https://images.unsplash.com/photo-1534528741775-53994a69daeb?w=150&auto=format&fit=crop&q=80",
+        currentProfile?.avatar || "/images/avatar-male.png",
       content: newPostContent.trim(),
       tag: newPostTag,
       likes: 1,

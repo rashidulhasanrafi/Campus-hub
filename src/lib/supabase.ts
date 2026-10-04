@@ -66,6 +66,21 @@ export interface ShoutoutPost {
   timeAgo: string;
 }
 
+export const UIU_PROGRAMS = [
+  "Computer Science & Engineering (CSE)",
+  "Electrical & Electronic Engineering (EEE)",
+  "Civil Engineering (CE)",
+  "Data Science (DS)",
+  "Business Administration (BBA)",
+  "Accounting & Information Systems (AIS)",
+  "Economics (ECO)",
+  "Environment and Development Studies (EDS)",
+  "Media Studies and Journalism (MSJ)",
+  "English",
+  "Pharmacy",
+  "Biotechnology and Genetic Engineering (BGE)",
+];
+
 export const CAMPUS_DEPARTMENTS = [
   "Computer Science & Eng (CSE)",
   "Electrical & Electronics (EEE)",
@@ -97,52 +112,16 @@ export const CAMPUS_STATUS_OPTIONS = [
 
 export const AVATAR_OPTIONS = [
   {
-    id: "avatar-1",
-    emoji: "https://images.unsplash.com/photo-1535713875002-d1d0cf377fde?w=150&auto=format&fit=crop&q=80",
-    label: "Alex • CSE",
-    bg: "bg-zinc-800",
+    id: "avatar-male",
+    emoji: "/images/avatar-male.png",
+    label: "Male Student",
+    bg: "bg-blue-900/30",
   },
   {
-    id: "avatar-2",
-    emoji: "https://images.unsplash.com/photo-1534528741775-53994a69daeb?w=150&auto=format&fit=crop&q=80",
-    label: "Maya • AI",
-    bg: "bg-zinc-800",
-  },
-  {
-    id: "avatar-3",
-    emoji: "https://images.unsplash.com/photo-1539571696357-5a69c17a67c6?w=150&auto=format&fit=crop&q=80",
-    label: "Liam • Eng",
-    bg: "bg-zinc-800",
-  },
-  {
-    id: "avatar-4",
-    emoji: "https://images.unsplash.com/photo-1517841905240-472988babdf9?w=150&auto=format&fit=crop&q=80",
-    label: "Elena • Arch",
-    bg: "bg-zinc-800",
-  },
-  {
-    id: "avatar-5",
-    emoji: "https://images.unsplash.com/photo-1507003211169-0a1dd7228f2d?w=150&auto=format&fit=crop&q=80",
-    label: "David • EEE",
-    bg: "bg-zinc-800",
-  },
-  {
-    id: "avatar-6",
-    emoji: "https://images.unsplash.com/photo-1494790108377-be9c29b29330?w=150&auto=format&fit=crop&q=80",
-    label: "Sara • Data",
-    bg: "bg-zinc-800",
-  },
-  {
-    id: "avatar-7",
-    emoji: "https://images.unsplash.com/photo-1500648767791-00dcc994a43e?w=150&auto=format&fit=crop&q=80",
-    label: "Marcus • SWE",
-    bg: "bg-zinc-800",
-  },
-  {
-    id: "avatar-8",
-    emoji: "https://images.unsplash.com/photo-1524504388940-b1c1722653e1?w=150&auto=format&fit=crop&q=80",
-    label: "Chloe • Bio",
-    bg: "bg-zinc-800",
+    id: "avatar-female",
+    emoji: "/images/avatar-female.png",
+    label: "Female Student",
+    bg: "bg-rose-900/30",
   },
 ];
 
@@ -152,7 +131,7 @@ export const INITIAL_SHOUTOUTS: ShoutoutPost[] = [
     userId: "campus-bot",
     userName: "Ayesha Noor",
     userDepartment: "Computer Science & Eng (CSE)",
-    userAvatar: "https://images.unsplash.com/photo-1494790108377-be9c29b29330?w=150&auto=format&fit=crop&q=80",
+    userAvatar: "/images/avatar-female.png",
     content: "Algorithms midterm study cram in Room 302! Join in if you're stuck on Dynamic Programming 🚀",
     tag: "Study Jam",
     likes: 14,
@@ -163,7 +142,7 @@ export const INITIAL_SHOUTOUTS: ShoutoutPost[] = [
     userId: "campus-bot-2",
     userName: "Tanvir Ahmed",
     userDepartment: "Business & Economics (BBA)",
-    userAvatar: "https://images.unsplash.com/photo-1507003211169-0a1dd7228f2d?w=150&auto=format&fit=crop&q=80",
+    userAvatar: "/images/avatar-male.png",
     content: "Central cafeteria coffee is surprisingly good today. Who is around for a quick chat? ☕",
     tag: "Chit Chat",
     likes: 9,
@@ -174,7 +153,7 @@ export const INITIAL_SHOUTOUTS: ShoutoutPost[] = [
     userId: "campus-bot-3",
     userName: "Sarah Jenkins",
     userDepartment: "Data Science & AI (DSAI)",
-    userAvatar: "https://images.unsplash.com/photo-1534528741775-53994a69daeb?w=150&auto=format&fit=crop&q=80",
+    userAvatar: "/images/avatar-female.png",
     content: "Looking for 1 more teammate for the upcoming Inter-University Hackathon! Drop a DM or call me!",
     tag: "Hackathon",
     likes: 22,
@@ -188,7 +167,7 @@ export const MOCK_STUDENTS: UserProfile[] = [
     full_name: "Farhan Rahman",
     department: "Computer Science & Eng (CSE)",
     batch: "Batch '24 (Junior)",
-    avatar: "https://images.unsplash.com/photo-1539571696357-5a69c17a67c6?w=150&auto=format&fit=crop&q=80",
+    avatar: "/images/avatar-male.png",
     status: "Ready to chat 💬",
     bio: "Building mobile apps & playing chess between classes.",
     is_online: true,
@@ -198,7 +177,7 @@ export const MOCK_STUDENTS: UserProfile[] = [
     full_name: "Priya Sharma",
     department: "Data Science & AI (DSAI)",
     batch: "Batch '25 (Sophomore)",
-    avatar: "https://images.unsplash.com/photo-1534528741775-53994a69daeb?w=150&auto=format&fit=crop&q=80",
+    avatar: "/images/avatar-female.png",
     status: "Free for coffee ☕",
     bio: "Machine learning enthusiast & cafeteria regular.",
     is_online: true,
@@ -208,7 +187,7 @@ export const MOCK_STUDENTS: UserProfile[] = [
     full_name: "Adnan Chowdhury",
     department: "Electrical & Electronics (EEE)",
     batch: "Batch '23 (Senior)",
-    avatar: "https://images.unsplash.com/photo-1507003211169-0a1dd7228f2d?w=150&auto=format&fit=crop&q=80",
+    avatar: "/images/avatar-male.png",
     status: "Studying at Library 📚",
     bio: "Final year thesis grind. Ask me about microcontrollers.",
     is_online: true,
@@ -218,7 +197,7 @@ export const MOCK_STUDENTS: UserProfile[] = [
     full_name: "Anika Tabassum",
     department: "Architecture & Design (ARCH)",
     batch: "Batch '24 (Junior)",
-    avatar: "https://images.unsplash.com/photo-1517841905240-472988babdf9?w=150&auto=format&fit=crop&q=80",
+    avatar: "/images/avatar-female.png",
     status: "Exam prep grind 🔥",
     bio: "Studio all night, coffee all day ☕",
     is_online: true,
@@ -228,7 +207,7 @@ export const MOCK_STUDENTS: UserProfile[] = [
     full_name: "Zayan Kabir",
     department: "Software Engineering (SWE)",
     batch: "Batch '26 (Freshman)",
-    avatar: "https://images.unsplash.com/photo-1500648767791-00dcc994a43e?w=150&auto=format&fit=crop&q=80",
+    avatar: "/images/avatar-male.png",
     status: "Chilling at Canteen 🍕",
     bio: "First year surviving calculus & discovering university bands.",
     is_online: true,
@@ -249,6 +228,14 @@ export function getLocalProfile(userId?: string): UserProfile | null {
     if (!raw) return null;
     const parsed = JSON.parse(raw) as UserProfile;
     if (userId && parsed.id !== userId) return null;
+    // Upgrade legacy unsplash or missing avatar to user-provided male/female avatars
+    if (!parsed.avatar || parsed.avatar.includes("unsplash.com")) {
+      const isF = (parsed.full_name || "").toLowerCase().includes("priya") ||
+        (parsed.full_name || "").toLowerCase().includes("anika") ||
+        (parsed.full_name || "").toLowerCase().includes("sara") ||
+        (parsed.full_name || "").toLowerCase().includes("female");
+      parsed.avatar = isF ? "/images/avatar-female.png" : "/images/avatar-male.png";
+    }
     return parsed;
   } catch (err) {
     console.error("Failed to read local profile:", err);
@@ -276,7 +263,7 @@ export const DEV_MOCK_PROFILE: UserProfile = {
   full_name: "Test Student (UIU)",
   department: "Computer Science & Eng (CSE)",
   batch: "Batch '24 (Junior)",
-  avatar: "https://images.unsplash.com/photo-1535713875002-d1d0cf377fde?w=150&auto=format&fit=crop&q=80",
+  avatar: "/images/avatar-male.png",
   status: "Ready to chat 💬",
   bio: "UIU Campus Hub • Testing real-time video, 1-on-1 match & hangout rooms.",
   is_online: true,

@@ -3,12 +3,11 @@
 import React, { useState } from "react";
 import {
   UserProfile,
-  CAMPUS_DEPARTMENTS,
+  UIU_PROGRAMS,
   CAMPUS_BATCHES,
   CAMPUS_STATUS_OPTIONS,
   AVATAR_OPTIONS,
   syncProfileWithSupabase,
-  supabase,
 } from "@/lib/supabase";
 import StudentAvatar from "@/components/StudentAvatar";
 import {
@@ -16,7 +15,6 @@ import {
   Check,
   User,
   GraduationCap,
-  Mail,
   Lock,
   ArrowRight,
 } from "lucide-react";
@@ -26,6 +24,7 @@ interface ProfileOnboardingModalProps {
   onClose: () => void;
   currentProfile: UserProfile | null;
   onSaveProfile: (profile: UserProfile) => void;
+  onRequireRelogin?: () => void;
 }
 
 export default function ProfileOnboardingModal({
@@ -33,12 +32,13 @@ export default function ProfileOnboardingModal({
   onClose,
   currentProfile,
   onSaveProfile,
+  onRequireRelogin,
 }: ProfileOnboardingModalProps) {
   const [fullName, setFullName] = useState(
     currentProfile?.full_name || "Alex Chen"
   );
   const [department, setDepartment] = useState(
-    currentProfile?.department || CAMPUS_DEPARTMENTS[0]
+    currentProfile?.department || UIU_PROGRAMS[0]
   );
   const [batch, setBatch] = useState(
     currentProfile?.batch || CAMPUS_BATCHES[1]
@@ -53,13 +53,6 @@ export default function ProfileOnboardingModal({
     currentProfile?.bio || "Exploring campus, building projects, and connecting!"
   );
 
-  // Optional Supabase Email Auth toggle
-  const [authMode, setAuthMode] = useState<"instant" | "email">("instant");
-  const [email, setEmail] = useState("");
-  const [password, setPassword] = useState("");
-  const [authError, setAuthError] = useState("");
-  const [authLoading, setAuthLoading] = useState(false);
-
   if (!isOpen) return null;
 
   const handleSubmit = async (e: React.FormEvent) => {
@@ -69,6 +62,7 @@ export default function ProfileOnboardingModal({
     const id = currentProfile?.id || `student_${Date.now().toString(36)}`;
     const newProfile: UserProfile = {
       id,
+      email: currentProfile?.email,
       full_name: fullName.trim(),
       department,
       batch,
@@ -82,67 +76,10 @@ export default function ProfileOnboardingModal({
     onSaveProfile(newProfile);
     await syncProfileWithSupabase(newProfile);
     onClose();
-  };
 
-  const handleEmailAuth = async (isSignUp: boolean) => {
-    if (!email || !password) {
-      setAuthError("Please fill in email and password");
-      return;
-    }
-    setAuthLoading(true);
-    setAuthError("");
-
-    try {
-      if (isSignUp) {
-        const { data, error } = await supabase.auth.signUp({
-          email,
-          password,
-        });
-        if (error) throw error;
-        if (data.user) {
-          const id = data.user.id;
-          const newProfile: UserProfile = {
-            id,
-            full_name: fullName.trim() || email.split("@")[0],
-            department,
-            batch,
-            avatar: selectedAvatar,
-            status,
-            bio: bio.trim(),
-            is_online: true,
-          };
-          onSaveProfile(newProfile);
-          await syncProfileWithSupabase(newProfile);
-          onClose();
-        }
-      } else {
-        const { data, error } = await supabase.auth.signInWithPassword({
-          email,
-          password,
-        });
-        if (error) throw error;
-        if (data.user) {
-          const id = data.user.id;
-          const newProfile: UserProfile = {
-            id,
-            full_name: fullName.trim() || email.split("@")[0],
-            department,
-            batch,
-            avatar: selectedAvatar,
-            status,
-            bio: bio.trim(),
-            is_online: true,
-          };
-          onSaveProfile(newProfile);
-          await syncProfileWithSupabase(newProfile);
-          onClose();
-        }
-      }
-    } catch (err: unknown) {
-      const error = err as Error;
-      setAuthError(error.message || "Authentication failed");
-    } finally {
-      setAuthLoading(false);
+    // If user edited an existing profile, require logging in with password again
+    if (currentProfile && onRequireRelogin) {
+      onRequireRelogin();
     }
   };
 
@@ -166,7 +103,7 @@ export default function ProfileOnboardingModal({
           </div>
           <div>
             <h2 className="text-base font-bold text-zinc-100 tracking-tight">
-              {currentProfile ? "Edit UIU Student Profile" : "UIU Campus Hub Setup"}
+              UIU Student Profile
             </h2>
             <p className="text-xs text-zinc-400">
               Customize your campus avatar, department, and live status
@@ -174,95 +111,13 @@ export default function ProfileOnboardingModal({
           </div>
         </div>
 
-        {/* Auth Mode Toggle */}
-        <div className="flex items-center p-1 rounded-xl bg-zinc-900 border border-zinc-800 mb-5">
-          <button
-            type="button"
-            onClick={() => setAuthMode("instant")}
-            className={`flex-1 py-1.5 text-xs font-semibold rounded-lg transition-colors ${
-              authMode === "instant"
-                ? "bg-zinc-800 text-orange-400 border border-orange-500/30 shadow-sm"
-                : "text-zinc-400 hover:text-orange-400"
-            }`}
-          >
-            Instant Student ID
-          </button>
-          <button
-            type="button"
-            onClick={() => setAuthMode("email")}
-            className={`flex-1 py-1.5 text-xs font-semibold rounded-lg transition-colors ${
-              authMode === "email"
-                ? "bg-zinc-800 text-orange-400 border border-orange-500/30 shadow-sm"
-                : "text-zinc-400 hover:text-orange-400"
-            }`}
-          >
-            Supabase Account
-          </button>
-        </div>
-
-        {authMode === "email" ? (
-          <div className="space-y-3.5 mb-5">
-            <div>
-              <label className="block text-xs font-medium text-zinc-300 mb-1">
-                University Email
-              </label>
-              <div className="relative">
-                <Mail className="absolute left-3.5 top-2.5 w-4 h-4 text-zinc-500" />
-                <input
-                  type="email"
-                  value={email}
-                  onChange={(e) => setEmail(e.target.value)}
-                  placeholder="student@university.edu"
-                  className="w-full pl-10 pr-4 py-2 rounded-lg bg-zinc-900 border border-zinc-800 text-xs text-zinc-100 placeholder-zinc-500 focus:outline-none focus:border-zinc-600 transition-colors"
-                />
-              </div>
-            </div>
-
-            <div>
-              <label className="block text-xs font-medium text-zinc-300 mb-1">
-                Password
-              </label>
-              <div className="relative">
-                <Lock className="absolute left-3.5 top-2.5 w-4 h-4 text-zinc-500" />
-                <input
-                  type="password"
-                  value={password}
-                  onChange={(e) => setPassword(e.target.value)}
-                  placeholder="••••••••"
-                  className="w-full pl-10 pr-4 py-2 rounded-lg bg-zinc-900 border border-zinc-800 text-xs text-zinc-100 placeholder-zinc-500 focus:outline-none focus:border-zinc-600 transition-colors"
-                />
-              </div>
-            </div>
-
-            {authError && (
-              <div className="p-2.5 rounded-lg bg-rose-500/10 border border-rose-500/20 text-xs text-rose-400">
-                {authError}
-              </div>
-            )}
-
-            <div className="flex gap-2.5 pt-1">
-              <button
-                type="button"
-                disabled={authLoading}
-                onClick={() => handleEmailAuth(false)}
-                className="flex-1 py-2 rounded-lg bg-zinc-900 hover:bg-zinc-800 border border-zinc-800 text-xs font-semibold text-zinc-300 transition-colors"
-              >
-                Sign In
-              </button>
-              <button
-                type="button"
-                disabled={authLoading}
-                onClick={() => handleEmailAuth(true)}
-                className="flex-1 py-2 rounded-lg bg-zinc-100 hover:bg-white text-zinc-950 text-xs font-semibold transition-colors"
-              >
-                Create Account
-              </button>
-            </div>
-            <p className="text-[10px] text-center text-zinc-500">
-              Secured with Supabase Auth Cloud
-            </p>
+        {/* Security Notice: If editing, saving requires logging in again with password */}
+        {currentProfile && (
+          <div className="flex items-center gap-2 p-2.5 rounded-lg bg-orange-500/10 border border-orange-500/25 text-xs text-orange-300 mb-4">
+            <Lock className="w-3.5 h-3.5 text-orange-400 shrink-0" />
+            <span>Editing your profile will require you to log in with your password again.</span>
           </div>
-        ) : null}
+        )}
 
         <form onSubmit={handleSubmit} className="space-y-4">
           {/* Avatar Selector */}
@@ -270,7 +125,7 @@ export default function ProfileOnboardingModal({
             <label className="block text-xs font-medium text-zinc-300 mb-2">
               Choose Campus Avatar
             </label>
-            <div className="grid grid-cols-4 gap-2">
+            <div className="grid grid-cols-2 gap-3">
               {AVATAR_OPTIONS.map((item) => {
                 const isSelected = selectedAvatar === item.emoji;
                 return (
@@ -317,18 +172,18 @@ export default function ProfileOnboardingModal({
             </div>
           </div>
 
-          {/* Department & Batch Grid */}
+          {/* Program & Batch Grid */}
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
             <div>
               <label className="block text-xs font-medium text-zinc-300 mb-1">
-                Department
+                Program
               </label>
               <select
                 value={department}
                 onChange={(e) => setDepartment(e.target.value)}
                 className="w-full px-3 py-2 rounded-lg bg-zinc-900 border border-zinc-800 text-xs text-zinc-100 focus:outline-none focus:border-zinc-600 transition-colors"
               >
-                {CAMPUS_DEPARTMENTS.map((dept) => (
+                {UIU_PROGRAMS.map((dept) => (
                   <option key={dept} value={dept} className="bg-zinc-900 text-white">
                     {dept}
                   </option>

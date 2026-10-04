@@ -2,7 +2,7 @@
 
 import React, { useState, useRef, useEffect } from "react";
 import { motion } from "framer-motion";
-import { supabase, setDevPreview, MOCK_STUDENTS } from "@/lib/supabase";
+import { supabase, setDevPreview, MOCK_STUDENTS, UIU_PROGRAMS } from "@/lib/supabase";
 import {
   Mail,
   Lock,
@@ -24,25 +24,41 @@ import confetti from "canvas-confetti";
 interface AuthScreenProps {
   onAuthSuccess: () => void;
   onBypassDev?: () => void;
+  initialInfo?: string;
+  initialLoginInput?: string;
 }
 
-export default function AuthScreen({ onAuthSuccess, onBypassDev }: AuthScreenProps) {
+export default function AuthScreen({
+  onAuthSuccess,
+  onBypassDev,
+  initialInfo = "",
+  initialLoginInput = "",
+}: AuthScreenProps) {
   // Core Login State
-  const [loginInput, setLoginInput] = useState("");
+  const [loginInput, setLoginInput] = useState(initialLoginInput);
   const [password, setPassword] = useState("");
   const [showPassword, setShowPassword] = useState(false);
   const [loading, setLoading] = useState(false);
   const [errorMessage, setErrorMessage] = useState("");
-  const [infoMessage, setInfoMessage] = useState("");
+  const [infoMessage, setInfoMessage] = useState(initialInfo);
+
+  useEffect(() => {
+    if (initialInfo) setInfoMessage(initialInfo);
+  }, [initialInfo]);
+
+  useEffect(() => {
+    if (initialLoginInput) setLoginInput(initialLoginInput);
+  }, [initialLoginInput]);
 
   // Auth Modes: "login" | "otp" | "register" | "forgot"
   const [authMode, setAuthMode] = useState<"login" | "otp" | "register" | "forgot">("login");
 
   // Registration State
   const [regName, setRegName] = useState("");
+  const [regGender, setRegGender] = useState<"male" | "female">("male");
   const [regEmail, setRegEmail] = useState("");
   const [regId, setRegId] = useState("");
-  const [regDept, setRegDept] = useState("Computer Science & Engineering");
+  const [regDept, setRegDept] = useState(UIU_PROGRAMS[0]);
   const [regBatch, setRegBatch] = useState("2024");
   const [regPassword, setRegPassword] = useState("");
 
@@ -285,6 +301,11 @@ export default function AuthScreen({ onAuthSuccess, onBypassDev }: AuthScreenPro
     }
 
     setLoading(true);
+    const assignedAvatar =
+      regGender === "female"
+        ? "/images/avatar-female.png"
+        : "/images/avatar-male.png";
+
     try {
       if (regPassword.trim().length >= 6) {
         const { data, error } = await supabase.auth.signUp({
@@ -293,9 +314,11 @@ export default function AuthScreen({ onAuthSuccess, onBypassDev }: AuthScreenPro
           options: {
             data: {
               full_name: regName.trim(),
+              gender: regGender,
               department: regDept,
               batch: regBatch,
               student_id: regId.trim(),
+              avatar: assignedAvatar,
             },
           },
         });
@@ -316,9 +339,11 @@ export default function AuthScreen({ onAuthSuccess, onBypassDev }: AuthScreenPro
           shouldCreateUser: true,
           data: {
             full_name: regName.trim(),
+            gender: regGender,
             department: regDept,
             batch: regBatch,
             student_id: regId.trim(),
+            avatar: assignedAvatar,
           },
         },
       });
@@ -1091,19 +1116,63 @@ export default function AuthScreen({ onAuthSuccess, onBypassDev }: AuthScreenPro
 
                 <div>
                   <label className="block text-xs font-medium text-slate-300 mb-1">
-                    Department
+                    Program
                   </label>
                   <select
                     value={regDept}
                     onChange={(e) => setRegDept(e.target.value)}
                     className="w-full px-3 py-2 rounded-lg bg-slate-950/70 border border-slate-800 text-xs text-slate-100 focus:outline-none focus:border-orange-500"
                   >
-                    <option value="Computer Science & Engineering">CSE</option>
-                    <option value="Electrical & Electronic Engineering">EEE</option>
-                    <option value="Business Administration">BBA</option>
-                    <option value="Data Science">Data Science</option>
-                    <option value="Economics">Economics</option>
+                    {UIU_PROGRAMS.map((program) => (
+                      <option
+                        key={program}
+                        value={program}
+                        className="bg-slate-900 text-slate-100 py-1"
+                      >
+                        {program}
+                      </option>
+                    ))}
                   </select>
+                </div>
+
+                <div>
+                  <label className="block text-xs font-medium text-slate-300 mb-1">
+                    Gender
+                  </label>
+                  <div className="grid grid-cols-2 gap-2">
+                    <button
+                      type="button"
+                      onClick={() => setRegGender("male")}
+                      className={`flex items-center justify-center gap-2 py-2 px-3 rounded-lg border text-xs font-medium transition-all ${
+                        regGender === "male"
+                          ? "bg-slate-800/90 border-orange-500 text-orange-400 ring-1 ring-orange-500/30"
+                          : "bg-slate-950/70 border-slate-800 text-slate-400 hover:text-slate-200 hover:border-slate-700"
+                      }`}
+                    >
+                      <img
+                        src="/images/avatar-male.png"
+                        alt="Male"
+                        className="w-4 h-4 rounded-full object-cover shrink-0"
+                      />
+                      <span>Male Student</span>
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => setRegGender("female")}
+                      className={`flex items-center justify-center gap-2 py-2 px-3 rounded-lg border text-xs font-medium transition-all ${
+                        regGender === "female"
+                          ? "bg-slate-800/90 border-orange-500 text-orange-400 ring-1 ring-orange-500/30"
+                          : "bg-slate-950/70 border-slate-800 text-slate-400 hover:text-slate-200 hover:border-slate-700"
+                      }`}
+                    >
+                      <img
+                        src="/images/avatar-female.png"
+                        alt="Female"
+                        className="w-4 h-4 rounded-full object-cover shrink-0"
+                      />
+                      <span>Female Student</span>
+                    </button>
+                  </div>
                 </div>
 
                 <div>

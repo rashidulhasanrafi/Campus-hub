@@ -135,7 +135,7 @@ export default function OnboardingScreen({
             <label className="block text-xs font-medium text-zinc-300 mb-2">
               Choose Campus Avatar
             </label>
-            <div className="grid grid-cols-4 gap-2">
+            <div className="grid grid-cols-2 gap-3">
               {AVATAR_OPTIONS.map((item) => {
                 const isSelected = selectedAvatar === item.emoji;
                 return (
