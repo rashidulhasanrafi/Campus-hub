@@ -1,5 +1,6 @@
 export interface HangoutRoomConfig {
   id: string;
+  code: string;
   name: string;
   topic: string;
   emoji: string;
@@ -8,11 +9,15 @@ export interface HangoutRoomConfig {
   initialParticipants?: number;
   gradient: string;
   password?: string;
+  hostName?: string;
+  hostId?: string;
+  isCustom?: boolean;
 }
 
 export const CAMPUS_HANGOUT_ROOMS: HangoutRoomConfig[] = [
   {
     id: "canteen-adda-1",
+    code: "UIU-101",
     name: "Canteen Adda 🍔",
     topic: "Chit-chat, food debate, campus gossip, and evening chill.",
     emoji: "🍕",
@@ -22,6 +27,7 @@ export const CAMPUS_HANGOUT_ROOMS: HangoutRoomConfig[] = [
   },
   {
     id: "code-lab-sync",
+    code: "UIU-102",
     name: "Project & Code Jam 💻",
     topic: "Web dev, DSA debugging, hackathon brainstorming, Git help.",
     emoji: "⚡",
@@ -31,6 +37,7 @@ export const CAMPUS_HANGOUT_ROOMS: HangoutRoomConfig[] = [
   },
   {
     id: "silent-study-library",
+    code: "UIU-103",
     name: "Library Silent Study 📚",
     topic: "Cam-on silent accountability study session. Pomodoro style.",
     emoji: "🤫",
@@ -41,6 +48,7 @@ export const CAMPUS_HANGOUT_ROOMS: HangoutRoomConfig[] = [
   },
   {
     id: "music-acoustic-jam",
+    code: "UIU-104",
     name: "Acoustic & Music Jam 🎸",
     topic: "Bring your guitar or play your favorite indie campus tracks.",
     emoji: "🎵",
@@ -50,6 +58,7 @@ export const CAMPUS_HANGOUT_ROOMS: HangoutRoomConfig[] = [
   },
   {
     id: "gaming-lounge",
+    code: "UIU-105",
     name: "Campus Gaming Lounge 🎮",
     topic: "Valorant, FIFA, chess, or discussing upcoming esports tournaments.",
     emoji: "🕹️",
@@ -59,6 +68,7 @@ export const CAMPUS_HANGOUT_ROOMS: HangoutRoomConfig[] = [
   },
   {
     id: "freshman-advising",
+    code: "UIU-106",
     name: "Freshman Q&A & Mentorship 🎓",
     topic: "Seniors helping freshers navigate course registration and profs.",
     emoji: "💡",

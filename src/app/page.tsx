@@ -40,6 +40,7 @@ export default function CampusHubHome() {
   const [selectedHangoutRoomId, setSelectedHangoutRoomId] = useState<string | null>(null);
   const [authNotice, setAuthNotice] = useState("");
   const [authPreFill, setAuthPreFill] = useState("");
+  const [isInCall, setIsInCall] = useState(false);
 
   // Apply campus theme attribute on document root (defaults to UIU)
   useEffect(() => {
@@ -227,6 +228,7 @@ export default function CampusHubHome() {
   const handleTabChange = (tab: NavTab) => {
     if (tab !== "match") setDirectRoomToJoin(null);
     setCurrentTab(tab);
+    setIsInCall(false);
     if (typeof window !== "undefined") {
       window.scrollTo({ top: 0, behavior: "instant" });
     }
@@ -290,16 +292,18 @@ export default function CampusHubHome() {
       </div>
 
       <div className="relative z-10 flex flex-col flex-1 min-h-screen">
-        {/* Global Campus Header with Active Status & Sign Out */}
-        <CampusHeader
-          profile={profile}
-          onlineCount={students.length}
-          onOpenProfileModal={() => setEditProfileOpen(true)}
-          onStatusChange={handleStatusChange}
-          onSignOut={handleSignOut}
-          currentTab={currentTab}
-          onTabChange={handleTabChange}
-        />
+        {/* Global Campus Header with Active Status & Sign Out - Completely hidden during calls */}
+        {!isInCall && (
+          <CampusHeader
+            profile={profile}
+            onlineCount={students.length}
+            onOpenProfileModal={() => setEditProfileOpen(true)}
+            onStatusChange={handleStatusChange}
+            onSignOut={handleSignOut}
+            currentTab={currentTab}
+            onTabChange={handleTabChange}
+          />
+        )}
 
       {/* Main Workspace View Router */}
       <main className="flex-1 flex flex-col w-full">
@@ -324,9 +328,11 @@ export default function CampusHubHome() {
             currentProfile={profile}
             onEndMatch={() => {
               setDirectRoomToJoin(null);
+              setIsInCall(false);
               setCurrentTab("lounge");
             }}
             directRoomName={directRoomToJoin}
+            onInCallChange={setIsInCall}
           />
         )}
 
@@ -334,6 +340,7 @@ export default function CampusHubHome() {
           <GroupHangout
             currentProfile={profile}
             initialRoomId={selectedHangoutRoomId}
+            onInCallChange={setIsInCall}
           />
         )}
 
@@ -347,11 +354,13 @@ export default function CampusHubHome() {
         )}
       </main>
 
-      {/* Persistent Mobile Bottom Navigation Bar */}
-      <BottomNavigation
-        currentTab={currentTab}
-        onTabChange={handleTabChange}
-      />
+      {/* Persistent Mobile Bottom Navigation Bar - Completely hidden during calls */}
+      {!isInCall && (
+        <BottomNavigation
+          currentTab={currentTab}
+          onTabChange={handleTabChange}
+        />
+      )}
 
       {/* Student Profile Edit Modal */}
       <ProfileOnboardingModal

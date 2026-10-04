@@ -12,7 +12,7 @@ import {
   isTrackReference,
 } from "@livekit/components-react";
 import { Track, RoomEvent, RemoteParticipant } from "livekit-client";
-import { UserProfile } from "@/lib/supabase";
+import { UserProfile, supabase } from "@/lib/supabase";
 import {
   CAMPUS_HANGOUT_ROOMS,
   HangoutRoomConfig,
@@ -41,17 +41,25 @@ import {
   AlertCircle,
   KeyRound,
   Search,
+  Copy,
+  LayoutGrid,
+  Maximize2,
+  Minimize2,
+  Hash,
+  FlipHorizontal,
 } from "lucide-react";
 import confetti from "canvas-confetti";
 
 interface GroupHangoutProps {
   currentProfile: UserProfile | null;
   initialRoomId?: string | null;
+  onInCallChange?: (inCall: boolean) => void;
 }
 
 export default function GroupHangout({
   currentProfile,
   initialRoomId,
+  onInCallChange,
 }: GroupHangoutProps) {
   const [rooms, setRooms] = useState<HangoutRoomConfig[]>(CAMPUS_HANGOUT_ROOMS);
   const [activeRoom, setActiveRoom] = useState<HangoutRoomConfig | null>(null);
@@ -60,9 +68,20 @@ export default function GroupHangout({
   const [selectedTag, setSelectedTag] = useState("All");
   const [searchQuery, setSearchQuery] = useState("");
   const [errorMsg, setErrorMsg] = useState("");
+  const [copiedCode, setCopiedCode] = useState<string | null>(null);
+
+  // Sync call state with parent to hide navigation bars
+  useEffect(() => {
+    const inCall = Boolean(activeRoom && livekitToken);
+    onInCallChange?.(inCall);
+    return () => {
+      onInCallChange?.(false);
+    };
+  }, [activeRoom, livekitToken, onInCallChange]);
 
   // Create Room Modal state
   const [createModalOpen, setCreateModalOpen] = useState(false);
+  const [nextRoomCode, setNextRoomCode] = useState("");
   const [newRoomTitle, setNewRoomTitle] = useState("");
   const [newRoomTopic, setNewRoomTopic] = useState("");
   const [newRoomTag, setNewRoomTag] = useState("Casual");
@@ -74,10 +93,123 @@ export default function GroupHangout({
   const [enteredPassword, setEnteredPassword] = useState("");
   const [passwordError, setPasswordError] = useState("");
 
+  // Copy Room Code helper
+  const handleCopyRoomCode = (code: string) => {
+    try {
+      navigator.clipboard.writeText(code);
+      setCopiedCode(code);
+      setTimeout(() => setCopiedCode(null), 2500);
+    } catch {}
+  };
+
+  const handleOpenCreateModal = () => {
+    const code = `UIU-${Math.floor(1000 + Math.random() * 9000)}`;
+    setNextRoomCode(code);
+    setCreateModalOpen(true);
+  };
+
+  // 1. Fetch persistent rooms from Supabase on mount & listen to real-time additions
+  // Helper to format Supabase database row into a HangoutRoomConfig
+  const formatDbRoom = (d: any): HangoutRoomConfig => {
+    const parts = (d.title || "").split(" ");
+    const lastPart = parts[parts.length - 1];
+    const isEmoji = /\p{Extended_Pictographic}/u.test(lastPart);
+    const emoji = isEmoji ? lastPart : "💬";
+    const name = d.title || "Campus Hangout";
+
+    let code = "UIU-ROOM";
+    if (d.id) {
+      const match = d.id.match(/uiu(\d+)/i);
+      if (match) {
+        code = `UIU-${match[1]}`;
+      } else if (d.id.includes("uiu-")) {
+        code = `UIU-${d.id.split("uiu-")[1].split("_")[0].toUpperCase()}`;
+      } else {
+        code = `UIU-${d.id.slice(0, 4).toUpperCase()}`;
+      }
+    }
+
+    return {
+      id: d.id,
+      code,
+      name,
+      topic: d.topic || "Campus group discussion and hangout.",
+      emoji,
+      tag: "Community",
+      maxParticipants: d.max_participants || 8,
+      gradient: "from-zinc-900 to-zinc-900/60 border-zinc-800",
+      hostName: d.host_name,
+      hostId: d.host_id,
+      isCustom: true,
+    };
+  };
+
+  // 1. Fetch persistent rooms from Supabase on mount & listen to real-time additions
+  useEffect(() => {
+    let isMounted = true;
+
+    const loadPersistedRooms = async () => {
+      try {
+        const { data, error } = await supabase
+          .from("hangout_rooms")
+          .select("*")
+          .order("created_at", { ascending: false });
+
+        if (!error && data && data.length > 0 && isMounted) {
+          const remoteRooms: HangoutRoomConfig[] = data.map(formatDbRoom);
+
+          setRooms((prev) => {
+            const remoteMap = new Map(remoteRooms.map((r) => [r.id, r]));
+            const presets = CAMPUS_HANGOUT_ROOMS.filter((p) => !remoteMap.has(p.id));
+            return [...remoteRooms, ...presets];
+          });
+        }
+      } catch (err) {
+        console.warn("Could not load persisted rooms:", err);
+      }
+    };
+
+    loadPersistedRooms();
+
+    // Supabase Realtime channel for live room announcements & database inserts
+    const lobbyChannel = supabase.channel("campus-hangout-lobby");
+
+    lobbyChannel
+      .on("broadcast", { event: "room-created" }, (payload) => {
+        if (payload?.payload && isMounted) {
+          const newRoom = payload.payload as HangoutRoomConfig;
+          setRooms((prev) => {
+            if (prev.some((r) => r.id === newRoom.id)) return prev;
+            return [newRoom, ...prev];
+          });
+        }
+      })
+      .on(
+        "postgres_changes",
+        { event: "INSERT", schema: "public", table: "hangout_rooms" },
+        (payload) => {
+          if (payload?.new && isMounted) {
+            const mapped = formatDbRoom(payload.new);
+            setRooms((prev) => {
+              if (prev.some((r) => r.id === mapped.id)) return prev;
+              return [mapped, ...prev];
+            });
+          }
+        }
+      );
+
+    lobbyChannel.subscribe();
+
+    return () => {
+      isMounted = false;
+      supabase.removeChannel(lobbyChannel);
+    };
+  }, []);
+
   // Handle deep-link / initial room join
   useEffect(() => {
     if (initialRoomId && !activeRoom) {
-      const target = rooms.find((r) => r.id === initialRoomId);
+      const target = rooms.find((r) => r.id === initialRoomId || r.code === initialRoomId);
       if (target) {
         if (target.password && target.password.trim().length > 0) {
           setPasswordPromptRoom(target);
@@ -93,13 +225,21 @@ export default function GroupHangout({
   const filteredRooms = rooms.filter((r) => {
     const matchesTag =
       selectedTag === "All" || r.tag.toLowerCase() === selectedTag.toLowerCase();
-    const query = searchQuery.trim().toLowerCase();
+    const rawQuery = searchQuery.trim().toLowerCase();
+    if (!rawQuery) return matchesTag;
+
+    const cleanQuery = rawQuery.replace(/[^a-z0-9]/g, "");
+    const cleanCode = (r.code || "").toLowerCase().replace(/[^a-z0-9]/g, "");
+
     const matchesSearch =
-      !query ||
-      r.name.toLowerCase().includes(query) ||
-      r.topic.toLowerCase().includes(query) ||
-      r.tag.toLowerCase().includes(query) ||
-      r.emoji.includes(query);
+      r.name.toLowerCase().includes(rawQuery) ||
+      r.topic.toLowerCase().includes(rawQuery) ||
+      r.tag.toLowerCase().includes(rawQuery) ||
+      (r.code && r.code.toLowerCase().includes(rawQuery)) ||
+      (cleanCode && cleanQuery && cleanCode.includes(cleanQuery)) ||
+      r.id.toLowerCase().includes(rawQuery) ||
+      (r.hostName && r.hostName.toLowerCase().includes(rawQuery));
+
     return matchesTag && matchesSearch;
   });
 
@@ -155,108 +295,104 @@ export default function GroupHangout({
   const handleLeaveRoom = () => {
     setLivekitToken("");
     setActiveRoom(null);
+    onInCallChange?.(false);
   };
 
-  const handleCreateRoom = (e: React.FormEvent) => {
+  const handleCreateRoom = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!newRoomTitle.trim()) return;
 
     const trimmedPassword = newRoomPassword.trim();
+    const code = nextRoomCode || `UIU-${Math.floor(1000 + Math.random() * 9000)}`;
     const newRoom: HangoutRoomConfig = {
-      id: `hangout_${Date.now().toString(36)}`,
+      id: `hangout_${code.toLowerCase().replace(/[^a-z0-9]/g, "")}_${Date.now().toString(36)}`,
+      code,
       name: `${newRoomTitle.trim()} ${newRoomEmoji}`,
       topic: newRoomTopic.trim() || "Campus group discussion and hangout.",
       emoji: newRoomEmoji,
       tag: newRoomTag,
       maxParticipants: 8,
-      initialParticipants: 1,
       gradient: "from-zinc-900 to-zinc-900/60 border-zinc-800",
       password: trimmedPassword || undefined,
+      hostName: currentProfile?.full_name || "UIU Student",
+      hostId: currentProfile?.id || "anon",
+      isCustom: true,
     };
 
-    setRooms([newRoom, ...rooms]);
+    setRooms((prev) => [newRoom, ...prev]);
     setCreateModalOpen(false);
     setNewRoomTitle("");
     setNewRoomTopic("");
     setNewRoomPassword("");
+
+    // 1. Persist to Supabase hangout_rooms table
+    try {
+      supabase
+        .from("hangout_rooms")
+        .insert({
+          id: newRoom.id,
+          title: newRoom.name,
+          topic: newRoom.topic,
+          host_name: newRoom.hostName,
+          host_id: newRoom.hostId,
+          max_participants: 8,
+          campus: "uiu",
+        })
+        .then(({ error }) => {
+          if (error) console.warn("Supabase hangout_rooms sync note:", error.message);
+        });
+
+      // 2. Broadcast via Supabase Realtime channel so all other students see it instantly
+      const lobbyChannel = supabase.channel("campus-hangout-lobby");
+      lobbyChannel.send({
+        type: "broadcast",
+        event: "room-created",
+        payload: newRoom,
+      });
+    } catch (err) {
+      console.warn("Lobby sync error:", err);
+    }
+
     handleJoinRoom(newRoom);
   };
 
+  // Active In-Call Fullscreen View
+  if (activeRoom && livekitToken) {
+    return (
+      <div className="fixed inset-0 z-50 bg-black h-[100dvh] w-full overflow-hidden flex flex-col justify-between select-none">
+        <LiveKitRoom
+          serverUrl={livekitUrl}
+          token={livekitToken}
+          connect={true}
+          video={true}
+          audio={true}
+          onError={(err) => {
+            console.error("LiveKit error:", err);
+            setErrorMsg(err.message || "Failed to connect to LiveKit room");
+          }}
+          onMediaDeviceFailure={(failure) => {
+            console.warn("Media device failure:", failure);
+            setErrorMsg("Could not access camera or microphone. Please check browser permissions.");
+          }}
+          className="relative w-full h-full flex flex-col justify-between overflow-hidden bg-black select-none"
+        >
+          <RoomAudioRenderer />
+          <GroupHangoutSession
+            room={activeRoom}
+            currentProfile={currentProfile}
+            onLeave={handleLeaveRoom}
+            copiedCode={copiedCode}
+            onCopyRoomCode={handleCopyRoomCode}
+          />
+        </LiveKitRoom>
+      </div>
+    );
+  }
+
   return (
     <div className="w-full max-w-7xl mx-auto px-3 sm:px-6 py-4 pb-28 md:pb-12 space-y-4">
-      {/* If connected to an active room */}
-      {activeRoom && livekitToken ? (
-        <div className="space-y-2.5">
-          {/* Active Room Header bar */}
-          <div className="flex items-center justify-between px-3 sm:px-4 py-2.5 rounded-xl bg-zinc-900/90 border border-zinc-800/90 backdrop-blur-md shadow-sm">
-            <div className="flex items-center gap-2.5 sm:gap-3 min-w-0">
-              <span className="text-xl sm:text-2xl p-1 sm:p-1.5 rounded-lg bg-zinc-800 border border-zinc-700/60 shrink-0">
-                {activeRoom.emoji}
-              </span>
-              <div className="min-w-0">
-                <div className="flex items-center gap-2 flex-wrap">
-                  <h2 className="text-xs sm:text-sm font-bold text-zinc-100 truncate">
-                    {activeRoom.name}
-                  </h2>
-                  <span className="px-1.5 py-0.5 rounded-md text-[9px] font-bold bg-emerald-500/10 text-emerald-400 border border-emerald-500/20 flex items-center gap-1 shrink-0">
-                    <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-pulse" />
-                    LIVE
-                  </span>
-                  {activeRoom.password && (
-                    <span className="px-1.5 py-0.5 rounded-md text-[9px] font-semibold bg-amber-500/10 text-amber-400 border border-amber-500/20 flex items-center gap-1 shrink-0">
-                      <Lock className="w-2.5 h-2.5 text-amber-400" />
-                      SECURE
-                    </span>
-                  )}
-                </div>
-                <p className="text-[11px] text-zinc-400 hidden sm:block truncate max-w-md">
-                  {activeRoom.topic}
-                </p>
-              </div>
-            </div>
-
-            <div className="flex items-center gap-2 shrink-0">
-              <span className="hidden md:inline-block px-2 py-0.5 rounded-md text-[10px] font-medium bg-zinc-800 text-zinc-400 border border-zinc-700/60 uppercase">
-                {activeRoom.tag}
-              </span>
-              <button
-                onClick={handleLeaveRoom}
-                className="px-3 py-1.5 rounded-lg bg-rose-600 hover:bg-rose-500 text-white font-semibold text-xs flex items-center gap-1.5 transition-colors shadow-sm active:scale-95"
-              >
-                <PhoneOff className="w-3.5 h-3.5" />
-                <span>Leave Room</span>
-              </button>
-            </div>
-          </div>
-
-          {/* LiveKit Video Grid Session - Zoom/Meet Layout */}
-          <LiveKitRoom
-            serverUrl={livekitUrl}
-            token={livekitToken}
-            connect={true}
-            video={true}
-            audio={true}
-            onError={(err) => {
-              console.error("LiveKit error:", err);
-              setErrorMsg(err.message || "Failed to connect to LiveKit room");
-            }}
-            onMediaDeviceFailure={(failure) => {
-              console.warn("Media device failure:", failure);
-              setErrorMsg("Could not access camera or microphone. Please check browser permissions.");
-            }}
-            className="relative w-full min-h-[580px] lg:min-h-[660px] flex flex-col justify-between overflow-hidden rounded-2xl border border-zinc-800/90 bg-[#090D16] shadow-2xl"
-          >
-            <RoomAudioRenderer />
-            <GroupHangoutSession
-              room={activeRoom}
-              currentProfile={currentProfile}
-              onLeave={handleLeaveRoom}
-            />
-          </LiveKitRoom>
-        </div>
-      ) : (
-        /* LOBBY VIEW */
-        <div className="space-y-5">
+      {/* LOBBY VIEW */}
+      <div className="space-y-5">
           {/* Lobby Hero */}
           <div className="relative overflow-hidden rounded-2xl p-6 sm:p-7 bg-zinc-900/60 border border-zinc-800/80 backdrop-blur-md shadow-sm">
             <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-5">
@@ -274,7 +410,7 @@ export default function GroupHangout({
               </div>
 
               <button
-                onClick={() => setCreateModalOpen(true)}
+                onClick={handleOpenCreateModal}
                 className="w-full sm:w-auto px-4 py-2.5 rounded-xl bg-orange-600 hover:bg-zinc-800 text-white font-semibold text-xs sm:text-sm shadow-sm active:scale-95 transition-all flex items-center justify-center gap-2 shrink-0"
               >
                 <Plus className="w-4 h-4 text-white" />
@@ -297,7 +433,7 @@ export default function GroupHangout({
               type="text"
               value={searchQuery}
               onChange={(e) => setSearchQuery(e.target.value)}
-              placeholder="Search hangout rooms by title, topic, or keyword (e.g. Canteen, Code, Gaming, Music)..."
+              placeholder="Search rooms by Room Code (e.g. UIU-101, UIU-4821), name, topic, or host..."
               className="w-full pl-10 pr-10 py-2.5 rounded-xl bg-zinc-900/80 border border-zinc-800 text-xs sm:text-sm text-zinc-100 placeholder-zinc-500 focus:outline-none focus:border-orange-500 focus:ring-1 focus:ring-orange-500/30 transition-all shadow-inner"
             />
             {searchQuery && (
@@ -353,7 +489,7 @@ export default function GroupHangout({
                 <button
                   onClick={() => {
                     setNewRoomTitle(searchQuery);
-                    setCreateModalOpen(true);
+                    handleOpenCreateModal();
                   }}
                   className="px-3 py-1.5 rounded-lg bg-orange-600 hover:bg-orange-500 text-xs font-semibold text-white transition-colors"
                 >
@@ -369,21 +505,42 @@ export default function GroupHangout({
               return (
                 <div
                   key={room.id}
-                  className="rounded-xl p-5 border border-zinc-800/80 bg-zinc-900/40 hover:border-orange-500/40 transition-colors flex flex-col justify-between group"
+                  className="rounded-xl p-5 border border-zinc-800/80 bg-zinc-900/40 hover:border-orange-500/40 transition-all flex flex-col justify-between group"
                 >
                   <div>
-                    <div className="flex items-start justify-between gap-3 mb-3">
-                      <span className="text-2xl p-2 rounded-xl bg-zinc-800/80 border border-zinc-700/60">
+                    <div className="flex items-start justify-between gap-2.5 mb-3">
+                      <span className="text-2xl p-2 rounded-xl bg-zinc-800/80 border border-zinc-700/60 shrink-0">
                         {room.emoji}
                       </span>
-                      <div className="flex items-center gap-1.5">
+                      <div className="flex items-center gap-1.5 flex-wrap justify-end">
+                        {/* Room Code Badge with Copy button */}
+                        <div className="flex items-center gap-1 px-2 py-0.5 rounded-md bg-orange-500/10 border border-orange-500/25 text-orange-400 font-mono text-[11px] font-bold">
+                          <Hash className="w-3 h-3 text-orange-400" />
+                          <span>{room.code}</span>
+                          <button
+                            type="button"
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              handleCopyRoomCode(room.code);
+                            }}
+                            title="Copy Room Code"
+                            className="p-0.5 hover:text-white transition-colors ml-0.5"
+                          >
+                            {copiedCode === room.code ? (
+                              <Check className="w-3 h-3 text-emerald-400" />
+                            ) : (
+                              <Copy className="w-3 h-3" />
+                            )}
+                          </button>
+                        </div>
+
                         {isLocked && (
                           <span className="flex items-center gap-1 px-2 py-0.5 rounded-md text-[10px] font-semibold bg-amber-500/10 text-amber-400 border border-amber-500/25">
                             <Lock className="w-3 h-3 text-amber-400" />
                             Private
                           </span>
                         )}
-                        <span className="flex items-center gap-1.5 px-2.5 py-1 rounded-md text-xs font-medium bg-zinc-800/80 text-zinc-300 border border-zinc-700/60">
+                        <span className="flex items-center gap-1.5 px-2 py-0.5 rounded-md text-[11px] font-medium bg-zinc-800/80 text-zinc-300 border border-zinc-700/60">
                           <span className="w-1.5 h-1.5 rounded-full bg-emerald-400" />
                           Up to {room.maxParticipants} Seats
                         </span>
@@ -397,6 +554,11 @@ export default function GroupHangout({
                     <p className="text-xs text-zinc-400 mt-1 line-clamp-2">
                       {room.topic}
                     </p>
+                    {room.hostName && (
+                      <p className="text-[10px] text-zinc-500 mt-2 flex items-center gap-1 truncate">
+                        <span>Hosted by <strong className="text-zinc-400 font-medium">{room.hostName}</strong></span>
+                      </p>
+                    )}
                   </div>
 
                   <div className="mt-4 pt-3 border-t border-zinc-800/70 flex items-center justify-between">
@@ -418,7 +580,6 @@ export default function GroupHangout({
             </div>
           )}
         </div>
-      )}
 
       {/* Password Prompt Modal */}
       {passwordPromptRoom && (
@@ -513,10 +674,35 @@ export default function GroupHangout({
               <X className="w-4 h-4" />
             </button>
 
-            <h3 className="text-base font-bold text-zinc-100 mb-4 flex items-center gap-2">
+            <h3 className="text-base font-bold text-zinc-100 mb-3 flex items-center gap-2">
               <Plus className="w-4 h-4 text-orange-400" />
               Create Campus Hangout Room
             </h3>
+
+            {/* Prospective Assigned Room Code */}
+            <div className="mb-4 p-3 rounded-xl bg-orange-500/10 border border-orange-500/25 flex items-center justify-between">
+              <div>
+                <span className="text-[10px] uppercase font-semibold tracking-wider text-orange-400 block">
+                  Assigned Room Code
+                </span>
+                <span className="text-sm sm:text-base font-mono font-bold text-zinc-100 flex items-center gap-1.5 mt-0.5">
+                  <Hash className="w-4 h-4 text-orange-400" />
+                  {nextRoomCode || "UIU-ROOM"}
+                </span>
+              </div>
+              <button
+                type="button"
+                onClick={() => handleCopyRoomCode(nextRoomCode)}
+                className="px-2.5 py-1 rounded-lg bg-orange-600/20 hover:bg-orange-600/30 text-orange-300 border border-orange-500/30 text-xs font-medium flex items-center gap-1 transition-colors"
+              >
+                {copiedCode === nextRoomCode ? (
+                  <Check className="w-3.5 h-3.5 text-emerald-400" />
+                ) : (
+                  <Copy className="w-3.5 h-3.5" />
+                )}
+                <span>{copiedCode === nextRoomCode ? "Copied" : "Copy Code"}</span>
+              </button>
+            </div>
 
             <form onSubmit={handleCreateRoom} className="space-y-3.5">
               <div>
@@ -621,12 +807,198 @@ interface GroupHangoutSessionProps {
   room: HangoutRoomConfig;
   currentProfile: UserProfile | null;
   onLeave: () => void;
+  copiedCode?: string | null;
+  onCopyRoomCode?: (code: string) => void;
+}
+
+interface HangoutSidebarContentProps {
+  activeTab: "participants" | "chat";
+  onTabChange: (tab: "participants" | "chat") => void;
+  onClose: () => void;
+  participants: any[];
+  currentProfile: UserProfile | null;
+  chatMessages: Array<{ id: string; sender: string; text: string; time: string; isSelf: boolean; avatar?: string }>;
+  chatInput: string;
+  onChatInputChange: (val: string) => void;
+  onSendMessage: (e: React.FormEvent) => void;
+  unreadCount: number;
+  chatScrollRef: React.RefObject<HTMLDivElement | null>;
+}
+
+function HangoutSidebarContent({
+  activeTab,
+  onTabChange,
+  onClose,
+  participants,
+  currentProfile,
+  chatMessages,
+  chatInput,
+  onChatInputChange,
+  onSendMessage,
+  unreadCount,
+  chatScrollRef,
+}: HangoutSidebarContentProps) {
+  return (
+    <div className="flex-1 flex flex-col overflow-hidden h-full">
+      {/* Top Segmented Tab Switcher */}
+      <div className="p-3 border-b border-zinc-800 flex items-center justify-between gap-2 shrink-0">
+        <div className="flex items-center gap-1 bg-zinc-950 p-1 rounded-xl border border-zinc-800 flex-1">
+          <button
+            type="button"
+            onClick={() => onTabChange("participants")}
+            className={`flex-1 py-1.5 px-2 rounded-lg text-xs font-semibold flex items-center justify-center gap-1.5 transition-colors ${
+              activeTab === "participants"
+                ? "bg-zinc-800 text-orange-400 shadow-sm"
+                : "text-zinc-400 hover:text-zinc-200"
+            }`}
+          >
+            <Users className="w-3.5 h-3.5" />
+            <span>People ({participants.length})</span>
+          </button>
+
+          <button
+            type="button"
+            onClick={() => onTabChange("chat")}
+            className={`flex-1 py-1.5 px-2 rounded-lg text-xs font-semibold flex items-center justify-center gap-1.5 transition-colors relative ${
+              activeTab === "chat"
+                ? "bg-zinc-800 text-orange-400 shadow-sm"
+                : "text-zinc-400 hover:text-zinc-200"
+            }`}
+          >
+            <MessageSquare className="w-3.5 h-3.5" />
+            <span>Chat</span>
+            {unreadCount > 0 && (
+              <span className="w-2 h-2 rounded-full bg-orange-500 animate-pulse ml-0.5" />
+            )}
+          </button>
+        </div>
+
+        <button
+          type="button"
+          onClick={onClose}
+          className="p-1.5 rounded-lg text-zinc-400 hover:text-zinc-200 hover:bg-zinc-800 transition-colors"
+        >
+          <X className="w-4 h-4" />
+        </button>
+      </div>
+
+      {/* TAB 1: PARTICIPANTS */}
+      {activeTab === "participants" && (
+        <div className="flex-1 flex flex-col justify-between p-3 overflow-hidden min-h-0">
+          <div className="space-y-2 overflow-y-auto flex-1 pr-1">
+            <div className="text-[11px] font-semibold text-zinc-400 uppercase tracking-wider px-1">
+              In Room ({participants.length}/8)
+            </div>
+
+            {participants.map((p) => (
+              <div
+                key={p.identity}
+                className="flex items-center justify-between p-2.5 rounded-xl bg-zinc-950/60 border border-zinc-800/80 hover:border-zinc-700 transition-colors"
+              >
+                <div className="flex items-center gap-2.5 min-w-0">
+                  <StudentAvatar
+                    avatar={p.isLocal ? currentProfile?.avatar : undefined}
+                    name={p.name || p.identity}
+                    size="sm"
+                    showOnlineBadge={false}
+                  />
+                  <div className="min-w-0">
+                    <p className="text-xs font-semibold text-zinc-200 truncate">
+                      {p.name || p.identity}
+                    </p>
+                    <p className="text-[10px] text-zinc-500">
+                      {p.isLocal ? "Host (You)" : "UIU Student"}
+                    </p>
+                  </div>
+                </div>
+
+                <div className="flex items-center gap-1.5 shrink-0">
+                  {p.isSpeaking && (
+                    <span className="w-2 h-2 rounded-full bg-emerald-400 animate-pulse mr-1" />
+                  )}
+                  {p.isMicrophoneEnabled ? (
+                    <Mic className="w-3.5 h-3.5 text-zinc-400" />
+                  ) : (
+                    <MicOff className="w-3.5 h-3.5 text-rose-400" />
+                  )}
+                  {p.isCameraEnabled ? (
+                    <Video className="w-3.5 h-3.5 text-zinc-400" />
+                  ) : (
+                    <VideoOff className="w-3.5 h-3.5 text-zinc-600" />
+                  )}
+                </div>
+              </div>
+            ))}
+          </div>
+
+          <div className="pt-3 border-t border-zinc-800 text-[11px] text-zinc-500 text-center shrink-0">
+            Max 8 peers allowed per UIU hangout room
+          </div>
+        </div>
+      )}
+
+      {/* TAB 2: IN-ROOM CHAT */}
+      {activeTab === "chat" && (
+        <div className="flex-1 flex flex-col justify-between overflow-hidden min-h-0">
+          <div ref={chatScrollRef} className="flex-1 p-3 space-y-3 overflow-y-auto">
+            {chatMessages.map((msg) => (
+              <div
+                key={msg.id}
+                className={`flex flex-col ${
+                  msg.isSelf ? "items-end" : "items-start"
+                } space-y-1 animate-in fade-in duration-100`}
+              >
+                <div className="flex items-center gap-1.5 text-[10px] text-zinc-400">
+                  <span className="font-semibold text-zinc-300">
+                    {msg.sender}
+                  </span>
+                  <span>•</span>
+                  <span>{msg.time}</span>
+                </div>
+                <div
+                  className={`px-3 py-2 rounded-2xl text-xs max-w-[85%] break-words leading-relaxed ${
+                    msg.isSelf
+                      ? "bg-orange-600 text-white rounded-tr-none shadow-sm"
+                      : "bg-zinc-800/90 text-zinc-200 rounded-tl-none border border-zinc-700/60"
+                  }`}
+                >
+                  {msg.text}
+                </div>
+              </div>
+            ))}
+          </div>
+
+          <form
+            onSubmit={onSendMessage}
+            className="p-3 border-t border-zinc-800 bg-zinc-950 flex items-center gap-2 shrink-0"
+          >
+            <input
+              type="text"
+              value={chatInput}
+              onChange={(e) => onChatInputChange(e.target.value)}
+              placeholder="Send a message to room..."
+              className="flex-1 px-3 py-2 rounded-xl bg-zinc-900 border border-zinc-800 text-xs text-zinc-100 placeholder-zinc-500 focus:outline-none focus:border-orange-500/60"
+            />
+            <button
+              type="submit"
+              disabled={!chatInput.trim()}
+              className="p-2 rounded-xl bg-orange-600 hover:bg-zinc-800 disabled:opacity-40 text-white transition-colors active:scale-95 shadow-sm"
+            >
+              <Send className="w-4 h-4" />
+            </button>
+          </form>
+        </div>
+      )}
+    </div>
+  );
 }
 
 function GroupHangoutSession({
   room,
   currentProfile,
   onLeave,
+  copiedCode,
+  onCopyRoomCode,
 }: GroupHangoutSessionProps) {
   const livekitRoom = useRoomContext();
   const participants = useParticipants();
@@ -636,6 +1008,20 @@ function GroupHangoutSession({
 
   // Focused / Pinned participant state
   const [pinnedIdentity, setPinnedIdentity] = useState<string | null>(null);
+
+  // Layout View mode: "grid" (Equal Grid by default) vs "speaker" (Dominant Spotlight)
+  const [viewMode, setViewMode] = useState<"grid" | "speaker">("grid");
+  // Per-participant object-fit mode: "contain" (default for mobile phone cameras to avoid crop) vs "cover"
+  const [fitModes, setFitModes] = useState<Record<string, "cover" | "contain">>({});
+  // Swapped state for 1-on-1 mobile PIP
+  const [isSwappedLayout, setIsSwappedLayout] = useState(false);
+
+  const toggleFitMode = (identity: string) => {
+    setFitModes((prev) => ({
+      ...prev,
+      [identity]: prev[identity] === "cover" ? "contain" : "cover",
+    }));
+  };
 
   // Right sidebar state
   const [sidebarOpen, setSidebarOpen] = useState(false);
@@ -870,503 +1256,1021 @@ function GroupHangoutSession({
   const focusedTrack = focusedParticipant ? getParticipantVideoTrack(focusedParticipant) : null;
   const isFocusedCamOff = !focusedTrack;
 
-  return (
-    <div className="relative w-full flex-1 flex flex-col lg:flex-row overflow-hidden min-h-0 bg-[#090D16]">
-      {/* ================================================================= */}
-      {/* MAIN STAGE (LEFT / CENTER): Dominant Video + Thumbnails + Dock    */}
-      {/* ================================================================= */}
-      <div className="flex-1 flex flex-col justify-between p-2.5 sm:p-3 min-w-0 overflow-hidden gap-2 sm:gap-3">
-        {/* 1. DOMINANT FOCUS VIDEO TILE */}
-        <div className="flex-1 relative w-full rounded-2xl overflow-hidden bg-zinc-950 border border-zinc-800/80 shadow-2xl flex items-center justify-center min-h-[290px] sm:min-h-[380px]">
-          {!isFocusedCamOff && focusedTrack ? (
-            <VideoTrack
-              trackRef={focusedTrack}
-              className={`w-full h-full object-contain sm:object-cover rounded-2xl ${
-                focusedParticipant.isLocal && focusedTrack.source === Track.Source.Camera
-                  ? "-scale-x-100"
-                  : ""
-              }`}
-            />
-          ) : (
-            /* Centered Avatar Stage when Camera is Muted/Off */
-            <div className="flex flex-col items-center justify-center p-6 text-center space-y-3 animate-in fade-in duration-200">
-              <div
-                className={`relative rounded-full transition-all duration-300 ${
-                  focusedParticipant?.isSpeaking
-                    ? "ring-4 ring-emerald-500/70 shadow-lg shadow-emerald-500/30 scale-105"
-                    : "ring-2 ring-zinc-800"
-                }`}
-              >
-                <StudentAvatar
-                  avatar={focusedParticipant?.isLocal ? currentProfile?.avatar : undefined}
-                  name={focusedParticipant?.name || focusedParticipant?.identity}
-                  size="xl"
-                  showOnlineBadge={false}
-                />
-                {focusedParticipant?.isSpeaking && (
-                  <span className="absolute -bottom-1 -right-1 w-4 h-4 rounded-full bg-emerald-500 border-2 border-zinc-950 animate-pulse" />
-                )}
-              </div>
+  // On Mobile:
+  // For 1-on-1 Hangouts call (or when 1 remote + 1 local):
+  const remoteParticipant = participants.find((p) => !p.isLocal);
+  const localVideoTrack = getParticipantVideoTrack(localParticipant);
+  const remoteVideoTrack = remoteParticipant ? getParticipantVideoTrack(remoteParticipant) : null;
 
-              <div>
-                <h3 className="text-base sm:text-lg font-bold text-zinc-100 tracking-tight">
-                  {focusedParticipant?.name || focusedParticipant?.identity}{" "}
-                  {focusedParticipant?.isLocal && "(You)"}
+  const mobileBackgroundTrack = isSwappedLayout ? localVideoTrack : (remoteVideoTrack || localVideoTrack);
+  const isMobileBackgroundLocal = isSwappedLayout || !remoteParticipant;
+  const mobileBackgroundParticipant = isSwappedLayout ? localParticipant : (remoteParticipant || localParticipant);
+
+  const mobilePipTrack = isSwappedLayout ? remoteVideoTrack : localVideoTrack;
+  const isMobilePipLocal = !isSwappedLayout;
+  const mobilePipParticipant = isSwappedLayout ? remoteParticipant : (remoteParticipant ? localParticipant : null);
+
+  return (
+    <div className="relative w-full h-full flex flex-col justify-between overflow-hidden bg-black select-none">
+      {/* ======================================================== */}
+      {/* 1. MOBILE NATIVE APP VIEW (WhatsApp / Google Meet Style) */}
+      {/* ======================================================== */}
+      <div className="md:hidden relative w-full h-full overflow-hidden flex flex-col justify-between">
+        {/* TOP HEADER OVERLAY: Gradient blur with Title, Room Code, Live, Swap/Mode, and Leave */}
+        <div className="absolute top-0 inset-x-0 z-30 pt-3 px-4 pb-6 bg-gradient-to-b from-black/90 via-black/40 to-transparent flex items-center justify-between pointer-events-auto">
+          <div className="flex items-center gap-2.5 min-w-0">
+            <button
+              type="button"
+              onClick={handleLeaveSession}
+              className="p-2 -ml-1 rounded-xl bg-black/40 hover:bg-black/60 text-white backdrop-blur-md border border-white/10 active:scale-95 transition-all"
+              title="Leave Room"
+            >
+              <PhoneOff className="w-4 h-4 text-rose-400" />
+            </button>
+            <div className="min-w-0">
+              <div className="flex items-center gap-1.5 flex-wrap">
+                <span className="text-base shrink-0">{room.emoji}</span>
+                <h3 className="text-xs sm:text-sm font-bold text-white truncate drop-shadow-md">
+                  {room.name}
                 </h3>
-                <div className="flex items-center justify-center gap-2 mt-1">
-                  <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-md text-[10px] font-semibold bg-zinc-900 border border-zinc-800 text-zinc-400">
-                    <VideoOff className="w-3 h-3 text-zinc-500" />
-                    Camera Muted
-                  </span>
-                  {focusedParticipant?.isSpeaking && (
-                    <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-md text-[10px] font-semibold bg-emerald-500/10 border border-emerald-500/30 text-emerald-400">
-                      <Mic className="w-3 h-3 text-emerald-400 animate-pulse" />
-                      Speaking
-                    </span>
+                <span className="px-1.5 py-0.5 rounded text-[9px] font-bold bg-emerald-500/20 text-emerald-400 border border-emerald-500/30 flex items-center gap-1 shrink-0">
+                  <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-pulse" />
+                  LIVE
+                </span>
+              </div>
+              <div className="flex items-center gap-2 mt-0.5">
+                <button
+                  type="button"
+                  onClick={() => onCopyRoomCode?.(room.code)}
+                  className="flex items-center gap-1 px-1.5 py-0.5 rounded text-[10px] font-mono font-bold bg-orange-500/20 text-orange-400 border border-orange-500/30 shrink-0"
+                >
+                  <Hash className="w-3 h-3 text-orange-400" />
+                  <span>{room.code}</span>
+                  {copiedCode === room.code ? (
+                    <Check className="w-2.5 h-2.5 text-emerald-400" />
+                  ) : (
+                    <Copy className="w-2.5 h-2.5 text-zinc-400" />
                   )}
-                </div>
+                </button>
+                <span className="text-[10px] text-zinc-300 flex items-center gap-1 shrink-0">
+                  <Users className="w-3 h-3" />
+                  {participants.length}
+                </span>
               </div>
             </div>
-          )}
-
-          {/* Floating Top Overlays */}
-          <div className="absolute top-3 left-3 flex items-center gap-2 z-10 pointer-events-none">
-            {pinnedIdentity === focusedParticipant?.identity && (
-              <span className="px-2.5 py-1 rounded-lg bg-orange-600/90 text-white text-[11px] font-semibold flex items-center gap-1.5 shadow-md backdrop-blur-md">
-                <Pin className="w-3 h-3" />
-                Pinned Focus
-              </span>
-            )}
-            {focusedParticipant?.isSpeaking && (
-              <span className="px-2.5 py-1 rounded-lg bg-emerald-600/90 text-white text-[11px] font-semibold flex items-center gap-1.5 shadow-md backdrop-blur-md">
-                <Mic className="w-3 h-3 animate-pulse" />
-                Active Speaker
-              </span>
-            )}
           </div>
 
-          {/* Top Right Pin Button */}
-          {focusedParticipant && (
-            <div className="absolute top-3 right-3 z-10">
+          <div className="flex items-center gap-1.5 shrink-0">
+            {participants.length <= 2 ? (
               <button
-                onClick={() =>
-                  setPinnedIdentity(
-                    pinnedIdentity === focusedParticipant.identity
-                      ? null
-                      : focusedParticipant.identity
-                  )
-                }
-                title={
-                  pinnedIdentity === focusedParticipant.identity
-                    ? "Unpin Focus"
-                    : "Pin this Participant"
-                }
-                className={`p-2 rounded-xl border backdrop-blur-md transition-colors shadow-sm ${
-                  pinnedIdentity === focusedParticipant.identity
-                    ? "bg-orange-600 text-white border-orange-500"
-                    : "bg-zinc-900/80 hover:bg-zinc-800 text-zinc-300 hover:text-white border-zinc-700/60"
-                }`}
+                type="button"
+                onClick={() => setIsSwappedLayout(!isSwappedLayout)}
+                className="p-2 rounded-xl bg-black/40 hover:bg-black/60 text-white backdrop-blur-md border border-white/10 active:scale-95 transition-all"
+                title="Swap Video Feeds"
               >
-                {pinnedIdentity === focusedParticipant.identity ? (
-                  <PinOff className="w-4 h-4" />
+                <FlipHorizontal className="w-4 h-4 text-zinc-200" />
+              </button>
+            ) : (
+              <button
+                type="button"
+                onClick={() => setViewMode(viewMode === "grid" ? "speaker" : "grid")}
+                className="p-2 rounded-xl bg-black/40 hover:bg-black/60 text-white backdrop-blur-md border border-white/10 active:scale-95 transition-all"
+                title="Toggle Grid / Speaker View"
+              >
+                {viewMode === "grid" ? (
+                  <Maximize2 className="w-4 h-4 text-zinc-200" />
                 ) : (
-                  <Pin className="w-4 h-4" />
+                  <LayoutGrid className="w-4 h-4 text-orange-400" />
                 )}
               </button>
-            </div>
-          )}
-
-          {/* Bottom Left Name Pill */}
-          {focusedParticipant && (
-            <div className="absolute bottom-3 left-3 z-10 flex items-center gap-2 px-3 py-1.5 rounded-xl bg-zinc-950/85 backdrop-blur-md border border-zinc-800/80 text-xs font-semibold text-zinc-200 shadow-md">
-              <span
-                className={`w-2 h-2 rounded-full ${
-                  focusedParticipant.isSpeaking ? "bg-emerald-400 animate-pulse" : "bg-zinc-500"
-                }`}
-              />
-              <span className="truncate max-w-[140px] sm:max-w-[200px]">
-                {focusedParticipant.name || focusedParticipant.identity}{" "}
-                {focusedParticipant.isLocal && "(You)"}
-              </span>
-              {!focusedParticipant.isMicrophoneEnabled && (
-                <MicOff className="w-3.5 h-3.5 text-rose-400 shrink-0 ml-0.5" />
-              )}
-            </div>
-          )}
+            )}
+            <button
+              type="button"
+              onClick={() => {
+                setActiveSidebarTab("participants");
+                setSidebarOpen(true);
+              }}
+              className="p-2 rounded-xl bg-black/40 hover:bg-black/60 text-white backdrop-blur-md border border-white/10 active:scale-95 transition-all"
+              title="Participants"
+            >
+              <Users className="w-4 h-4 text-zinc-200" />
+            </button>
+          </div>
         </div>
 
-        {/* 2. BOTTOM STRIP: Horizontal Peer Video Thumbnails (16:9 Aspect Ratio) */}
-        <div className="h-20 sm:h-24 shrink-0 flex items-center gap-2.5 overflow-x-auto py-1 px-1 scrollbar-thin">
-          {participants.map((p) => {
-            const pVideoTrack = getParticipantVideoTrack(p);
-            const isCamOff = !pVideoTrack;
-            const isSelectedFocus = p.identity === focusedParticipant?.identity;
-            const isPinned = p.identity === pinnedIdentity;
+        {/* MOBILE VIDEO STAGE: */}
+        {participants.length <= 2 ? (
+          /* 1-on-1 Hangouts Mobile Experience (WhatsApp style full background + floating PIP) */
+          <div className="relative w-full h-full overflow-hidden flex items-center justify-center bg-zinc-950">
+            {/* Full-screen Remote Background Stream */}
+            <div className="absolute inset-0 w-full h-full flex items-center justify-center overflow-hidden">
+              {mobileBackgroundTrack && mobileBackgroundTrack.publication?.track ? (
+                <VideoTrack
+                  trackRef={mobileBackgroundTrack}
+                  className={`w-full h-full object-cover ${
+                    isMobileBackgroundLocal && mobileBackgroundTrack.source === Track.Source.Camera
+                      ? "-scale-x-100"
+                      : ""
+                  }`}
+                />
+              ) : (
+                <div className="flex flex-col items-center justify-center p-6 text-center space-y-3">
+                  <div className="relative">
+                    <StudentAvatar
+                      avatar={isMobileBackgroundLocal ? currentProfile?.avatar : undefined}
+                      name={mobileBackgroundParticipant?.name || mobileBackgroundParticipant?.identity || "UIU Student"}
+                      size="xl"
+                      showOnlineBadge={false}
+                    />
+                    <span className="absolute -bottom-1 -right-1 w-4 h-4 rounded-full bg-emerald-500 border-2 border-zinc-950 animate-pulse" />
+                  </div>
+                  <div>
+                    <h3 className="text-base font-bold text-white tracking-tight">
+                      {mobileBackgroundParticipant?.name || (isMobileBackgroundLocal ? currentProfile?.full_name : "Classmate")}
+                    </h3>
+                    <p className="text-xs text-zinc-400 mt-0.5">
+                      {!remoteParticipant
+                        ? "Waiting for classmates to join this room..."
+                        : !isMobileBackgroundLocal
+                        ? "Live Video Hangout"
+                        : "Camera turned off"}
+                    </p>
+                  </div>
+                </div>
+              )}
+            </div>
 
-            return (
+            {/* Bottom Left Name Pill for Background Participant */}
+            {mobileBackgroundParticipant && (
+              <div className="absolute bottom-24 left-4 z-20 flex items-center gap-1.5 px-3 py-1 rounded-xl bg-black/70 backdrop-blur-md border border-white/10 text-xs font-semibold text-white">
+                <span
+                  className={`w-2 h-2 rounded-full ${
+                    mobileBackgroundParticipant.isSpeaking ? "bg-emerald-400 animate-pulse" : "bg-zinc-500"
+                  }`}
+                />
+                <span className="truncate max-w-[140px]">
+                  {mobileBackgroundParticipant.name || mobileBackgroundParticipant.identity}{" "}
+                  {mobileBackgroundParticipant.isLocal && "(You)"}
+                </span>
+                {!mobileBackgroundParticipant.isMicrophoneEnabled && (
+                  <MicOff className="w-3.5 h-3.5 text-rose-400 shrink-0 ml-0.5" />
+                )}
+              </div>
+            )}
+
+            {/* Floating Corner PIP (Local Preview or Remote if swapped) */}
+            {mobilePipParticipant && (
               <div
-                key={p.identity}
-                onClick={() =>
-                  setPinnedIdentity(pinnedIdentity === p.identity ? null : p.identity)
-                }
-                title={`Click to focus ${p.name || p.identity}`}
-                className={`relative w-28 sm:w-36 aspect-video shrink-0 rounded-xl overflow-hidden cursor-pointer border transition-all duration-150 flex items-center justify-center bg-zinc-900 ${
-                  isSelectedFocus
-                    ? "border-orange-500 ring-2 ring-orange-500/50 shadow-md"
-                    : p.isSpeaking
-                    ? "border-emerald-400 ring-1 ring-emerald-400/40"
-                    : "border-zinc-800 hover:border-zinc-700 hover:bg-zinc-850"
-                }`}
+                onClick={() => setIsSwappedLayout(!isSwappedLayout)}
+                className="absolute top-20 right-4 w-28 sm:w-32 aspect-[9/16] rounded-2xl overflow-hidden border-2 border-zinc-700/80 shadow-2xl bg-zinc-900 z-20 cursor-pointer active:scale-95 transition-all"
+                title="Tap to swap screens"
               >
-                {!isCamOff && pVideoTrack ? (
+                {mobilePipTrack && mobilePipTrack.publication?.track ? (
                   <VideoTrack
-                    trackRef={pVideoTrack}
+                    trackRef={mobilePipTrack}
                     className={`w-full h-full object-cover ${
-                      p.isLocal && pVideoTrack.source === Track.Source.Camera ? "-scale-x-100" : ""
+                      isMobilePipLocal && mobilePipTrack.source === Track.Source.Camera ? "-scale-x-100" : ""
                     }`}
                   />
                 ) : (
-                  <div className="flex flex-col items-center justify-center p-1 text-center">
+                  <div className="w-full h-full flex flex-col items-center justify-center p-2 bg-zinc-950/90 text-center">
                     <StudentAvatar
-                      avatar={p.isLocal ? currentProfile?.avatar : undefined}
-                      name={p.name || p.identity}
+                      avatar={isMobilePipLocal ? currentProfile?.avatar : undefined}
+                      name={mobilePipParticipant.name || mobilePipParticipant.identity}
                       size="sm"
                       showOnlineBadge={false}
                     />
-                    <span className="text-[10px] font-medium text-zinc-300 truncate max-w-[80px] mt-0.5">
-                      {p.name || p.identity}
+                    <span className="text-[10px] text-zinc-300 font-semibold mt-1 truncate max-w-[80px]">
+                      {isMobilePipLocal ? "You" : mobilePipParticipant.name?.split(" ")[0]}
+                    </span>
+                    <span className="text-[8px] text-zinc-500 flex items-center gap-0.5 mt-0.5">
+                      <VideoOff className="w-2 h-2" /> Cam Off
                     </span>
                   </div>
                 )}
-
-                {/* Thumbnail Name & Mic Pill */}
-                <div className="absolute bottom-1 left-1 right-1 flex items-center justify-between px-1.5 py-0.5 rounded bg-zinc-950/80 backdrop-blur-sm text-[9px] font-medium text-zinc-200">
-                  <span className="truncate max-w-[70px]">
-                    {p.isLocal ? "You" : p.name?.split(" ")[0] || p.identity}
-                  </span>
-                  {!p.isMicrophoneEnabled ? (
-                    <MicOff className="w-2.5 h-2.5 text-rose-400 shrink-0" />
-                  ) : p.isSpeaking ? (
-                    <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-pulse" />
-                  ) : null}
+                <div className="absolute bottom-1 right-1 p-1 rounded-md bg-black/60 text-white/80">
+                  <FlipHorizontal className="w-2.5 h-2.5" />
                 </div>
-
-                {/* Pin Indicator */}
-                {isPinned && (
-                  <span className="absolute top-1 right-1 p-0.5 rounded bg-orange-600 text-white">
-                    <Pin className="w-2.5 h-2.5" />
-                  </span>
-                )}
               </div>
-            );
-          })}
-        </div>
-
-        {/* 3. CLEAN BOTTOM FLOATING TOOLBAR (Zoom / Meet Style Dock) */}
-        <div className="h-14 sm:h-16 flex items-center justify-center shrink-0">
-          <div className="relative flex items-center gap-1.5 sm:gap-2.5 px-3 sm:px-4 py-2 rounded-2xl bg-zinc-900/90 border border-zinc-800/90 backdrop-blur-xl shadow-2xl">
-            {/* Audio Toggle */}
-            <button
-              onClick={handleToggleMic}
-              disabled={isMicToggling}
-              title={isMicrophoneEnabled ? "Mute Microphone" : "Unmute Microphone"}
-              className={`flex flex-col items-center justify-center p-2 sm:px-3 sm:py-2 rounded-xl border transition-all active:scale-95 ${
-                !isMicrophoneEnabled
-                  ? "bg-rose-500/20 border-rose-500/40 text-rose-400 hover:bg-rose-500/30"
-                  : "bg-zinc-800/80 border-zinc-700/60 text-zinc-200 hover:bg-zinc-800 hover:text-white"
+            )}
+          </div>
+        ) : (
+          /* Multi-Peer Group Hangout on Mobile: Equal Grid fitting neatly within screen height */
+          <div className="h-full w-full min-h-0 overflow-hidden pt-16 pb-24 px-2.5 flex items-center justify-center bg-zinc-950">
+            <div
+              className={`w-full h-full grid gap-2 ${
+                participants.length <= 4
+                  ? "grid-cols-2 grid-rows-2"
+                  : participants.length <= 6
+                  ? "grid-cols-2 grid-rows-3"
+                  : "grid-cols-2 sm:grid-cols-4"
               }`}
             >
-              {!isMicrophoneEnabled ? <MicOff className="w-4 h-4" /> : <Mic className="w-4 h-4 text-emerald-400" />}
-              <span className="text-[9px] font-semibold mt-0.5 hidden sm:inline">
-                {!isMicrophoneEnabled ? "Unmute" : "Mute"}
-              </span>
-            </button>
+              {participants.map((p) => {
+                const pVideoTrack = getParticipantVideoTrack(p);
+                const isCamOff = !pVideoTrack;
+                const isSpeaking = p.isSpeaking;
+                const isPinned = p.identity === pinnedIdentity;
 
-            {/* Video Toggle */}
-            <button
-              onClick={handleToggleCamera}
-              disabled={isCamToggling}
-              title={isCameraEnabled ? "Stop Camera" : "Start Camera"}
-              className={`flex flex-col items-center justify-center p-2 sm:px-3 sm:py-2 rounded-xl border transition-all active:scale-95 ${
-                !isCameraEnabled
-                  ? "bg-rose-500/20 border-rose-500/40 text-rose-400 hover:bg-rose-500/30"
-                  : "bg-zinc-800/80 border-zinc-700/60 text-zinc-200 hover:bg-zinc-800 hover:text-white"
-              }`}
-            >
-              {!isCameraEnabled ? <VideoOff className="w-4 h-4" /> : <Video className="w-4 h-4 text-orange-400" />}
-              <span className="text-[9px] font-semibold mt-0.5 hidden sm:inline">
-                {!isCameraEnabled ? "Start Video" : "Stop Video"}
-              </span>
-            </button>
+                return (
+                  <div
+                    key={p.identity}
+                    className={`relative w-full h-full rounded-2xl overflow-hidden bg-zinc-900 border flex items-center justify-center transition-all ${
+                      isSpeaking
+                        ? "border-emerald-400 ring-2 ring-emerald-400/50"
+                        : isPinned
+                        ? "border-orange-500 ring-2 ring-orange-500/50"
+                        : "border-zinc-800"
+                    }`}
+                  >
+                    {!isCamOff && pVideoTrack ? (
+                      <VideoTrack
+                        trackRef={pVideoTrack}
+                        className={`w-full h-full object-cover ${
+                          p.isLocal && pVideoTrack.source === Track.Source.Camera ? "-scale-x-100" : ""
+                        }`}
+                      />
+                    ) : (
+                      <div className="flex flex-col items-center justify-center p-2 text-center space-y-1">
+                        <StudentAvatar
+                          avatar={p.isLocal ? currentProfile?.avatar : undefined}
+                          name={p.name || p.identity}
+                          size="md"
+                          showOnlineBadge={false}
+                        />
+                        <span className="text-[11px] font-bold text-zinc-200 truncate max-w-[100px]">
+                          {p.name || p.identity} {p.isLocal && "(You)"}
+                        </span>
+                        <span className="text-[9px] text-zinc-500 flex items-center gap-1">
+                          <VideoOff className="w-2.5 h-2.5" /> Cam Off
+                        </span>
+                      </div>
+                    )}
 
-            {/* Screen Share */}
-            <button
-              onClick={handleToggleScreenShare}
-              title={isScreenShareEnabled ? "Stop Sharing Screen" : "Share Screen"}
-              className={`flex flex-col items-center justify-center p-2 sm:px-3 sm:py-2 rounded-xl border transition-all active:scale-95 ${
-                isScreenShareEnabled
-                  ? "bg-orange-600 border-orange-500 text-white"
-                  : "bg-zinc-800/80 border-zinc-700/60 text-zinc-200 hover:bg-zinc-800 hover:text-white"
-              }`}
-            >
-              <ScreenShare className="w-4 h-4" />
-              <span className="text-[9px] font-semibold mt-0.5 hidden sm:inline">Share</span>
-            </button>
-
-            {/* Reactions Picker */}
-            <div className="relative">
-              <button
-                onClick={() => setReactionsOpen(!reactionsOpen)}
-                title="Send Emoji Reaction"
-                className={`flex flex-col items-center justify-center p-2 sm:px-3 sm:py-2 rounded-xl border transition-all active:scale-95 ${
-                  reactionsOpen
-                    ? "bg-zinc-800 border-orange-500/50 text-orange-400"
-                    : "bg-zinc-800/80 border-zinc-700/60 text-zinc-200 hover:bg-zinc-800"
-                }`}
-              >
-                <Smile className="w-4 h-4" />
-                <span className="text-[9px] font-semibold mt-0.5 hidden sm:inline">React</span>
-              </button>
-
-              {/* Reactions Popup */}
-              {reactionsOpen && (
-                <div className="absolute bottom-14 left-1/2 -translate-x-1/2 p-1.5 rounded-xl bg-zinc-900 border border-zinc-700/80 backdrop-blur-xl shadow-2xl flex items-center gap-1 z-30 animate-in fade-in zoom-in-95 duration-100">
-                  {["🎉", "🔥", "👏", "☕", "❤️", "🚀", "💡"].map((em) => (
-                    <button
-                      key={em}
-                      onClick={() => handleSendReaction(em)}
-                      className="p-1.5 hover:scale-130 active:scale-95 transition-transform text-sm sm:text-base"
-                    >
-                      {em}
-                    </button>
-                  ))}
-                </div>
-              )}
+                    {/* Bottom Left Name Pill */}
+                    <div className="absolute bottom-1.5 left-1.5 z-10 flex items-center gap-1 px-2 py-0.5 rounded-md bg-black/70 backdrop-blur-md text-[10px] text-white">
+                      <span
+                        className={`w-1.5 h-1.5 rounded-full ${
+                          isSpeaking ? "bg-emerald-400 animate-pulse" : "bg-zinc-500"
+                        }`}
+                      />
+                      <span className="truncate max-w-[80px]">
+                        {p.isLocal ? "You" : p.name?.split(" ")[0] || p.identity}
+                      </span>
+                      {!p.isMicrophoneEnabled && <MicOff className="w-2.5 h-2.5 text-rose-400 ml-0.5" />}
+                    </div>
+                  </div>
+                );
+              })}
             </div>
+          </div>
+        )}
 
-            {/* Participants Toggle */}
-            <button
-              onClick={() => {
-                if (sidebarOpen && activeSidebarTab === "participants") {
-                  setSidebarOpen(false);
-                } else {
-                  setActiveSidebarTab("participants");
-                  setSidebarOpen(true);
-                }
-              }}
-              title="View Participants"
-              className={`flex flex-col items-center justify-center p-2 sm:px-3 sm:py-2 rounded-xl border transition-all active:scale-95 relative ${
-                sidebarOpen && activeSidebarTab === "participants"
-                  ? "bg-orange-600/20 border-orange-500 text-orange-400"
-                  : "bg-zinc-800/80 border-zinc-700/60 text-zinc-200 hover:bg-zinc-800"
-              }`}
-            >
-              <Users className="w-4 h-4" />
-              <span className="text-[9px] font-semibold mt-0.5 hidden sm:inline">People</span>
-              <span className="absolute -top-1 -right-1 px-1 rounded-full text-[9px] font-bold bg-zinc-800 border border-zinc-700 text-zinc-300">
-                {participants.length}
+        {/* BOTTOM ESSENTIAL CALL CONTROLS DOCK (WhatsApp / Meet circular style) */}
+        <div className="absolute bottom-5 inset-x-0 z-30 flex items-center justify-center gap-3.5 pointer-events-auto px-4">
+          {/* Mic Toggle */}
+          <button
+            type="button"
+            onClick={handleToggleMic}
+            disabled={isMicToggling}
+            className={`w-12 h-12 rounded-full flex items-center justify-center transition-all active:scale-95 shadow-lg ${
+              !isMicrophoneEnabled
+                ? "bg-rose-600 text-white shadow-rose-600/30"
+                : "bg-zinc-800/90 text-white border border-zinc-700/60 backdrop-blur-xl"
+            }`}
+            title={isMicrophoneEnabled ? "Mute Microphone" : "Unmute Microphone"}
+          >
+            {!isMicrophoneEnabled ? <MicOff className="w-5 h-5" /> : <Mic className="w-5 h-5 text-emerald-400" />}
+          </button>
+
+          {/* Video Toggle */}
+          <button
+            type="button"
+            onClick={handleToggleCamera}
+            disabled={isCamToggling}
+            className={`w-12 h-12 rounded-full flex items-center justify-center transition-all active:scale-95 shadow-lg ${
+              !isCameraEnabled
+                ? "bg-rose-600 text-white shadow-rose-600/30"
+                : "bg-zinc-800/90 text-white border border-zinc-700/60 backdrop-blur-xl"
+            }`}
+            title={isCameraEnabled ? "Turn Off Camera" : "Turn On Camera"}
+          >
+            {!isCameraEnabled ? <VideoOff className="w-5 h-5" /> : <Video className="w-5 h-5 text-orange-400" />}
+          </button>
+
+          {/* Screen Share */}
+          <button
+            type="button"
+            onClick={handleToggleScreenShare}
+            className={`w-12 h-12 rounded-full flex items-center justify-center transition-all active:scale-95 shadow-lg ${
+              isScreenShareEnabled
+                ? "bg-orange-600 text-white shadow-orange-600/30"
+                : "bg-zinc-800/90 text-white border border-zinc-700/60 backdrop-blur-xl"
+            }`}
+            title={isScreenShareEnabled ? "Stop Sharing Screen" : "Share Screen"}
+          >
+            <ScreenShare className="w-5 h-5" />
+          </button>
+
+          {/* End / Leave Call Button */}
+          <button
+            type="button"
+            onClick={handleLeaveSession}
+            className="w-14 h-14 rounded-full bg-rose-600 hover:bg-rose-700 text-white flex items-center justify-center shadow-xl shadow-rose-600/40 active:scale-95 transition-all"
+            title="Leave Room"
+          >
+            <PhoneOff className="w-6 h-6" />
+          </button>
+
+          {/* Chat Toggle Button */}
+          <button
+            type="button"
+            onClick={() => {
+              setActiveSidebarTab("chat");
+              setSidebarOpen(true);
+              setUnreadCount(0);
+            }}
+            className="relative w-12 h-12 rounded-full bg-zinc-800/90 text-white border border-zinc-700/60 backdrop-blur-xl flex items-center justify-center shadow-lg active:scale-95 transition-all"
+            title="In-Room Chat"
+          >
+            <MessageSquare className="w-5 h-5" />
+            {unreadCount > 0 && (
+              <span className="absolute -top-1 -right-1 w-5 h-5 rounded-full bg-orange-600 text-white text-[10px] font-bold flex items-center justify-center animate-pulse">
+                {unreadCount}
               </span>
-            </button>
+            )}
+          </button>
 
-            {/* Chat Toggle */}
+          {/* Emoji Reactions */}
+          <div className="relative">
             <button
-              onClick={() => {
-                if (sidebarOpen && activeSidebarTab === "chat") {
-                  setSidebarOpen(false);
-                } else {
-                  setActiveSidebarTab("chat");
-                  setSidebarOpen(true);
-                  setUnreadCount(0);
-                }
-              }}
-              title="Open In-Room Chat"
-              className={`flex flex-col items-center justify-center p-2 sm:px-3 sm:py-2 rounded-xl border transition-all active:scale-95 relative ${
-                sidebarOpen && activeSidebarTab === "chat"
-                  ? "bg-orange-600/20 border-orange-500 text-orange-400"
-                  : "bg-zinc-800/80 border-zinc-700/60 text-zinc-200 hover:bg-zinc-800"
+              type="button"
+              onClick={() => setReactionsOpen(!reactionsOpen)}
+              className={`w-12 h-12 rounded-full flex items-center justify-center transition-all active:scale-95 shadow-lg ${
+                reactionsOpen
+                  ? "bg-zinc-800 border-orange-500 text-orange-400"
+                  : "bg-zinc-800/90 text-white border border-zinc-700/60 backdrop-blur-xl"
               }`}
+              title="Send Reaction"
             >
-              <MessageSquare className="w-4 h-4" />
-              <span className="text-[9px] font-semibold mt-0.5 hidden sm:inline">Chat</span>
-              {unreadCount > 0 && (
-                <span className="absolute -top-1 -right-1 w-4 h-4 rounded-full text-[9px] font-bold bg-orange-600 text-white flex items-center justify-center animate-pulse">
-                  {unreadCount}
-                </span>
-              )}
+              <Smile className="w-5 h-5" />
             </button>
-
-            {/* Red Leave Room Button */}
-            <button
-              onClick={handleLeaveSession}
-              title="Leave Hangout Room"
-              className="px-3 sm:px-4 py-2 rounded-xl bg-rose-600 hover:bg-rose-500 text-white font-semibold text-xs flex items-center gap-1.5 shadow-sm active:scale-95 transition-all ml-1"
-            >
-              <PhoneOff className="w-4 h-4" />
-              <span className="hidden sm:inline">Leave</span>
-            </button>
+            {reactionsOpen && (
+              <div className="absolute bottom-16 right-0 p-2 rounded-2xl bg-zinc-900 border border-zinc-700/80 backdrop-blur-2xl shadow-2xl flex items-center gap-1.5 z-40 animate-in fade-in zoom-in-95 duration-100">
+                {["🎉", "🔥", "👏", "☕", "❤️", "🚀", "💡"].map((em) => (
+                  <button
+                    key={em}
+                    type="button"
+                    onClick={() => handleSendReaction(em)}
+                    className="p-1.5 hover:scale-125 active:scale-95 transition-transform text-lg"
+                  >
+                    {em}
+                  </button>
+                ))}
+              </div>
+            )}
           </div>
         </div>
       </div>
 
-      {/* ================================================================= */}
-      {/* RIGHT SIDEBAR (COLLAPSIBLE): Participants & In-Room Text Chat    */}
-      {/* ================================================================= */}
-      {sidebarOpen && (
-        <div className="w-full lg:w-80 sm:w-88 flex flex-col border-t lg:border-t-0 lg:border-l border-zinc-800 bg-zinc-900/95 backdrop-blur-xl shrink-0 rounded-2xl lg:rounded-l-none overflow-hidden transition-all duration-200">
-          {/* Top Segmented Tab Switcher */}
-          <div className="p-3 border-b border-zinc-800 flex items-center justify-between gap-2">
-            <div className="flex items-center gap-1 bg-zinc-950 p-1 rounded-xl border border-zinc-800 flex-1">
-              <button
-                onClick={() => setActiveSidebarTab("participants")}
-                className={`flex-1 py-1 px-2 rounded-lg text-xs font-semibold flex items-center justify-center gap-1.5 transition-colors ${
-                  activeSidebarTab === "participants"
-                    ? "bg-zinc-800 text-orange-400 shadow-sm"
-                    : "text-zinc-400 hover:text-zinc-200"
-                }`}
-              >
-                <Users className="w-3.5 h-3.5" />
-                <span>People ({participants.length})</span>
-              </button>
-
-              <button
-                onClick={() => {
-                  setActiveSidebarTab("chat");
-                  setUnreadCount(0);
-                }}
-                className={`flex-1 py-1 px-2 rounded-lg text-xs font-semibold flex items-center justify-center gap-1.5 transition-colors relative ${
-                  activeSidebarTab === "chat"
-                    ? "bg-zinc-800 text-orange-400 shadow-sm"
-                    : "text-zinc-400 hover:text-zinc-200"
-                }`}
-              >
-                <MessageSquare className="w-3.5 h-3.5" />
-                <span>Chat</span>
-                {unreadCount > 0 && (
-                  <span className="w-2 h-2 rounded-full bg-orange-500 animate-pulse ml-0.5" />
+      {/* ======================================================== */}
+      {/* 2. DESKTOP ZOOM/MEET PRO WORKSPACE (md: and up)         */}
+      {/* ======================================================== */}
+      <div className="hidden md:flex flex-1 flex-col h-full overflow-hidden min-h-0 bg-[#090D16]">
+        {/* Active Room Header bar */}
+        <div className="flex items-center justify-between px-4 py-2.5 bg-zinc-900/90 border-b border-zinc-800/90 backdrop-blur-md shrink-0">
+          <div className="flex items-center gap-3 min-w-0">
+            <span className="text-2xl p-1.5 rounded-lg bg-zinc-800 border border-zinc-700/60 shrink-0">
+              {room.emoji}
+            </span>
+            <div className="min-w-0">
+              <div className="flex items-center gap-2 flex-wrap">
+                <h2 className="text-sm font-bold text-zinc-100 truncate">
+                  {room.name}
+                </h2>
+                <div className="flex items-center gap-1.5 px-2 py-0.5 rounded-md text-[10px] font-mono font-bold bg-orange-500/15 text-orange-400 border border-orange-500/30 shrink-0">
+                  <Hash className="w-3 h-3 text-orange-400" />
+                  <span>{room.code}</span>
+                  <button
+                    type="button"
+                    onClick={() => onCopyRoomCode?.(room.code)}
+                    title="Copy Room Code to invite classmates"
+                    className="ml-1 p-0.5 hover:text-white transition-colors"
+                  >
+                    {copiedCode === room.code ? (
+                      <Check className="w-3 h-3 text-emerald-400" />
+                    ) : (
+                      <Copy className="w-3 h-3" />
+                    )}
+                  </button>
+                </div>
+                <span className="px-1.5 py-0.5 rounded-md text-[9px] font-bold bg-emerald-500/10 text-emerald-400 border border-emerald-500/20 flex items-center gap-1 shrink-0">
+                  <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-pulse" />
+                  LIVE
+                </span>
+                {room.password && (
+                  <span className="px-1.5 py-0.5 rounded-md text-[9px] font-semibold bg-amber-500/10 text-amber-400 border border-amber-500/20 flex items-center gap-1 shrink-0">
+                    <Lock className="w-2.5 h-2.5 text-amber-400" />
+                    SECURE
+                  </span>
                 )}
-              </button>
+              </div>
+              <p className="text-[11px] text-zinc-400 truncate max-w-md">
+                {room.topic}
+              </p>
             </div>
-
-            <button
-              onClick={() => setSidebarOpen(false)}
-              className="p-1.5 rounded-lg text-zinc-400 hover:text-zinc-200 hover:bg-zinc-800 transition-colors"
-            >
-              <X className="w-4 h-4" />
-            </button>
           </div>
 
-          {/* TAB 1: PARTICIPANTS LIST */}
-          {activeSidebarTab === "participants" && (
-            <div className="flex-1 flex flex-col justify-between p-3 overflow-hidden">
-              <div className="space-y-2 overflow-y-auto flex-1 pr-1">
-                <div className="text-[11px] font-semibold text-zinc-400 uppercase tracking-wider px-1">
-                  In Room ({participants.length}/8)
-                </div>
+          <div className="flex items-center gap-2 shrink-0">
+            <span className="px-2 py-0.5 rounded-md text-[10px] font-medium bg-zinc-800 text-zinc-400 border border-zinc-700/60 uppercase">
+              {room.tag}
+            </span>
+            <button
+              type="button"
+              onClick={handleLeaveSession}
+              className="px-3 py-1.5 rounded-lg bg-rose-600 hover:bg-rose-500 text-white font-semibold text-xs flex items-center gap-1.5 transition-colors shadow-sm active:scale-95"
+            >
+              <PhoneOff className="w-3.5 h-3.5" />
+              <span>Leave Room</span>
+            </button>
+          </div>
+        </div>
 
-                {participants.map((p) => (
-                  <div
-                    key={p.identity}
-                    className="flex items-center justify-between p-2.5 rounded-xl bg-zinc-950/60 border border-zinc-800/80 hover:border-zinc-700 transition-colors"
-                  >
-                    <div className="flex items-center gap-2.5 min-w-0">
-                      <StudentAvatar
-                        avatar={p.isLocal ? currentProfile?.avatar : undefined}
-                        name={p.name || p.identity}
-                        size="sm"
-                        showOnlineBadge={false}
-                      />
-                      <div className="min-w-0">
-                        <p className="text-xs font-semibold text-zinc-200 truncate">
-                          {p.name || p.identity}
-                        </p>
-                        <p className="text-[10px] text-zinc-500">
-                          {p.isLocal ? "Host (You)" : "UIU Student"}
-                        </p>
+        {/* Desktop Stage & Sidebar */}
+        <div className="flex-1 flex overflow-hidden min-h-0">
+          {/* Main Stage (Grid or Speaker + Dock) */}
+          <div className="flex-1 flex flex-col justify-between p-3 min-w-0 overflow-hidden gap-3">
+            {viewMode === "grid" ? (
+              /* 1. EQUAL GALLERY GRID */
+              <div className="flex-1 relative w-full overflow-hidden min-h-0 flex items-center justify-center">
+                <div
+                  className={`w-full h-full grid gap-3 p-1 ${
+                    participants.length <= 1
+                      ? "grid-cols-1 max-w-3xl mx-auto"
+                      : participants.length === 2
+                      ? "grid-cols-1 md:grid-cols-2"
+                      : participants.length <= 4
+                      ? "grid-cols-2 grid-rows-2"
+                      : participants.length <= 6
+                      ? "grid-cols-2 md:grid-cols-3"
+                      : "grid-cols-2 sm:grid-cols-3 lg:grid-cols-4"
+                  }`}
+                >
+                  {participants.map((p) => {
+                    const pVideoTrack = getParticipantVideoTrack(p);
+                    const isCamOff = !pVideoTrack;
+                    const isSpeaking = p.isSpeaking;
+                    const isPinned = p.identity === pinnedIdentity;
+                    const fit = fitModes[p.identity] || "contain";
+
+                    return (
+                      <div
+                        key={p.identity}
+                        className={`relative w-full h-full rounded-2xl overflow-hidden bg-zinc-950 border flex items-center justify-center transition-all duration-200 ${
+                          isSpeaking
+                            ? "border-emerald-400 ring-2 ring-emerald-400/50 shadow-lg shadow-emerald-500/20"
+                            : isPinned
+                            ? "border-orange-500 ring-2 ring-orange-500/50 shadow-md"
+                            : "border-zinc-800/90 shadow-md"
+                        }`}
+                      >
+                        {!isCamOff && pVideoTrack ? (
+                          <VideoTrack
+                            trackRef={pVideoTrack}
+                            className={`w-full h-full ${
+                              fit === "contain"
+                                ? "object-contain bg-zinc-950"
+                                : "object-cover"
+                            } ${
+                              p.isLocal && pVideoTrack.source === Track.Source.Camera
+                                ? "-scale-x-100"
+                                : ""
+                            }`}
+                          />
+                        ) : (
+                          <div className="flex flex-col items-center justify-center p-3 text-center space-y-2 animate-in fade-in duration-150">
+                            <div
+                              className={`relative rounded-full transition-all duration-300 ${
+                                isSpeaking
+                                  ? "ring-4 ring-emerald-500/70 shadow-lg shadow-emerald-500/30 scale-105"
+                                  : "ring-2 ring-zinc-800"
+                              }`}
+                            >
+                              <StudentAvatar
+                                avatar={p.isLocal ? currentProfile?.avatar : undefined}
+                                name={p.name || p.identity}
+                                size={
+                                  participants.length <= 2
+                                    ? "xl"
+                                    : participants.length <= 4
+                                    ? "lg"
+                                    : "md"
+                                }
+                                showOnlineBadge={false}
+                              />
+                              {isSpeaking && (
+                                <span className="absolute -bottom-1 -right-1 w-3.5 h-3.5 rounded-full bg-emerald-500 border-2 border-zinc-950 animate-pulse" />
+                              )}
+                            </div>
+
+                            <div>
+                              <h4 className="text-xs sm:text-sm font-bold text-zinc-100 truncate max-w-[150px] sm:max-w-[200px]">
+                                {p.name || p.identity} {p.isLocal && "(You)"}
+                              </h4>
+                              <div className="flex items-center justify-center gap-1.5 mt-0.5">
+                                <span className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded text-[9px] font-semibold bg-zinc-900 border border-zinc-800 text-zinc-400">
+                                  <VideoOff className="w-2.5 h-2.5 text-zinc-500" />
+                                  Cam Off
+                                </span>
+                                {isSpeaking && (
+                                  <span className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded text-[9px] font-semibold bg-emerald-500/10 border border-emerald-500/30 text-emerald-400">
+                                    <Mic className="w-2.5 h-2.5 text-emerald-400 animate-pulse" />
+                                    Speaking
+                                  </span>
+                                )}
+                              </div>
+                            </div>
+                          </div>
+                        )}
+
+                        {/* Top Right Controls on Video Tile */}
+                        <div className="absolute top-2.5 right-2.5 flex items-center gap-1.5 z-10">
+                          {!isCamOff && (
+                            <button
+                              type="button"
+                              onClick={() => toggleFitMode(p.identity)}
+                              title={
+                                fit === "contain"
+                                  ? "Crop & Fill Entire Tile"
+                                  : "Fit Complete Frame (No Crop / Mobile Safe)"
+                              }
+                              className="p-1.5 rounded-lg bg-zinc-900/80 hover:bg-zinc-800 text-zinc-300 hover:text-white border border-zinc-700/60 backdrop-blur-md transition-colors shadow-sm"
+                            >
+                              {fit === "contain" ? (
+                                <Maximize2 className="w-3 h-3" />
+                              ) : (
+                                <Minimize2 className="w-3 h-3" />
+                              )}
+                            </button>
+                          )}
+
+                          <button
+                            type="button"
+                            onClick={() => {
+                              setPinnedIdentity(p.identity);
+                              setViewMode("speaker");
+                            }}
+                            title="Spotlight / Focus this Participant"
+                            className="p-1.5 rounded-lg bg-zinc-900/80 hover:bg-zinc-800 text-zinc-300 hover:text-white border border-zinc-700/60 backdrop-blur-md transition-colors shadow-sm"
+                          >
+                            <Pin className="w-3 h-3" />
+                          </button>
+                        </div>
+
+                        {/* Speaking Badge on Top Left */}
+                        {isSpeaking && (
+                          <div className="absolute top-2.5 left-2.5 z-10 pointer-events-none">
+                            <span className="px-2 py-0.5 rounded-md bg-emerald-600/90 text-white text-[10px] font-semibold flex items-center gap-1 shadow-md backdrop-blur-md">
+                              <Mic className="w-2.5 h-2.5 animate-pulse" />
+                              Speaking
+                            </span>
+                          </div>
+                        )}
+
+                        {/* Bottom Left Name & Mic Pill */}
+                        <div className="absolute bottom-2.5 left-2.5 z-10 flex items-center gap-1.5 px-2.5 py-1 rounded-lg bg-zinc-950/85 backdrop-blur-md border border-zinc-800/80 text-[11px] font-medium text-zinc-200 shadow-md max-w-[85%]">
+                          <span
+                            className={`w-1.5 h-1.5 rounded-full shrink-0 ${
+                              isSpeaking ? "bg-emerald-400 animate-pulse" : "bg-zinc-500"
+                            }`}
+                          />
+                          <span className="truncate">
+                            {p.name || p.identity} {p.isLocal && "(You)"}
+                          </span>
+                          {!p.isMicrophoneEnabled ? (
+                            <MicOff className="w-3.5 h-3.5 text-rose-400 shrink-0 ml-0.5" />
+                          ) : null}
+                        </div>
+                      </div>
+                    );
+                  })}
+                </div>
+              </div>
+            ) : (
+              /* 2. SPEAKER / SPOTLIGHT VIEW */
+              <div className="flex-1 flex flex-col justify-between overflow-hidden min-h-0 gap-2">
+                <div className="flex-1 relative w-full rounded-2xl overflow-hidden bg-zinc-950 border border-zinc-800/80 shadow-2xl flex items-center justify-center min-h-[290px] sm:min-h-[380px]">
+                  {!isFocusedCamOff && focusedTrack ? (
+                    <VideoTrack
+                      trackRef={focusedTrack}
+                      className={`w-full h-full ${
+                        (fitModes[focusedParticipant.identity] || "contain") === "contain"
+                          ? "object-contain bg-zinc-950"
+                          : "object-cover"
+                      } rounded-2xl ${
+                        focusedParticipant.isLocal && focusedTrack.source === Track.Source.Camera
+                          ? "-scale-x-100"
+                          : ""
+                      }`}
+                    />
+                  ) : (
+                    <div className="flex flex-col items-center justify-center p-6 text-center space-y-3 animate-in fade-in duration-200">
+                      <div
+                        className={`relative rounded-full transition-all duration-300 ${
+                          focusedParticipant?.isSpeaking
+                            ? "ring-4 ring-emerald-500/70 shadow-lg shadow-emerald-500/30 scale-105"
+                            : "ring-2 ring-zinc-800"
+                        }`}
+                      >
+                        <StudentAvatar
+                          avatar={focusedParticipant?.isLocal ? currentProfile?.avatar : undefined}
+                          name={focusedParticipant?.name || focusedParticipant?.identity}
+                          size="xl"
+                          showOnlineBadge={false}
+                        />
+                        {focusedParticipant?.isSpeaking && (
+                          <span className="absolute -bottom-1 -right-1 w-4 h-4 rounded-full bg-emerald-500 border-2 border-zinc-950 animate-pulse" />
+                        )}
+                      </div>
+
+                      <div>
+                        <h3 className="text-base sm:text-lg font-bold text-zinc-100 tracking-tight">
+                          {focusedParticipant?.name || focusedParticipant?.identity}{" "}
+                          {focusedParticipant?.isLocal && "(You)"}
+                        </h3>
+                        <div className="flex items-center justify-center gap-2 mt-1">
+                          <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-md text-[10px] font-semibold bg-zinc-900 border border-zinc-800 text-zinc-400">
+                            <VideoOff className="w-3.5 h-3.5 text-zinc-500" />
+                            Camera Muted
+                          </span>
+                          {focusedParticipant?.isSpeaking && (
+                            <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-md text-[10px] font-semibold bg-emerald-500/10 border border-emerald-500/30 text-emerald-400">
+                              <Mic className="w-3.5 h-3.5 text-emerald-400 animate-pulse" />
+                              Speaking
+                            </span>
+                          )}
+                        </div>
                       </div>
                     </div>
+                  )}
 
-                    <div className="flex items-center gap-1.5 shrink-0">
-                      {p.isSpeaking && (
-                        <span className="w-2 h-2 rounded-full bg-emerald-400 animate-pulse mr-1" />
-                      )}
-                      {p.isMicrophoneEnabled ? (
-                        <Mic className="w-3.5 h-3.5 text-zinc-400" />
-                      ) : (
-                        <MicOff className="w-3.5 h-3.5 text-rose-400" />
-                      )}
-                      {p.isCameraEnabled ? (
-                        <Video className="w-3.5 h-3.5 text-zinc-400" />
-                      ) : (
-                        <VideoOff className="w-3.5 h-3.5 text-zinc-600" />
-                      )}
-                    </div>
-                  </div>
-                ))}
-              </div>
-
-              <div className="pt-3 border-t border-zinc-800 text-[11px] text-zinc-500 text-center">
-                Max 8 peers allowed per UIU hangout room
-              </div>
-            </div>
-          )}
-
-          {/* TAB 2: IN-ROOM CHAT */}
-          {activeSidebarTab === "chat" && (
-            <div className="flex-1 flex flex-col justify-between overflow-hidden">
-              {/* Message History */}
-              <div
-                ref={chatScrollRef}
-                className="flex-1 p-3 space-y-3 overflow-y-auto"
-              >
-                {chatMessages.map((msg) => (
-                  <div
-                    key={msg.id}
-                    className={`flex flex-col ${
-                      msg.isSelf ? "items-end" : "items-start"
-                    } space-y-1 animate-in fade-in duration-100`}
-                  >
-                    <div className="flex items-center gap-1.5 text-[10px] text-zinc-400">
-                      <span className="font-semibold text-zinc-300">
-                        {msg.sender}
+                  {/* Floating Top Overlays */}
+                  <div className="absolute top-3 left-3 flex items-center gap-2 z-10 pointer-events-none">
+                    {pinnedIdentity === focusedParticipant?.identity && (
+                      <span className="px-2.5 py-1 rounded-lg bg-orange-600/90 text-white text-[11px] font-semibold flex items-center gap-1.5 shadow-md backdrop-blur-md">
+                        <Pin className="w-3.5 h-3.5" />
+                        Pinned Focus
                       </span>
-                      <span>•</span>
-                      <span>{msg.time}</span>
-                    </div>
-                    <div
-                      className={`px-3 py-2 rounded-2xl text-xs max-w-[85%] break-words leading-relaxed ${
-                        msg.isSelf
-                          ? "bg-orange-600 text-white rounded-tr-none shadow-sm"
-                          : "bg-zinc-800/90 text-zinc-200 rounded-tl-none border border-zinc-700/60"
-                      }`}
-                    >
-                      {msg.text}
-                    </div>
+                    )}
+                    {focusedParticipant?.isSpeaking && (
+                      <span className="px-2.5 py-1 rounded-lg bg-emerald-600/90 text-white text-[11px] font-semibold flex items-center gap-1.5 shadow-md backdrop-blur-md">
+                        <Mic className="w-3.5 h-3.5 animate-pulse" />
+                        Active Speaker
+                      </span>
+                    )}
                   </div>
-                ))}
-              </div>
 
-              {/* Chat Input Bar */}
-              <form
-                onSubmit={handleSendMessage}
-                className="p-3 border-t border-zinc-800 bg-zinc-950 flex items-center gap-2"
-              >
-                <input
-                  type="text"
-                  value={chatInput}
-                  onChange={(e) => setChatInput(e.target.value)}
-                  placeholder="Send a message to room..."
-                  className="flex-1 px-3 py-2 rounded-xl bg-zinc-900 border border-zinc-800 text-xs text-zinc-100 placeholder-zinc-500 focus:outline-none focus:border-orange-500/60"
-                />
+                  {/* Top Right Pin & Fit Buttons */}
+                  {focusedParticipant && (
+                    <div className="absolute top-3 right-3 z-10 flex items-center gap-1.5">
+                      {!isFocusedCamOff && (
+                        <button
+                          type="button"
+                          onClick={() => toggleFitMode(focusedParticipant.identity)}
+                          title="Toggle Fit / Fill"
+                          className="p-2 rounded-xl border backdrop-blur-md transition-colors shadow-sm bg-zinc-900/80 hover:bg-zinc-800 text-zinc-300 hover:text-white border-zinc-700/60"
+                        >
+                          {(fitModes[focusedParticipant.identity] || "contain") === "contain" ? (
+                            <Maximize2 className="w-4 h-4" />
+                          ) : (
+                            <Minimize2 className="w-4 h-4" />
+                          )}
+                        </button>
+                      )}
+                      <button
+                        type="button"
+                        onClick={() =>
+                          setPinnedIdentity(
+                            pinnedIdentity === focusedParticipant.identity
+                              ? null
+                              : focusedParticipant.identity
+                          )
+                        }
+                        title={
+                          pinnedIdentity === focusedParticipant.identity
+                            ? "Unpin Focus"
+                            : "Pin this Participant"
+                        }
+                        className={`p-2 rounded-xl border backdrop-blur-md transition-colors shadow-sm ${
+                          pinnedIdentity === focusedParticipant.identity
+                            ? "bg-orange-600 text-white border-orange-500"
+                            : "bg-zinc-900/80 hover:bg-zinc-800 text-zinc-300 hover:text-white border-zinc-700/60"
+                        }`}
+                      >
+                        {pinnedIdentity === focusedParticipant.identity ? (
+                          <PinOff className="w-4 h-4" />
+                        ) : (
+                          <Pin className="w-4 h-4" />
+                        )}
+                      </button>
+                    </div>
+                  )}
+
+                  {/* Bottom Left Name Pill */}
+                  {focusedParticipant && (
+                    <div className="absolute bottom-3 left-3 z-10 flex items-center gap-2 px-3 py-1.5 rounded-xl bg-zinc-950/85 backdrop-blur-md border border-zinc-800/80 text-xs font-semibold text-zinc-200 shadow-md">
+                      <span
+                        className={`w-2 h-2 rounded-full ${
+                          focusedParticipant.isSpeaking ? "bg-emerald-400 animate-pulse" : "bg-zinc-500"
+                        }`}
+                      />
+                      <span className="truncate max-w-[140px] sm:max-w-[200px]">
+                        {focusedParticipant.name || focusedParticipant.identity}{" "}
+                        {focusedParticipant.isLocal && "(You)"}
+                      </span>
+                      {!focusedParticipant.isMicrophoneEnabled && (
+                        <MicOff className="w-3.5 h-3.5 text-rose-400 shrink-0 ml-0.5" />
+                      )}
+                    </div>
+                  )}
+                </div>
+
+                {/* BOTTOM STRIP: Horizontal Peer Video Thumbnails */}
+                <div className="h-20 sm:h-24 shrink-0 flex items-center gap-2.5 overflow-x-auto py-1 px-1 scrollbar-thin">
+                  {participants.map((p) => {
+                    const pVideoTrack = getParticipantVideoTrack(p);
+                    const isCamOff = !pVideoTrack;
+                    const isSelectedFocus = p.identity === focusedParticipant?.identity;
+                    const isPinned = p.identity === pinnedIdentity;
+
+                    return (
+                      <div
+                        key={p.identity}
+                        onClick={() =>
+                          setPinnedIdentity(pinnedIdentity === p.identity ? null : p.identity)
+                        }
+                        title={`Click to focus ${p.name || p.identity}`}
+                        className={`relative w-28 sm:w-36 aspect-video shrink-0 rounded-xl overflow-hidden cursor-pointer border transition-all duration-150 flex items-center justify-center bg-zinc-900 ${
+                          isSelectedFocus
+                            ? "border-orange-500 ring-2 ring-orange-500/50 shadow-md"
+                            : p.isSpeaking
+                            ? "border-emerald-400 ring-1 ring-emerald-400/40"
+                            : "border-zinc-800 hover:border-zinc-700 hover:bg-zinc-850"
+                        }`}
+                      >
+                        {!isCamOff && pVideoTrack ? (
+                          <VideoTrack
+                            trackRef={pVideoTrack}
+                            className={`w-full h-full object-cover ${
+                              p.isLocal && pVideoTrack.source === Track.Source.Camera ? "-scale-x-100" : ""
+                            }`}
+                          />
+                        ) : (
+                          <div className="flex flex-col items-center justify-center p-1 text-center">
+                            <StudentAvatar
+                              avatar={p.isLocal ? currentProfile?.avatar : undefined}
+                              name={p.name || p.identity}
+                              size="sm"
+                              showOnlineBadge={false}
+                            />
+                            <span className="text-[10px] font-medium text-zinc-300 truncate max-w-[80px] mt-0.5">
+                              {p.name || p.identity}
+                            </span>
+                          </div>
+                        )}
+
+                        <div className="absolute bottom-1 left-1 right-1 flex items-center justify-between px-1.5 py-0.5 rounded bg-zinc-950/80 backdrop-blur-sm text-[9px] font-medium text-zinc-200">
+                          <span className="truncate max-w-[70px]">
+                            {p.isLocal ? "You" : p.name?.split(" ")[0] || p.identity}
+                          </span>
+                          {!p.isMicrophoneEnabled ? (
+                            <MicOff className="w-2.5 h-2.5 text-rose-400 shrink-0" />
+                          ) : p.isSpeaking ? (
+                            <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-pulse" />
+                          ) : null}
+                        </div>
+
+                        {isPinned && (
+                          <span className="absolute top-1 right-1 p-0.5 rounded bg-orange-600 text-white">
+                            <Pin className="w-2.5 h-2.5" />
+                          </span>
+                        )}
+                      </div>
+                    );
+                  })}
+                </div>
+              </div>
+            )}
+
+            {/* 3. CLEAN BOTTOM FLOATING TOOLBAR (Zoom / Meet Style Dock) */}
+            <div className="h-14 sm:h-16 flex items-center justify-center shrink-0">
+              <div className="relative flex items-center gap-1.5 sm:gap-2 px-2.5 sm:px-4 py-2 rounded-2xl bg-zinc-900/90 border border-zinc-800/90 backdrop-blur-xl shadow-2xl">
+                {/* Audio Toggle */}
                 <button
-                  type="submit"
-                  disabled={!chatInput.trim()}
-                  className="p-2 rounded-xl bg-orange-600 hover:bg-zinc-800 disabled:opacity-40 text-white transition-colors active:scale-95 shadow-sm"
+                  type="button"
+                  onClick={handleToggleMic}
+                  disabled={isMicToggling}
+                  title={isMicrophoneEnabled ? "Mute Microphone" : "Unmute Microphone"}
+                  className={`flex flex-col items-center justify-center p-2 sm:px-3 sm:py-2 rounded-xl border transition-all active:scale-95 ${
+                    !isMicrophoneEnabled
+                      ? "bg-rose-500/20 border-rose-500/40 text-rose-400 hover:bg-rose-500/30"
+                      : "bg-zinc-800/80 border-zinc-700/60 text-zinc-200 hover:bg-zinc-800 hover:text-white"
+                  }`}
                 >
-                  <Send className="w-4 h-4" />
+                  {!isMicrophoneEnabled ? <MicOff className="w-4 h-4" /> : <Mic className="w-4 h-4 text-emerald-400" />}
+                  <span className="text-[9px] font-semibold mt-0.5 hidden sm:inline">
+                    {!isMicrophoneEnabled ? "Unmute" : "Mute"}
+                  </span>
                 </button>
-              </form>
+
+                {/* Video Toggle */}
+                <button
+                  type="button"
+                  onClick={handleToggleCamera}
+                  disabled={isCamToggling}
+                  title={isCameraEnabled ? "Stop Camera" : "Start Camera"}
+                  className={`flex flex-col items-center justify-center p-2 sm:px-3 sm:py-2 rounded-xl border transition-all active:scale-95 ${
+                    !isCameraEnabled
+                      ? "bg-rose-500/20 border-rose-500/40 text-rose-400 hover:bg-rose-500/30"
+                      : "bg-zinc-800/80 border-zinc-700/60 text-zinc-200 hover:bg-zinc-800 hover:text-white"
+                  }`}
+                >
+                  {!isCameraEnabled ? <VideoOff className="w-4 h-4" /> : <Video className="w-4 h-4 text-orange-400" />}
+                  <span className="text-[9px] font-semibold mt-0.5 hidden sm:inline">
+                    {!isCameraEnabled ? "Start Video" : "Stop Video"}
+                  </span>
+                </button>
+
+                {/* Screen Share */}
+                <button
+                  type="button"
+                  onClick={handleToggleScreenShare}
+                  title={isScreenShareEnabled ? "Stop Sharing Screen" : "Share Screen"}
+                  className={`flex flex-col items-center justify-center p-2 sm:px-3 sm:py-2 rounded-xl border transition-all active:scale-95 ${
+                    isScreenShareEnabled
+                      ? "bg-orange-600 border-orange-500 text-white"
+                      : "bg-zinc-800/80 border-zinc-700/60 text-zinc-200 hover:bg-zinc-800 hover:text-white"
+                  }`}
+                >
+                  <ScreenShare className="w-4 h-4" />
+                  <span className="text-[9px] font-semibold mt-0.5 hidden sm:inline">Share</span>
+                </button>
+
+                {/* View Mode Switcher */}
+                <button
+                  type="button"
+                  onClick={() => setViewMode(viewMode === "grid" ? "speaker" : "grid")}
+                  title={viewMode === "grid" ? "Switch to Speaker Spotlight View" : "Switch to Equal Grid View"}
+                  className={`flex flex-col items-center justify-center p-2 sm:px-3 sm:py-2 rounded-xl border transition-all active:scale-95 ${
+                    viewMode === "grid"
+                      ? "bg-orange-600/20 border-orange-500 text-orange-400"
+                      : "bg-zinc-800/80 border-zinc-700/60 text-zinc-200 hover:bg-zinc-800"
+                  }`}
+                >
+                  {viewMode === "grid" ? <LayoutGrid className="w-4 h-4" /> : <Maximize2 className="w-4 h-4" />}
+                  <span className="text-[9px] font-semibold mt-0.5 hidden sm:inline">
+                    {viewMode === "grid" ? "Grid" : "Speaker"}
+                  </span>
+                </button>
+
+                {/* Reactions Picker */}
+                <div className="relative">
+                  <button
+                    type="button"
+                    onClick={() => setReactionsOpen(!reactionsOpen)}
+                    title="Send Emoji Reaction"
+                    className={`flex flex-col items-center justify-center p-2 sm:px-3 sm:py-2 rounded-xl border transition-all active:scale-95 ${
+                      reactionsOpen
+                        ? "bg-zinc-800 border-orange-500/50 text-orange-400"
+                        : "bg-zinc-800/80 border-zinc-700/60 text-zinc-200 hover:bg-zinc-800"
+                    }`}
+                  >
+                    <Smile className="w-4 h-4" />
+                    <span className="text-[9px] font-semibold mt-0.5 hidden sm:inline">React</span>
+                  </button>
+
+                  {reactionsOpen && (
+                    <div className="absolute bottom-14 left-1/2 -translate-x-1/2 p-1.5 rounded-xl bg-zinc-900 border border-zinc-700/80 backdrop-blur-xl shadow-2xl flex items-center gap-1 z-30 animate-in fade-in zoom-in-95 duration-100">
+                      {["🎉", "🔥", "👏", "☕", "❤️", "🚀", "💡"].map((em) => (
+                        <button
+                          key={em}
+                          type="button"
+                          onClick={() => handleSendReaction(em)}
+                          className="p-1.5 hover:scale-130 active:scale-95 transition-transform text-sm sm:text-base"
+                        >
+                          {em}
+                        </button>
+                      ))}
+                    </div>
+                  )}
+                </div>
+
+                {/* Participants Toggle */}
+                <button
+                  type="button"
+                  onClick={() => {
+                    if (sidebarOpen && activeSidebarTab === "participants") {
+                      setSidebarOpen(false);
+                    } else {
+                      setActiveSidebarTab("participants");
+                      setSidebarOpen(true);
+                    }
+                  }}
+                  title="View Participants"
+                  className={`flex flex-col items-center justify-center p-2 sm:px-3 sm:py-2 rounded-xl border transition-all active:scale-95 relative ${
+                    sidebarOpen && activeSidebarTab === "participants"
+                      ? "bg-orange-600/20 border-orange-500 text-orange-400"
+                      : "bg-zinc-800/80 border-zinc-700/60 text-zinc-200 hover:bg-zinc-800"
+                  }`}
+                >
+                  <Users className="w-4 h-4" />
+                  <span className="text-[9px] font-semibold mt-0.5 hidden sm:inline">People</span>
+                  <span className="absolute -top-1 -right-1 px-1 rounded-full text-[9px] font-bold bg-zinc-800 border border-zinc-700 text-zinc-300">
+                    {participants.length}
+                  </span>
+                </button>
+
+                {/* Chat Toggle */}
+                <button
+                  type="button"
+                  onClick={() => {
+                    if (sidebarOpen && activeSidebarTab === "chat") {
+                      setSidebarOpen(false);
+                    } else {
+                      setActiveSidebarTab("chat");
+                      setSidebarOpen(true);
+                      setUnreadCount(0);
+                    }
+                  }}
+                  title="Open In-Room Chat"
+                  className={`flex flex-col items-center justify-center p-2 sm:px-3 sm:py-2 rounded-xl border transition-all active:scale-95 relative ${
+                    sidebarOpen && activeSidebarTab === "chat"
+                      ? "bg-orange-600/20 border-orange-500 text-orange-400"
+                      : "bg-zinc-800/80 border-zinc-700/60 text-zinc-200 hover:bg-zinc-800"
+                  }`}
+                >
+                  <MessageSquare className="w-4 h-4" />
+                  <span className="text-[9px] font-semibold mt-0.5 hidden sm:inline">Chat</span>
+                  {unreadCount > 0 && (
+                    <span className="absolute -top-1 -right-1 w-4 h-4 rounded-full text-[9px] font-bold bg-orange-600 text-white flex items-center justify-center animate-pulse">
+                      {unreadCount}
+                    </span>
+                  )}
+                </button>
+
+                {/* Red Leave Room Button */}
+                <button
+                  type="button"
+                  onClick={handleLeaveSession}
+                  title="Leave Hangout Room"
+                  className="px-3 sm:px-4 py-2 rounded-xl bg-rose-600 hover:bg-rose-500 text-white font-semibold text-xs flex items-center gap-1.5 shadow-sm active:scale-95 transition-all ml-1"
+                >
+                  <PhoneOff className="w-4 h-4" />
+                  <span className="hidden sm:inline">Leave</span>
+                </button>
+              </div>
+            </div>
+          </div>
+
+          {/* Desktop Right Sidebar (Collapsible) */}
+          {sidebarOpen && (
+            <div className="w-80 flex flex-col border-l border-zinc-800 bg-zinc-900/95 backdrop-blur-xl shrink-0 overflow-hidden transition-all duration-200">
+              <HangoutSidebarContent
+                activeTab={activeSidebarTab}
+                onTabChange={setActiveSidebarTab}
+                onClose={() => setSidebarOpen(false)}
+                participants={participants}
+                currentProfile={currentProfile}
+                chatMessages={chatMessages}
+                chatInput={chatInput}
+                onChatInputChange={setChatInput}
+                onSendMessage={handleSendMessage}
+                unreadCount={unreadCount}
+                chatScrollRef={chatScrollRef}
+              />
             </div>
           )}
+        </div>
+      </div>
+
+      {/* ======================================================== */}
+      {/* 3. MOBILE SIDEBAR DRAWER (Slide-Up Bottom Sheet on Mobile) */}
+      {/* ======================================================== */}
+      {sidebarOpen && (
+        <div className="md:hidden fixed inset-x-0 bottom-0 z-40 max-h-[80dvh] h-[72dvh] bg-zinc-900/98 backdrop-blur-2xl border-t border-zinc-800 rounded-t-3xl shadow-2xl flex flex-col overflow-hidden transition-all duration-200">
+          <HangoutSidebarContent
+            activeTab={activeSidebarTab}
+            onTabChange={setActiveSidebarTab}
+            onClose={() => setSidebarOpen(false)}
+            participants={participants}
+            currentProfile={currentProfile}
+            chatMessages={chatMessages}
+            chatInput={chatInput}
+            onChatInputChange={setChatInput}
+            onSendMessage={handleSendMessage}
+            unreadCount={unreadCount}
+            chatScrollRef={chatScrollRef}
+          />
         </div>
       )}
     </div>
