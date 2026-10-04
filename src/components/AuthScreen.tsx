@@ -2,7 +2,7 @@
 
 import React, { useState, useRef, useEffect } from "react";
 import { motion } from "framer-motion";
-import { supabase, setDevPreview, MOCK_STUDENTS, UIU_PROGRAMS } from "@/lib/supabase";
+import { supabase, UIU_PROGRAMS } from "@/lib/supabase";
 import {
   Mail,
   Lock,
@@ -14,7 +14,6 @@ import {
   CheckCircle2,
   AlertCircle,
   Video,
-  Zap,
   User,
   MessageSquare,
   Users,
@@ -23,14 +22,12 @@ import confetti from "canvas-confetti";
 
 interface AuthScreenProps {
   onAuthSuccess: () => void;
-  onBypassDev?: () => void;
   initialInfo?: string;
   initialLoginInput?: string;
 }
 
 export default function AuthScreen({
   onAuthSuccess,
-  onBypassDev,
   initialInfo = "",
   initialLoginInput = "",
 }: AuthScreenProps) {
@@ -69,7 +66,7 @@ export default function AuthScreen({
   const inputRefs = useRef<(HTMLInputElement | null)[]>([]);
 
   // Real-time Online Students Counter
-  const [realtimeOnline, setRealtimeOnline] = useState<number>(MOCK_STUDENTS.length);
+  const [realtimeOnline, setRealtimeOnline] = useState<number>(0);
 
   // Subscribe to real-time presence & query live count
   useEffect(() => {
@@ -85,11 +82,11 @@ export default function AuthScreen({
         if (!error && typeof count === "number" && count > 0 && isMounted) {
           setRealtimeOnline(count);
         } else if (isMounted) {
-          setRealtimeOnline(MOCK_STUDENTS.filter((s) => s.is_online).length);
+          setRealtimeOnline(0);
         }
       } catch {
         if (isMounted) {
-          setRealtimeOnline(MOCK_STUDENTS.filter((s) => s.is_online).length);
+          setRealtimeOnline(0);
         }
       }
     };
@@ -434,17 +431,6 @@ export default function AuthScreen({
         colors: ["#ea580c", "#f97316", "#fbbf24"],
       });
     } catch {}
-  };
-
-  // Development Preview Bypass
-  const handleDevBypass = () => {
-    setDevPreview(true);
-    triggerSuccessConfetti();
-    if (onBypassDev) {
-      onBypassDev();
-    } else {
-      onAuthSuccess();
-    }
   };
 
   return (
@@ -991,21 +977,6 @@ export default function AuthScreen({
                     className="px-6 py-2.5 rounded-lg border-2 border-orange-500/80 hover:bg-orange-500/10 text-orange-400 hover:text-orange-300 font-semibold text-sm transition-all shadow-sm active:scale-95 cursor-pointer"
                   >
                     Create new account
-                  </button>
-                </div>
-
-                {/* 7. Quick Guest / Dev Preview Bypass Button */}
-                <div className="pt-3">
-                  <button
-                    type="button"
-                    onClick={handleDevBypass}
-                    className="w-full py-2.5 rounded-lg bg-slate-950/60 hover:bg-slate-800 border border-slate-800 hover:border-orange-500/40 text-slate-300 hover:text-white font-medium text-xs transition-colors flex items-center justify-center gap-2 active:scale-95 cursor-pointer"
-                  >
-                    <Zap className="w-3.5 h-3.5 text-orange-400" />
-                    <span>Continue as Guest (Dev Preview)</span>
-                    <span className="px-1.5 py-0.5 rounded text-[9px] font-bold bg-orange-500/20 text-orange-300 border border-orange-500/30">
-                      UIU Mock
-                    </span>
                   </button>
                 </div>
               </form>
