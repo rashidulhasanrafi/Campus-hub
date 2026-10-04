@@ -92,9 +92,9 @@ export default function OnboardingScreen({
         className="fixed inset-0 pointer-events-none z-0 flex items-center justify-center overflow-hidden select-none"
       >
         <img
-          src="/images/uiu-logo-tight.png"
+          src="/images/campus-hub-emblem-tight.png"
           alt=""
-          className="w-[420px] sm:w-[580px] max-w-none opacity-[0.035] filter contrast-125 object-contain"
+          className="w-[580px] sm:w-[760px] max-w-none opacity-[0.05] filter contrast-125 object-contain"
         />
       </div>
 
@@ -104,8 +104,8 @@ export default function OnboardingScreen({
         <div className="flex items-center gap-3.5">
           <div className="w-12 h-12 rounded-xl bg-zinc-900 border border-orange-500/40 p-1 flex items-center justify-center text-zinc-100 shadow-sm shrink-0">
             <img
-              src="/images/uiu-logo-tight.png"
-              alt="UIU Logo"
+              src="/images/campus-hub-icon.png"
+              alt="Campus Hub Logo"
               className="w-full h-full object-contain"
             />
           </div>

@@ -66,10 +66,10 @@ export default function CampusHeader({
       <div className="max-w-7xl mx-auto px-4 sm:px-6 h-14 flex items-center justify-between gap-3">
         {/* Brand Logo & UIU Campus Badge */}
         <div className="flex items-center gap-3">
-          <div className="relative flex items-center justify-center w-9 h-9 rounded-xl bg-zinc-900 border border-orange-500/40 p-1 shadow-sm shrink-0 group">
+          <div className="relative flex items-center justify-center w-10 h-10 rounded-xl bg-zinc-900 border border-orange-500/40 p-1 shadow-sm shrink-0 group">
             <img
-              src="/images/uiu-logo-tight.png"
-              alt="UIU Crest Logo"
+              src="/images/campus-hub-icon.png"
+              alt="Campus Hub Logo"
               className="w-full h-full object-contain filter drop-shadow-sm transition-transform group-hover:scale-105"
             />
             <span className="absolute -top-0.5 -right-0.5 flex h-2.5 w-2.5">

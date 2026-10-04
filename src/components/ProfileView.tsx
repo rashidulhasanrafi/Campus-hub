@@ -60,9 +60,9 @@ export default function ProfileView({
       <div className="relative overflow-hidden rounded-2xl p-6 sm:p-7 bg-zinc-900/60 border border-zinc-800/80 hover:border-orange-500/30 backdrop-blur-md shadow-sm transition-colors">
         {/* Subtle Watermark on ID Card */}
         <img
-          src="/images/uiu-logo-tight.png"
+          src="/images/campus-hub-emblem-tight.png"
           alt=""
-          className="absolute -right-8 -bottom-8 w-48 h-48 opacity-[0.04] pointer-events-none select-none filter contrast-125"
+          className="absolute -right-8 -bottom-8 w-56 h-auto opacity-[0.06] pointer-events-none select-none filter contrast-125"
         />
 
         <div className="relative z-10 flex flex-col sm:flex-row items-center sm:items-start justify-between gap-6">

@@ -282,15 +282,15 @@ export default function CampusHubHome() {
   // 4. Authenticated & Profile Ready: Render Campus Hub Application
   return (
     <div className="relative min-h-screen flex flex-col bg-[#090a0f] text-zinc-100 selection:bg-orange-600 selection:text-white overflow-x-hidden">
-      {/* Background Subtle Watermark: UIU Emblem centered with 3.5% opacity */}
+      {/* Background Subtle Watermark: Campus Hub Emblem centered with 5% opacity */}
       <div
         aria-hidden="true"
         className="fixed inset-0 pointer-events-none z-0 flex items-center justify-center overflow-hidden select-none"
       >
         <img
-          src="/images/uiu-logo-tight.png"
+          src="/images/campus-hub-emblem-tight.png"
           alt=""
-          className="uiu-watermark w-[480px] sm:w-[640px] md:w-[720px] max-w-none opacity-[0.035] filter contrast-125 object-contain"
+          className="uiu-watermark w-[720px] sm:w-[920px] md:w-[1080px] max-w-none opacity-[0.05] filter contrast-125 object-contain"
         />
       </div>
 
