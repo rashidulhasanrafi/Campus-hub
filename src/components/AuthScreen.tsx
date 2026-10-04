@@ -161,7 +161,15 @@ export default function AuthScreen({
     const trimmed = val.trim().toLowerCase();
     if (!trimmed) return "";
     if (trimmed.includes("@")) return trimmed;
-    return `${trimmed}@bscse.uiu.ac.bd`;
+    const cleanId = trimmed.replace(/\s+/g, "");
+    return `${cleanId}@bscse.uiu.ac.bd`;
+  };
+
+  // Check if an email belongs to official UIU student domain (@*.uiu.ac.bd or @uiu.ac.bd)
+  const isOfficialUiuEmail = (emailStr: string): boolean => {
+    const trimmed = emailStr.trim().toLowerCase();
+    if (!trimmed) return false;
+    return /^[a-zA-Z0-9._%+-]+@([a-zA-Z0-9.-]+\.)?uiu\.ac\.bd$/.test(trimmed);
   };
 
   // Primary Login Submit (Facebook Structure)
@@ -173,6 +181,11 @@ export default function AuthScreen({
     const targetEmail = normalizeIdentifier(loginInput);
     if (!targetEmail) {
       setErrorMessage("Please enter your Student Email or Student ID.");
+      return;
+    }
+
+    if (!isOfficialUiuEmail(targetEmail)) {
+      setErrorMessage("Not a valid email! Please login with your official UIU student email (@*.uiu.ac.bd).");
       return;
     }
 
@@ -215,7 +228,11 @@ export default function AuthScreen({
     } catch (err: unknown) {
       const error = err as Error;
       console.error("Login Error:", error);
-      setErrorMessage(error.message || "Failed to log in. Please check your credentials.");
+      if (error.message?.includes("uiu.ac.bd") || error.message?.includes("Only official UIU")) {
+        setErrorMessage("Not a valid email! Please login with your official UIU student email (@*.uiu.ac.bd).");
+      } else {
+        setErrorMessage(error.message || "Failed to log in. Please check your credentials.");
+      }
     } finally {
       setLoading(false);
     }
@@ -226,6 +243,11 @@ export default function AuthScreen({
     const targetEmail = normalizeIdentifier(customEmail || loginInput || otpTargetEmail);
     if (!targetEmail) {
       setErrorMessage("Please enter a valid student email or ID.");
+      return;
+    }
+
+    if (!isOfficialUiuEmail(targetEmail)) {
+      setErrorMessage("Not a valid email! Please login with your official UIU student email (@*.uiu.ac.bd).");
       return;
     }
 
@@ -300,6 +322,11 @@ export default function AuthScreen({
       return;
     }
 
+    if (!isOfficialUiuEmail(targetEmail)) {
+      setErrorMessage("Not a valid email! Please register with your official UIU student email (@*.uiu.ac.bd).");
+      return;
+    }
+
     setLoading(true);
     const assignedAvatar =
       regGender === "female"
@@ -356,7 +383,11 @@ export default function AuthScreen({
       setInfoMessage(`Verification code sent to ${targetEmail} to complete registration.`);
     } catch (err: unknown) {
       const error = err as Error;
-      setErrorMessage(error.message || "Registration failed. Please check inputs.");
+      if (error.message?.includes("uiu.ac.bd") || error.message?.includes("Only official UIU")) {
+        setErrorMessage("Not a valid email! Please register with your official UIU student email (@*.uiu.ac.bd).");
+      } else {
+        setErrorMessage(error.message || "Registration failed. Please check inputs.");
+      }
     } finally {
       setLoading(false);
     }
@@ -874,11 +905,19 @@ export default function AuthScreen({
                     <div className="flex items-center gap-1.5 mt-1.5">
                       <button
                         type="button"
-                        onClick={() => setLoginInput(`${loginInput}@bscse.uiu.ac.bd`)}
+                        onClick={() => setLoginInput(`${loginInput.trim().replace(/\s+/g, "")}@bscse.uiu.ac.bd`)}
                         className="text-[10px] text-slate-400 hover:text-orange-400 px-2 py-0.5 rounded bg-slate-800 border border-slate-700 transition-colors"
                       >
-                        +{loginInput}@bscse.uiu.ac.bd
+                        +{loginInput.trim().replace(/\s+/g, "")}@bscse.uiu.ac.bd
                       </button>
+                    </div>
+                  )}
+
+                  {/* Realtime warning if a non-UIU email is typed */}
+                  {loginInput && loginInput.includes("@") && !loginInput.trim().toLowerCase().endsWith("uiu.ac.bd") && (
+                    <div className="flex items-center gap-1.5 mt-2 p-2 rounded-lg bg-rose-500/10 border border-rose-500/25 text-xs text-rose-300 animate-in fade-in duration-150">
+                      <AlertCircle className="w-3.5 h-3.5 text-rose-400 shrink-0" />
+                      <span>Not a valid email! Please login with your official UIU student email (@*.uiu.ac.bd).</span>
                     </div>
                   )}
                 </div>
@@ -1177,7 +1216,7 @@ export default function AuthScreen({
 
                 <div>
                   <label className="block text-xs font-medium text-slate-300 mb-1">
-                    Student Email / Gmail
+                    Official UIU Student Email
                   </label>
                   <div className="relative">
                     <Mail className="absolute left-3 top-3 w-4 h-4 text-slate-500" />
@@ -1190,6 +1229,12 @@ export default function AuthScreen({
                       className="w-full pl-9 pr-3 py-2 rounded-lg bg-slate-950/70 border border-slate-800 text-xs text-slate-100 placeholder-slate-500 focus:outline-none focus:border-orange-500 focus:ring-1 focus:ring-orange-500/20"
                     />
                   </div>
+                  {regEmail && regEmail.includes("@") && !regEmail.trim().toLowerCase().endsWith("uiu.ac.bd") && (
+                    <div className="flex items-center gap-1.5 mt-2 p-2 rounded-lg bg-rose-500/10 border border-rose-500/25 text-xs text-rose-300 animate-in fade-in duration-150">
+                      <AlertCircle className="w-3.5 h-3.5 text-rose-400 shrink-0" />
+                      <span>Not a valid email! Please use your official UIU student email (@*.uiu.ac.bd).</span>
+                    </div>
+                  )}
                 </div>
 
                 <div>
