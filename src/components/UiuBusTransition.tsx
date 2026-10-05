@@ -10,8 +10,8 @@ interface UiuBusTransitionProps {
 export default function UiuBusTransition({ onComplete }: UiuBusTransitionProps) {
   // Timeline Stages:
   // 1: "bus" (Bus driving from right to left with orange energy wave erupting from rear bumper) -> 0s to 5.0s
-  // 2: "welcome" (Screen is full orange; Welcome typography viewed in center screen) -> 5.0s to 7.0s (2.0s view time)
-  // 3: "frosted" (Frosted translucent glass sheet dissolving to reveal real dashboard) -> 7.0s to 7.75s
+  // 2: "welcome" (Screen is full orange; Welcome typography appears within 1s, displays for 2s; 3.0s total orange screen) -> 5.0s to 8.0s
+  // 3: "frosted" (Frosted translucent glass sheet dissolving to reveal real dashboard) -> 8.0s to 8.65s
   const [stage, setStage] = useState<"bus" | "welcome" | "frosted">("bus");
 
   useEffect(() => {
@@ -20,15 +20,17 @@ export default function UiuBusTransition({ onComplete }: UiuBusTransitionProps) 
       setStage("welcome");
     }, 5000);
 
-    // Stage 2: Orange page with Welcome typography visible for 2.0 seconds (5.0s -> 7.0s)
+    // Stage 2: Orange page with Welcome typography visible for 3.0 seconds (5.0s -> 8.0s)
+    // Within 1st second (5.0s -> 6.0s), "Welcome to Campus Hub" appears smoothly.
+    // For 2.0 seconds (6.0s -> 8.0s), it displays, and at 8.0s departs.
     const tFrosted = setTimeout(() => {
       setStage("frosted");
-    }, 7000);
+    }, 8000);
 
-    // Stage 3: Frosted glass reveal dissolves into real dashboard (7.0s -> 7.75s)
+    // Stage 3: Frosted glass reveal dissolves into real dashboard (8.0s -> 8.65s)
     const tComplete = setTimeout(() => {
       onComplete();
-    }, 7750);
+    }, 8650);
 
     return () => {
       clearTimeout(tWelcome);
@@ -190,14 +192,14 @@ export default function UiuBusTransition({ onComplete }: UiuBusTransitionProps) 
         </motion.div>
       </motion.div>
 
-      {/* 3. STAGE 2: BOLD MODERN WELCOME TYPOGRAPHY (VIEWED FOR 2.0s OVER FULL ORANGE SCREEN) */}
+      {/* 3. STAGE 2: BOLD MODERN WELCOME TYPOGRAPHY (APPEARS WITHIN 1 SEC, VIEWED FOR 2 SECS OVER FULL ORANGE SCREEN) */}
       <AnimatePresence>
         {stage === "welcome" && (
           <motion.div
-            initial={{ opacity: 0, scale: 0.92, y: 22 }}
+            initial={{ opacity: 0, scale: 0.9, y: 18 }}
             animate={{ opacity: 1, scale: 1, y: 0 }}
-            exit={{ opacity: 0, scale: 1.06, filter: "blur(14px)" }}
-            transition={{ duration: 0.45, ease: [0.16, 1, 0.3, 1] }}
+            exit={{ opacity: 0, scale: 1.05, filter: "blur(12px)" }}
+            transition={{ duration: 0.75, ease: [0.16, 1, 0.3, 1] }}
             className="absolute inset-0 z-40 flex flex-col items-center justify-center text-center px-4"
           >
             {/* Ambient Radiant Center Glow */}

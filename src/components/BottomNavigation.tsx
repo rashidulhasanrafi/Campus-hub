@@ -55,16 +55,16 @@ export default function BottomNavigation({
   ];
 
   return (
-    <div className="fixed bottom-0 left-0 right-0 z-40 md:hidden pb-safe">
-      <div
-        className={`mx-3 mb-2 rounded-2xl border transition-all duration-300 p-1.5 flex items-center justify-around relative ${
-          !isLightUi
-            ? "liquid-glass-bar"
-            : isDark
-              ? "border-zinc-800/90 bg-zinc-950/95 backdrop-blur-xl shadow-2xl"
-              : "border-slate-200/90 bg-white/95 backdrop-blur-xl shadow-lg"
-        }`}
-      >
+    <nav
+      className={`fixed bottom-0 left-0 right-0 z-40 md:hidden border-t transition-all duration-300 pb-safe ${
+        !isLightUi
+          ? "liquid-glass-docked-bar"
+          : isDark
+            ? "border-zinc-800/80 bg-zinc-950/98 backdrop-blur-2xl shadow-[0_-8px_30px_rgba(0,0,0,0.8)]"
+            : "border-slate-200/90 bg-white/98 backdrop-blur-2xl shadow-[0_-8px_25px_rgba(0,0,0,0.08)]"
+      }`}
+    >
+      <div className="w-full max-w-lg mx-auto px-2 py-1.5 flex items-center justify-around relative">
         {tabs.map((tab) => {
           const isActive = currentTab === tab.id;
           const Icon = tab.icon;
@@ -197,6 +197,6 @@ export default function BottomNavigation({
           );
         })}
       </div>
-    </div>
+    </nav>
   );
 }

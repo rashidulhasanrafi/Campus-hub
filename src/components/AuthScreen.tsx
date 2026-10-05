@@ -17,6 +17,8 @@ import {
   User,
   MessageSquare,
   Users,
+  ArrowLeft,
+  GraduationCap,
 } from "lucide-react";
 import confetti from "canvas-confetti";
 
@@ -64,6 +66,7 @@ export default function AuthScreen({
   const [regDept, setRegDept] = useState(UIU_PROGRAMS[0]);
   const [regBatch, setRegBatch] = useState("2024");
   const [regPassword, setRegPassword] = useState("");
+  const [showRegPassword, setShowRegPassword] = useState(false);
 
   // OTP Verification State
   const [otpTargetEmail, setOtpTargetEmail] = useState("");
@@ -391,6 +394,7 @@ export default function AuthScreen({
       setResendCooldown(30);
       setInfoMessage(`Verification code sent to ${targetEmail} to complete registration.`);
     } catch (err: unknown) {
+      onCancelBusTransition?.();
       const error = err as Error;
       if (error.message?.includes("uiu.ac.bd") || error.message?.includes("Only official UIU")) {
         setErrorMessage("Not a valid email! Please register with your official UIU student email (@*.uiu.ac.bd).");
@@ -478,13 +482,303 @@ export default function AuthScreen({
       />
 
       {/* ================================================================= */}
-      {/* 2. MAIN SPLIT-SCREEN CONTAINER (NO HARD BORDER, NATURALLY BLENDED)*/}
+      {/* 2. MAIN CONTAINER: EXPANDED FULL-SCREEN REGISTER OR SPLIT-SCREEN  */}
       {/* ================================================================= */}
-      <main className="relative z-10 flex-1 w-full max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8 sm:py-14 flex flex-col lg:flex-row items-center justify-between gap-10 lg:gap-14">
-        {/* =============================================================== */}
-        {/* LEFT COLUMN: HERO SHOWCASE WITH BIGGER ANIMATED LOGO & ORBIT     */}
-        {/* =============================================================== */}
-        <div className="w-full lg:w-7/12 flex flex-col items-center lg:items-start text-center lg:text-left space-y-6">
+      <main
+        className={`relative z-10 flex-1 w-full max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-6 sm:py-12 ${
+          authMode === "register"
+            ? "flex items-center justify-center"
+            : "flex flex-col lg:flex-row items-center justify-between gap-10 lg:gap-14"
+        }`}
+      >
+        {authMode === "register" ? (
+          /* =============================================================== */
+          /* EXPANDED FULL-SCREEN REGISTRATION CARD                          */
+          /* =============================================================== */
+          <motion.div
+            initial={{ opacity: 0, scale: 0.96, y: 15 }}
+            animate={{ opacity: 1, scale: 1, y: 0 }}
+            exit={{ opacity: 0, scale: 0.96, y: 15 }}
+            transition={{ duration: 0.35 }}
+            className="w-full max-w-3xl lg:max-w-4xl mx-auto rounded-3xl bg-slate-900/90 backdrop-blur-xl border border-slate-800/80 shadow-2xl shadow-black/60 p-6 sm:p-10 my-auto"
+          >
+            {/* Top Bar with Back Button & Badges */}
+            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 pb-6 border-b border-slate-800/80">
+              <div className="flex items-center gap-3.5">
+                <div className="w-12 h-12 rounded-2xl bg-gradient-to-tr from-orange-600 via-orange-500 to-amber-500 flex items-center justify-center text-white shadow-lg shadow-orange-600/30 shrink-0">
+                  <GraduationCap className="w-6 h-6" />
+                </div>
+                <div>
+                  <div className="flex items-center gap-2 flex-wrap">
+                    <h2 className="text-2xl sm:text-3xl font-extrabold text-slate-100 tracking-tight">
+                      Create UIU Hub Account
+                    </h2>
+                    <span className="px-2.5 py-0.5 rounded-full text-[11px] font-bold bg-orange-500/15 text-orange-400 border border-orange-500/30">
+                      Official UIU
+                    </span>
+                  </div>
+                  <p className="text-xs sm:text-sm text-slate-400 mt-0.5">
+                    Connect with fellow UIU students, live study lounges, and academic discussions
+                  </p>
+                </div>
+              </div>
+
+              <button
+                type="button"
+                onClick={() => {
+                  setErrorMessage("");
+                  setInfoMessage("");
+                  setAuthMode("login");
+                }}
+                className="self-start sm:self-center inline-flex items-center gap-2 px-4 py-2.5 rounded-xl bg-slate-800/80 hover:bg-slate-800 text-slate-300 hover:text-orange-400 border border-slate-700/60 text-xs sm:text-sm font-semibold transition-all cursor-pointer shadow-sm active:scale-95"
+              >
+                <ArrowLeft className="w-4 h-4" />
+                <span>Back to Log In</span>
+              </button>
+            </div>
+
+            {/* Error & Info Alerts */}
+            {errorMessage && (
+              <div className="mt-5 flex items-start gap-2.5 p-3.5 rounded-xl bg-rose-500/10 border border-rose-500/25 text-xs sm:text-sm text-rose-300 animate-in fade-in duration-150">
+                <AlertCircle className="w-4 h-4 text-rose-400 shrink-0 mt-0.5" />
+                <span>{errorMessage}</span>
+              </div>
+            )}
+
+            {infoMessage && (
+              <div className="mt-5 flex items-start gap-2.5 p-3.5 rounded-xl bg-orange-500/10 border border-orange-500/30 text-xs sm:text-sm text-orange-300 animate-in fade-in duration-150">
+                <CheckCircle2 className="w-4 h-4 text-orange-400 shrink-0 mt-0.5" />
+                <span>{infoMessage}</span>
+              </div>
+            )}
+
+            {/* Registration Form with Larger Inputs & 2-Column Grid */}
+            <form onSubmit={handleRegisterSubmit} className="mt-6 space-y-5">
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-5">
+                {/* 1. Full Name */}
+                <div className="sm:col-span-1">
+                  <label className="block text-sm font-semibold text-slate-200 mb-2">
+                    Full Name <span className="text-orange-400">*</span>
+                  </label>
+                  <div className="relative">
+                    <User className="absolute left-3.5 top-1/2 -translate-y-1/2 w-5 h-5 text-slate-500" />
+                    <input
+                      type="text"
+                      required
+                      value={regName}
+                      onChange={(e) => setRegName(e.target.value)}
+                      placeholder="e.g. Tanvir Ahmed"
+                      className="w-full pl-11 pr-4 py-3.5 rounded-xl bg-slate-950/80 border border-slate-800 text-sm sm:text-base text-slate-100 placeholder-slate-500 focus:outline-none focus:border-orange-500 focus:ring-2 focus:ring-orange-500/25 transition-all"
+                    />
+                  </div>
+                </div>
+
+                {/* 2. Student ID */}
+                <div className="sm:col-span-1">
+                  <label className="block text-sm font-semibold text-slate-200 mb-2">
+                    Student ID <span className="text-orange-400">*</span>
+                  </label>
+                  <div className="relative">
+                    <GraduationCap className="absolute left-3.5 top-1/2 -translate-y-1/2 w-5 h-5 text-slate-500" />
+                    <input
+                      type="text"
+                      required
+                      value={regId}
+                      onChange={(e) => setRegId(e.target.value)}
+                      placeholder="e.g. 011 221 000"
+                      className="w-full pl-11 pr-4 py-3.5 rounded-xl bg-slate-950/80 border border-slate-800 text-sm sm:text-base text-slate-100 placeholder-slate-500 focus:outline-none focus:border-orange-500 focus:ring-2 focus:ring-orange-500/25 transition-all"
+                    />
+                  </div>
+                </div>
+
+                {/* 3. Program / Department */}
+                <div className="sm:col-span-1">
+                  <label className="block text-sm font-semibold text-slate-200 mb-2">
+                    Academic Program / Department
+                  </label>
+                  <select
+                    value={regDept}
+                    onChange={(e) => setRegDept(e.target.value)}
+                    className="w-full px-4 py-3.5 rounded-xl bg-slate-950/80 border border-slate-800 text-sm sm:text-base text-slate-100 focus:outline-none focus:border-orange-500 focus:ring-2 focus:ring-orange-500/25 transition-all cursor-pointer"
+                  >
+                    {UIU_PROGRAMS.map((program) => (
+                      <option
+                        key={program}
+                        value={program}
+                        className="bg-slate-900 text-slate-100 py-1"
+                      >
+                        {program}
+                      </option>
+                    ))}
+                  </select>
+                </div>
+
+                {/* 4. Batch Year */}
+                <div className="sm:col-span-1">
+                  <label className="block text-sm font-semibold text-slate-200 mb-2">
+                    Batch Year
+                  </label>
+                  <input
+                    type="text"
+                    value={regBatch}
+                    onChange={(e) => setRegBatch(e.target.value)}
+                    placeholder="e.g. 2024"
+                    className="w-full px-4 py-3.5 rounded-xl bg-slate-950/80 border border-slate-800 text-sm sm:text-base text-slate-100 placeholder-slate-500 focus:outline-none focus:border-orange-500 focus:ring-2 focus:ring-orange-500/25 transition-all"
+                  />
+                </div>
+
+                {/* 5. Gender Selection (Full Width across both cols) */}
+                <div className="sm:col-span-2">
+                  <label className="block text-sm font-semibold text-slate-200 mb-2">
+                    Gender & Campus Profile Avatar
+                  </label>
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 sm:gap-4">
+                    <button
+                      type="button"
+                      onClick={() => setRegGender("male")}
+                      className={`flex items-center justify-center gap-3 py-3.5 px-4 rounded-xl border text-sm sm:text-base font-semibold transition-all cursor-pointer ${
+                        regGender === "male"
+                          ? "bg-orange-500/15 border-orange-500 text-orange-400 ring-2 ring-orange-500/30"
+                          : "bg-slate-950/70 border-slate-800 text-slate-400 hover:text-slate-200 hover:border-slate-700"
+                      }`}
+                    >
+                      <img
+                        src="/images/avatar-male.png"
+                        alt="Male"
+                        className="w-6 h-6 rounded-full object-cover shrink-0 ring-1 ring-orange-500/40"
+                      />
+                      <span>Male Student</span>
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => setRegGender("female")}
+                      className={`flex items-center justify-center gap-3 py-3.5 px-4 rounded-xl border text-sm sm:text-base font-semibold transition-all cursor-pointer ${
+                        regGender === "female"
+                          ? "bg-orange-500/15 border-orange-500 text-orange-400 ring-2 ring-orange-500/30"
+                          : "bg-slate-950/70 border-slate-800 text-slate-400 hover:text-slate-200 hover:border-slate-700"
+                      }`}
+                    >
+                      <img
+                        src="/images/avatar-female.png"
+                        alt="Female"
+                        className="w-6 h-6 rounded-full object-cover shrink-0 ring-1 ring-orange-500/40"
+                      />
+                      <span>Female Student</span>
+                    </button>
+                  </div>
+                </div>
+
+                {/* 6. Official UIU Student Email */}
+                <div className="sm:col-span-2">
+                  <label className="block text-sm font-semibold text-slate-200 mb-2">
+                    Official UIU Student Email <span className="text-orange-400">*</span>
+                  </label>
+                  <div className="relative">
+                    <Mail className="absolute left-3.5 top-1/2 -translate-y-1/2 w-5 h-5 text-slate-500" />
+                    <input
+                      type="email"
+                      required
+                      value={regEmail}
+                      onChange={(e) => setRegEmail(e.target.value)}
+                      placeholder="e.g. yourname@bscse.uiu.ac.bd"
+                      className="w-full pl-11 pr-4 py-3.5 rounded-xl bg-slate-950/80 border border-slate-800 text-sm sm:text-base text-slate-100 placeholder-slate-500 focus:outline-none focus:border-orange-500 focus:ring-2 focus:ring-orange-500/25 transition-all"
+                    />
+                  </div>
+                  {/* Quick Domain Pill helper */}
+                  {regEmail && !regEmail.includes("@") && (
+                    <div className="flex items-center gap-1.5 mt-2">
+                      <button
+                        type="button"
+                        onClick={() => setRegEmail(`${regEmail.trim().replace(/\s+/g, "")}@bscse.uiu.ac.bd`)}
+                        className="text-xs text-slate-400 hover:text-orange-400 px-2.5 py-1 rounded-md bg-slate-800 border border-slate-700 transition-colors cursor-pointer"
+                      >
+                        +{regEmail.trim().replace(/\s+/g, "")}@bscse.uiu.ac.bd
+                      </button>
+                    </div>
+                  )}
+
+                  {/* Realtime warning if not uiu email */}
+                  {regEmail && regEmail.includes("@") && !regEmail.trim().toLowerCase().endsWith("uiu.ac.bd") && (
+                    <div className="flex items-center gap-2 mt-2 p-2.5 rounded-xl bg-rose-500/10 border border-rose-500/25 text-xs text-rose-300 animate-in fade-in duration-150">
+                      <AlertCircle className="w-4 h-4 text-rose-400 shrink-0" />
+                      <span>Not a valid email! Please use your official UIU student email (@*.uiu.ac.bd).</span>
+                    </div>
+                  )}
+                </div>
+
+                {/* 7. Password - NO "(Optional)", WITH Eye icon toggle */}
+                <div className="sm:col-span-2">
+                  <label className="block text-sm font-semibold text-slate-200 mb-2">
+                    Password
+                  </label>
+                  <div className="relative">
+                    <Lock className="absolute left-3.5 top-1/2 -translate-y-1/2 w-5 h-5 text-slate-500" />
+                    <input
+                      type={showRegPassword ? "text" : "password"}
+                      value={regPassword}
+                      onChange={(e) => setRegPassword(e.target.value)}
+                      placeholder="Create a password (min 6 characters) or leave blank for OTP"
+                      className="w-full pl-11 pr-12 py-3.5 rounded-xl bg-slate-950/80 border border-slate-800 text-sm sm:text-base text-slate-100 placeholder-slate-500 focus:outline-none focus:border-orange-500 focus:ring-2 focus:ring-orange-500/25 transition-all"
+                    />
+                    <button
+                      type="button"
+                      onClick={() => setShowRegPassword(!showRegPassword)}
+                      className="absolute right-3.5 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-200 transition-colors p-1 cursor-pointer"
+                      aria-label={showRegPassword ? "Hide password" : "Show password"}
+                    >
+                      {showRegPassword ? <EyeOff className="w-5 h-5" /> : <Eye className="w-5 h-5" />}
+                    </button>
+                  </div>
+                </div>
+              </div>
+
+              {/* Submit Button */}
+              <button
+                type="submit"
+                disabled={loading}
+                className="w-full py-4 rounded-xl bg-[#ea580c] hover:bg-[#c2410c] text-white font-bold text-base sm:text-lg shadow-xl shadow-orange-600/30 active:scale-[0.99] disabled:opacity-50 disabled:cursor-not-allowed transition-all flex items-center justify-center gap-2 cursor-pointer mt-3"
+              >
+                {loading ? (
+                  <>
+                    <RefreshCw className="w-5 h-5 animate-spin" />
+                    <span>Creating UIU Account...</span>
+                  </>
+                ) : (
+                  <>
+                    <CheckCircle2 className="w-5 h-5" />
+                    <span>Sign Up & Verify UIU Account</span>
+                  </>
+                )}
+              </button>
+
+              {/* Bottom Switch to Login */}
+              <div className="text-center pt-2">
+                <button
+                  type="button"
+                  onClick={() => {
+                    setErrorMessage("");
+                    setInfoMessage("");
+                    setAuthMode("login");
+                  }}
+                  className="text-sm font-medium text-slate-400 hover:text-orange-400 transition-colors cursor-pointer"
+                >
+                  Already have an account? <span className="text-orange-400 font-semibold underline">Log In</span>
+                </button>
+              </div>
+
+              {/* Meta-Style Clean Footer Brand */}
+              <div className="pt-3 text-center text-xs text-slate-500 flex items-center justify-center gap-1.5 border-t border-slate-800/60">
+                <ShieldCheck className="w-4 h-4 text-orange-400/80" />
+                <span>United International University • Official UIU Campus Hub Network</span>
+              </div>
+            </form>
+          </motion.div>
+        ) : (
+          <>
+            {/* =============================================================== */}
+            {/* LEFT COLUMN: HERO SHOWCASE WITH BIGGER ANIMATED LOGO & ORBIT     */}
+            {/* =============================================================== */}
+            <div className="w-full lg:w-7/12 flex flex-col items-center lg:items-start text-center lg:text-left space-y-6">
           {/* Facebook-style Big Expressive Headline (Clean, no upper badge pill) */}
           <motion.div
             initial={{ opacity: 0, y: 15 }}
@@ -856,17 +1150,11 @@ export default function AuthScreen({
             {/* Card Header */}
             <div className="text-center space-y-1">
               <h2 className="text-xl sm:text-2xl font-bold text-slate-100 tracking-tight">
-                {authMode === "otp"
-                  ? "Verify Passcode"
-                  : authMode === "register"
-                  ? "Create UIU Hub Account"
-                  : "Log in to Campus Hub"}
+                {authMode === "otp" ? "Verify Passcode" : "Log in to Campus Hub"}
               </h2>
               <p className="text-xs text-slate-400">
                 {authMode === "otp"
                   ? `Enter the 6-digit passcode sent to ${otpTargetEmail}`
-                  : authMode === "register"
-                  ? "Sign up with your student credentials"
                   : "Connect with verified UIU students & study lounges"}
               </p>
             </div>
@@ -1101,179 +1389,7 @@ export default function AuthScreen({
               </div>
             )}
 
-            {/* =========================================================== */}
-            {/* VIEW C: REGISTRATION MODAL/FORM                             */}
-            {/* =========================================================== */}
-            {authMode === "register" && (
-              <form onSubmit={handleRegisterSubmit} className="space-y-3">
-                <div>
-                  <label className="block text-xs font-medium text-slate-300 mb-1">
-                    Full Name
-                  </label>
-                  <div className="relative">
-                    <User className="absolute left-3 top-3 w-4 h-4 text-slate-500" />
-                    <input
-                      type="text"
-                      required
-                      value={regName}
-                      onChange={(e) => setRegName(e.target.value)}
-                      placeholder="e.g. Tanvir Ahmed"
-                      className="w-full pl-9 pr-3 py-2 rounded-lg bg-slate-950/70 border border-slate-800 text-xs text-slate-100 placeholder-slate-500 focus:outline-none focus:border-orange-500 focus:ring-1 focus:ring-orange-500/20"
-                    />
-                  </div>
-                </div>
 
-                <div className="grid grid-cols-2 gap-2">
-                  <div>
-                    <label className="block text-xs font-medium text-slate-300 mb-1">
-                      Student ID
-                    </label>
-                    <input
-                      type="text"
-                      required
-                      value={regId}
-                      onChange={(e) => setRegId(e.target.value)}
-                      placeholder="011 221 000"
-                      className="w-full px-3 py-2 rounded-lg bg-slate-950/70 border border-slate-800 text-xs text-slate-100 placeholder-slate-500 focus:outline-none focus:border-orange-500 focus:ring-1 focus:ring-orange-500/20"
-                    />
-                  </div>
-                  <div>
-                    <label className="block text-xs font-medium text-slate-300 mb-1">
-                      Batch
-                    </label>
-                    <input
-                      type="text"
-                      value={regBatch}
-                      onChange={(e) => setRegBatch(e.target.value)}
-                      placeholder="2024"
-                      className="w-full px-3 py-2 rounded-lg bg-slate-950/70 border border-slate-800 text-xs text-slate-100 placeholder-slate-500 focus:outline-none focus:border-orange-500 focus:ring-1 focus:ring-orange-500/20"
-                    />
-                  </div>
-                </div>
-
-                <div>
-                  <label className="block text-xs font-medium text-slate-300 mb-1">
-                    Program
-                  </label>
-                  <select
-                    value={regDept}
-                    onChange={(e) => setRegDept(e.target.value)}
-                    className="w-full px-3 py-2 rounded-lg bg-slate-950/70 border border-slate-800 text-xs text-slate-100 focus:outline-none focus:border-orange-500"
-                  >
-                    {UIU_PROGRAMS.map((program) => (
-                      <option
-                        key={program}
-                        value={program}
-                        className="bg-slate-900 text-slate-100 py-1"
-                      >
-                        {program}
-                      </option>
-                    ))}
-                  </select>
-                </div>
-
-                <div>
-                  <label className="block text-xs font-medium text-slate-300 mb-1">
-                    Gender
-                  </label>
-                  <div className="grid grid-cols-2 gap-2">
-                    <button
-                      type="button"
-                      onClick={() => setRegGender("male")}
-                      className={`flex items-center justify-center gap-2 py-2 px-3 rounded-lg border text-xs font-medium transition-all ${
-                        regGender === "male"
-                          ? "bg-slate-800/90 border-orange-500 text-orange-400 ring-1 ring-orange-500/30"
-                          : "bg-slate-950/70 border-slate-800 text-slate-400 hover:text-slate-200 hover:border-slate-700"
-                      }`}
-                    >
-                      <img
-                        src="/images/avatar-male.png"
-                        alt="Male"
-                        className="w-4 h-4 rounded-full object-cover shrink-0"
-                      />
-                      <span>Male Student</span>
-                    </button>
-                    <button
-                      type="button"
-                      onClick={() => setRegGender("female")}
-                      className={`flex items-center justify-center gap-2 py-2 px-3 rounded-lg border text-xs font-medium transition-all ${
-                        regGender === "female"
-                          ? "bg-slate-800/90 border-orange-500 text-orange-400 ring-1 ring-orange-500/30"
-                          : "bg-slate-950/70 border-slate-800 text-slate-400 hover:text-slate-200 hover:border-slate-700"
-                      }`}
-                    >
-                      <img
-                        src="/images/avatar-female.png"
-                        alt="Female"
-                        className="w-4 h-4 rounded-full object-cover shrink-0"
-                      />
-                      <span>Female Student</span>
-                    </button>
-                  </div>
-                </div>
-
-                <div>
-                  <label className="block text-xs font-medium text-slate-300 mb-1">
-                    Official UIU Student Email
-                  </label>
-                  <div className="relative">
-                    <Mail className="absolute left-3 top-3 w-4 h-4 text-slate-500" />
-                    <input
-                      type="email"
-                      required
-                      value={regEmail}
-                      onChange={(e) => setRegEmail(e.target.value)}
-                      placeholder="student@bscse.uiu.ac.bd"
-                      className="w-full pl-9 pr-3 py-2 rounded-lg bg-slate-950/70 border border-slate-800 text-xs text-slate-100 placeholder-slate-500 focus:outline-none focus:border-orange-500 focus:ring-1 focus:ring-orange-500/20"
-                    />
-                  </div>
-                  {regEmail && regEmail.includes("@") && !regEmail.trim().toLowerCase().endsWith("uiu.ac.bd") && (
-                    <div className="flex items-center gap-1.5 mt-2 p-2 rounded-lg bg-rose-500/10 border border-rose-500/25 text-xs text-rose-300 animate-in fade-in duration-150">
-                      <AlertCircle className="w-3.5 h-3.5 text-rose-400 shrink-0" />
-                      <span>Not a valid email! Please use your official UIU student email (@*.uiu.ac.bd).</span>
-                    </div>
-                  )}
-                </div>
-
-                <div>
-                  <label className="block text-xs font-medium text-slate-300 mb-1">
-                    Password (Optional)
-                  </label>
-                  <div className="relative">
-                    <Lock className="absolute left-3 top-3 w-4 h-4 text-slate-500" />
-                    <input
-                      type="password"
-                      value={regPassword}
-                      onChange={(e) => setRegPassword(e.target.value)}
-                      placeholder="Min 6 characters (or verify via OTP)"
-                      className="w-full pl-9 pr-3 py-2 rounded-lg bg-slate-950/70 border border-slate-800 text-xs text-slate-100 placeholder-slate-500 focus:outline-none focus:border-orange-500 focus:ring-1 focus:ring-orange-500/20"
-                    />
-                  </div>
-                </div>
-
-                <button
-                  type="submit"
-                  disabled={loading}
-                  className="w-full py-2.5 mt-2 rounded-lg bg-[#ea580c] hover:bg-[#c2410c] text-white font-semibold text-xs shadow-md shadow-orange-600/20 transition-all flex items-center justify-center gap-2 cursor-pointer"
-                >
-                  {loading ? (
-                    <RefreshCw className="w-3.5 h-3.5 animate-spin" />
-                  ) : (
-                    <span>Sign Up & Verify</span>
-                  )}
-                </button>
-
-                <div className="text-center pt-1">
-                  <button
-                    type="button"
-                    onClick={() => setAuthMode("login")}
-                    className="text-xs text-slate-400 hover:text-orange-400 transition-colors"
-                  >
-                    Already have an account? Log In
-                  </button>
-                </div>
-              </form>
-            )}
 
             {/* =========================================================== */}
             {/* VIEW D: FORGOT PASSWORD / OTP DISPATCH                      */}
@@ -1326,7 +1442,9 @@ export default function AuthScreen({
             </div>
           </motion.div>
         </div>
-      </main>
+      </>
+    )}
+  </main>
 
       {/* Footer copyright */}
       <footer className="relative z-10 w-full text-center py-4 text-[11px] text-slate-500">

@@ -350,6 +350,34 @@ body.light,
     inset 0 1px 1px 0 rgba(255, 255, 255, 0.9) !important;
 }
 
+/* Liquid Glass Docked Bottom Bar - Attached flush to bottom screen edge */
+.liquid-glass-docked-bar {
+  background: rgba(9, 11, 17, 0.96) !important;
+  backdrop-filter: blur(28px) saturate(200%) !important;
+  -webkit-backdrop-filter: blur(28px) saturate(200%) !important;
+  border-top: 1px solid rgba(255, 255, 255, 0.12) !important;
+  border-bottom: none !important;
+  border-left: none !important;
+  border-right: none !important;
+  box-shadow: 
+    0 -8px 32px 0 rgba(0, 0, 0, 0.8),
+    inset 0 1px 0 0 rgba(255, 255, 255, 0.12) !important;
+}
+
+[data-theme="light"] .liquid-glass-docked-bar,
+.light .liquid-glass-docked-bar {
+  background: rgba(255, 255, 255, 0.97) !important;
+  backdrop-filter: blur(28px) saturate(180%) !important;
+  -webkit-backdrop-filter: blur(28px) saturate(180%) !important;
+  border-top: 1px solid rgba(226, 232, 240, 0.95) !important;
+  border-bottom: none !important;
+  border-left: none !important;
+  border-right: none !important;
+  box-shadow: 
+    0 -6px 24px 0 rgba(0, 0, 0, 0.08),
+    inset 0 1px 0 0 rgba(255, 255, 255, 0.95) !important;
+}
+
 /* Fluid Liquid Pop on Active Icons */
 .liquid-glass-active-icon {
   filter: drop-shadow(0 4px 12px rgba(249, 115, 22, 0.55));
