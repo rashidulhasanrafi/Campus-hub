@@ -14,6 +14,7 @@ const geistMono = Geist_Mono({
 });
 
 import { ThemeProvider } from "@/context/ThemeContext";
+import { UiModeProvider } from "@/context/UiModeContext";
 
 export const viewport: Viewport = {
   width: "device-width",
@@ -63,7 +64,9 @@ export default function RootLayout({
         suppressHydrationWarning
         className="min-h-full flex flex-col bg-[#090a0f] text-zinc-100 select-none transition-colors duration-200"
       >
-        <ThemeProvider>{children}</ThemeProvider>
+        <ThemeProvider>
+          <UiModeProvider>{children}</UiModeProvider>
+        </ThemeProvider>
       </body>
     </html>
   );

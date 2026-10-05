@@ -14,11 +14,11 @@ import {
 import { Track, RoomEvent, RemoteParticipant } from "livekit-client";
 import { UserProfile, supabase } from "@/lib/supabase";
 import {
-  CAMPUS_HANGOUT_ROOMS,
   HangoutRoomConfig,
   fetchLiveKitToken,
 } from "@/lib/livekit";
 import StudentAvatar from "@/components/StudentAvatar";
+import { useUiMode } from "@/context/UiModeContext";
 import {
   Users,
   Video,
@@ -61,7 +61,10 @@ export default function GroupHangout({
   initialRoomId,
   onInCallChange,
 }: GroupHangoutProps) {
-  const [rooms, setRooms] = useState<HangoutRoomConfig[]>(CAMPUS_HANGOUT_ROOMS);
+  const { isLightUi } = useUiMode();
+  // Dynamic ephemeral rooms only (no demo rooms)
+  const [rooms, setRooms] = useState<HangoutRoomConfig[]>([]);
+  const [roomParticipantCounts, setRoomParticipantCounts] = useState<Record<string, number>>({});
   const [activeRoom, setActiveRoom] = useState<HangoutRoomConfig | null>(null);
   const [livekitToken, setLivekitToken] = useState<string>("");
   const [livekitUrl, setLivekitUrl] = useState<string>("");
@@ -69,6 +72,15 @@ export default function GroupHangout({
   const [searchQuery, setSearchQuery] = useState("");
   const [errorMsg, setErrorMsg] = useState("");
   const [copiedCode, setCopiedCode] = useState<string | null>(null);
+
+  const roomCreatedTimestampsRef = useRef<Record<string, number>>({});
+  const lobbyChannelRef = useRef<ReturnType<typeof supabase.channel> | null>(null);
+  const activeRoomRef = useRef<HangoutRoomConfig | null>(null);
+  const myClientId = useRef(
+    typeof window !== "undefined"
+      ? `hangout_cli_${Math.random().toString(36).substring(2, 9)}_${Date.now().toString(36)}`
+      : "hangout_cli_ssr"
+  ).current;
 
   // Sync call state with parent to hide navigation bars
   useEffect(() => {
@@ -144,7 +156,12 @@ export default function GroupHangout({
     };
   };
 
-  // 1. Fetch persistent rooms from Supabase on mount & listen to real-time additions
+  // Keep activeRoomRef in sync
+  useEffect(() => {
+    activeRoomRef.current = activeRoom;
+  }, [activeRoom]);
+
+  // 1. Fetch persistent rooms from Supabase on mount & listen to real-time additions/deletions
   useEffect(() => {
     let isMounted = true;
 
@@ -155,14 +172,13 @@ export default function GroupHangout({
           .select("*")
           .order("created_at", { ascending: false });
 
-        if (!error && data && data.length > 0 && isMounted) {
-          const remoteRooms: HangoutRoomConfig[] = data.map(formatDbRoom);
-
-          setRooms((prev) => {
-            const remoteMap = new Map(remoteRooms.map((r) => [r.id, r]));
-            const presets = CAMPUS_HANGOUT_ROOMS.filter((p) => !remoteMap.has(p.id));
-            return [...remoteRooms, ...presets];
-          });
+        if (!error && isMounted) {
+          if (data && data.length > 0) {
+            const remoteRooms: HangoutRoomConfig[] = data.map(formatDbRoom);
+            setRooms(remoteRooms);
+          } else {
+            setRooms([]);
+          }
         }
       } catch (err) {
         console.warn("Could not load persisted rooms:", err);
@@ -171,17 +187,30 @@ export default function GroupHangout({
 
     loadPersistedRooms();
 
-    // Supabase Realtime channel for live room announcements & database inserts
-    const lobbyChannel = supabase.channel("campus-hangout-lobby");
+    // Supabase Realtime channel for live room announcements, presence & database changes
+    const lobbyChannel = supabase.channel("campus-hangout-lobby", {
+      config: {
+        presence: { key: myClientId },
+        broadcast: { self: false },
+      },
+    });
+    lobbyChannelRef.current = lobbyChannel;
 
     lobbyChannel
       .on("broadcast", { event: "room-created" }, (payload) => {
         if (payload?.payload && isMounted) {
           const newRoom = payload.payload as HangoutRoomConfig;
+          roomCreatedTimestampsRef.current[newRoom.id] = Date.now();
           setRooms((prev) => {
             if (prev.some((r) => r.id === newRoom.id)) return prev;
             return [newRoom, ...prev];
           });
+        }
+      })
+      .on("broadcast", { event: "room-deleted" }, (payload) => {
+        if (payload?.payload?.roomId && isMounted) {
+          const deletedId = payload.payload.roomId;
+          setRooms((prev) => prev.filter((r) => r.id !== deletedId));
         }
       })
       .on(
@@ -190,21 +219,96 @@ export default function GroupHangout({
         (payload) => {
           if (payload?.new && isMounted) {
             const mapped = formatDbRoom(payload.new);
+            roomCreatedTimestampsRef.current[mapped.id] = Date.now();
             setRooms((prev) => {
               if (prev.some((r) => r.id === mapped.id)) return prev;
               return [mapped, ...prev];
             });
           }
         }
-      );
+      )
+      .on(
+        "postgres_changes",
+        { event: "DELETE", schema: "public", table: "hangout_rooms" },
+        (payload) => {
+          if (payload?.old?.id && isMounted) {
+            const delId = payload.old.id;
+            setRooms((prev) => prev.filter((r) => r.id !== delId));
+          }
+        }
+      )
+      .on("presence", { event: "sync" }, () => {
+        if (!isMounted) return;
+        const presState = lobbyChannel.presenceState();
+        const counts: Record<string, number> = {};
+
+        Object.values(presState).forEach((presList: any) => {
+          presList.forEach((p: any) => {
+            if (p && p.roomId) {
+              counts[p.roomId] = (counts[p.roomId] || 0) + 1;
+            }
+          });
+        });
+
+        setRoomParticipantCounts(counts);
+
+        // Auto-cleanup: If a room in dashboard has 0 participants and grace period expired, delete it!
+        setRooms((prev) => {
+          const activeList: HangoutRoomConfig[] = [];
+          prev.forEach((r) => {
+            const pCount = counts[r.id] || 0;
+            const isCurrentlyInside = activeRoomRef.current?.id === r.id;
+            const isJustCreated = Date.now() - (roomCreatedTimestampsRef.current[r.id] || 0) < 15000;
+
+            if (pCount > 0 || isCurrentlyInside || isJustCreated) {
+              activeList.push(r);
+            } else {
+              // 0 participants, delete from Supabase and notify lobby
+              supabase.from("hangout_rooms").delete().eq("id", r.id).then(() => {});
+              lobbyChannel.send({
+                type: "broadcast",
+                event: "room-deleted",
+                payload: { roomId: r.id },
+              });
+            }
+          });
+          return activeList;
+        });
+      });
 
     lobbyChannel.subscribe();
 
     return () => {
       isMounted = false;
-      supabase.removeChannel(lobbyChannel);
+      try {
+        lobbyChannel.untrack();
+        supabase.removeChannel(lobbyChannel);
+      } catch {}
     };
-  }, []);
+  }, [myClientId]);
+
+  // Track room presence when entering or leaving an active room
+  useEffect(() => {
+    const channel = lobbyChannelRef.current;
+    if (!channel) return;
+
+    if (activeRoom) {
+      channel.track({
+        clientId: myClientId,
+        userId: currentProfile?.id || `anon_${myClientId}`,
+        userName: currentProfile?.full_name || "Campus Student",
+        roomId: activeRoom.id,
+        joinedAt: Date.now(),
+      });
+    } else {
+      channel.track({
+        clientId: myClientId,
+        userId: currentProfile?.id || `anon_${myClientId}`,
+        userName: currentProfile?.full_name || "Campus Student",
+        roomId: null,
+      });
+    }
+  }, [activeRoom, myClientId, currentProfile]);
 
   // Handle deep-link / initial room join
   useEffect(() => {
@@ -292,7 +396,10 @@ export default function GroupHangout({
     }
   };
 
-  const handleLeaveRoom = () => {
+  const handleLeaveRoom = (isLastPerson?: boolean, leftRoomId?: string) => {
+    if (isLastPerson && leftRoomId) {
+      setRooms((prev) => prev.filter((r) => r.id !== leftRoomId));
+    }
     setLivekitToken("");
     setActiveRoom(null);
     onInCallChange?.(false);
@@ -319,6 +426,7 @@ export default function GroupHangout({
       isCustom: true,
     };
 
+    roomCreatedTimestampsRef.current[newRoom.id] = Date.now();
     setRooms((prev) => [newRoom, ...prev]);
     setCreateModalOpen(false);
     setNewRoomTitle("");
@@ -327,7 +435,7 @@ export default function GroupHangout({
 
     // 1. Persist to Supabase hangout_rooms table
     try {
-      supabase
+      await supabase
         .from("hangout_rooms")
         .insert({
           id: newRoom.id,
@@ -337,13 +445,10 @@ export default function GroupHangout({
           host_id: newRoom.hostId,
           max_participants: 8,
           campus: "uiu",
-        })
-        .then(({ error }) => {
-          if (error) console.warn("Supabase hangout_rooms sync note:", error.message);
         });
 
       // 2. Broadcast via Supabase Realtime channel so all other students see it instantly
-      const lobbyChannel = supabase.channel("campus-hangout-lobby");
+      const lobbyChannel = lobbyChannelRef.current || supabase.channel("campus-hangout-lobby");
       lobbyChannel.send({
         type: "broadcast",
         event: "room-created",
@@ -398,7 +503,15 @@ export default function GroupHangout({
             <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-5">
               <div className="space-y-1.5 max-w-xl">
                 <div className="inline-flex items-center gap-2 px-2.5 py-0.5 rounded-md bg-zinc-800/80 text-zinc-300 text-xs font-medium border border-zinc-700/60">
-                  <Users className="w-3.5 h-3.5 text-orange-400" />
+                  {!isLightUi ? (
+                    <img
+                      src="/images/icon-hangouts.png"
+                      alt="Hangouts"
+                      className="w-4 h-4 object-contain"
+                    />
+                  ) : (
+                    <Users className="w-3.5 h-3.5 text-orange-400" />
+                  )}
                   Campus Hangouts • Up to 8 Peers
                 </div>
                 <h2 className="text-lg sm:text-xl font-bold text-zinc-100 tracking-tight">
@@ -469,10 +582,29 @@ export default function GroupHangout({
           </div>
 
           {/* Rooms Grid */}
-          {filteredRooms.length === 0 ? (
+          {rooms.length === 0 ? (
+            <div className="rounded-2xl p-10 border border-zinc-800/80 bg-zinc-900/40 text-center space-y-4 max-w-lg mx-auto animate-in fade-in duration-200">
+              <div className="w-16 h-16 rounded-2xl bg-orange-500/10 border border-orange-500/30 text-orange-400 flex items-center justify-center mx-auto shadow-sm">
+                <Users className="w-8 h-8 text-orange-400" />
+              </div>
+              <div className="space-y-1">
+                <h3 className="text-base font-bold text-zinc-100">No Active Hangout Rooms</h3>
+                <p className="text-xs text-zinc-400 leading-relaxed">
+                  There are currently no active group study rooms or addas. Create a new room to start hanging out with campus friends!
+                </p>
+              </div>
+              <button
+                onClick={handleOpenCreateModal}
+                className="px-5 py-2.5 rounded-xl bg-orange-600 hover:bg-orange-500 text-xs font-semibold text-white transition-all shadow-md active:scale-95 inline-flex items-center gap-2 cursor-pointer"
+              >
+                <Plus className="w-4 h-4" />
+                <span>Create Campus Room</span>
+              </button>
+            </div>
+          ) : filteredRooms.length === 0 ? (
             <div className="rounded-2xl p-8 border border-zinc-800/80 bg-zinc-900/40 text-center space-y-3">
               <span className="text-3xl block">🔍</span>
-              <h3 className="text-sm font-bold text-zinc-200">No rooms found</h3>
+              <h3 className="text-sm font-bold text-zinc-200">No matching rooms</h3>
               <p className="text-xs text-zinc-400 max-w-sm mx-auto">
                 No active hangout rooms match &quot;{searchQuery}&quot; under &quot;{selectedTag}&quot;.
               </p>
@@ -501,6 +633,8 @@ export default function GroupHangout({
             <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3.5">
             {filteredRooms.map((room) => {
               const isLocked = Boolean(room.password && room.password.trim().length > 0);
+              const participantCount =
+                roomParticipantCounts[room.id] || (activeRoom?.id === room.id ? 1 : 1);
 
               return (
                 <div
@@ -541,8 +675,8 @@ export default function GroupHangout({
                           </span>
                         )}
                         <span className="flex items-center gap-1.5 px-2 py-0.5 rounded-md text-[11px] font-medium bg-zinc-800/80 text-zinc-300 border border-zinc-700/60">
-                          <span className="w-1.5 h-1.5 rounded-full bg-emerald-400" />
-                          Up to {room.maxParticipants} Seats
+                          <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-pulse" />
+                          {participantCount} / {room.maxParticipants} Live
                         </span>
                       </div>
                     </div>
@@ -806,7 +940,7 @@ export default function GroupHangout({
 interface GroupHangoutSessionProps {
   room: HangoutRoomConfig;
   currentProfile: UserProfile | null;
-  onLeave: () => void;
+  onLeave: (isLastPerson?: boolean, leftRoomId?: string) => void;
   copiedCode?: string | null;
   onCopyRoomCode?: (code: string) => void;
 }
@@ -1048,8 +1182,59 @@ function GroupHangoutSession({
   const [isCamToggling, setIsCamToggling] = useState(false);
   const [isMicToggling, setIsMicToggling] = useState(false);
 
+  // Track participant count for unmount cleanup
+  const participantsCountRef = useRef(participants.length);
+  useEffect(() => {
+    participantsCountRef.current = participants.length;
+  }, [participants.length]);
+
+  // If user unexpectedly unmounts or navigates away while being the last/only person in room
+  useEffect(() => {
+    return () => {
+      if (participantsCountRef.current <= 1) {
+        try {
+          supabase
+            .from("hangout_rooms")
+            .delete()
+            .eq("id", room.id)
+            .then(() => {});
+
+          const lobbyChannel = supabase.channel("campus-hangout-lobby");
+          lobbyChannel.send({
+            type: "broadcast",
+            event: "room-deleted",
+            payload: { roomId: room.id },
+          });
+        } catch {}
+      }
+    };
+  }, [room.id]);
+
   // 1. Leave session
   const handleLeaveSession = useCallback(() => {
+    const isLastPerson = participants.length <= 1;
+
+    if (isLastPerson) {
+      try {
+        supabase
+          .from("hangout_rooms")
+          .delete()
+          .eq("id", room.id)
+          .then(({ error }) => {
+            if (error) console.warn("Supabase hangout room delete error:", error.message);
+          });
+
+        const lobbyChannel = supabase.channel("campus-hangout-lobby");
+        lobbyChannel.send({
+          type: "broadcast",
+          event: "room-deleted",
+          payload: { roomId: room.id },
+        });
+      } catch (err) {
+        console.warn("Room delete error:", err);
+      }
+    }
+
     if (livekitRoom) {
       try {
         livekitRoom.localParticipant.trackPublications.forEach((pub) => {
@@ -1060,9 +1245,12 @@ function GroupHangoutSession({
       } catch (err) {
         console.error("Error stopping tracks on leave:", err);
       }
+      try {
+        livekitRoom.disconnect();
+      } catch {}
     }
-    onLeave();
-  }, [livekitRoom, onLeave]);
+    onLeave(isLastPerson, room.id);
+  }, [livekitRoom, onLeave, participants.length, room.id]);
 
   // 2. TOGGLE CAMERA: properly set camera enabled via LiveKit
   const handleToggleCamera = async () => {

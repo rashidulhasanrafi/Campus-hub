@@ -21,14 +21,20 @@ import {
   Calendar,
   Mail,
   FileText,
+  Sliders,
+  MessageSquare,
+  Video,
+  Users,
 } from "lucide-react";
 import { useTheme } from "@/context/ThemeContext";
+import { useUiMode } from "@/context/UiModeContext";
 
 interface ProfileViewProps {
   profile: UserProfile | null;
   onOpenEditModal: () => void;
   onUpdateStatus: (status: string) => void;
   onSignOut?: () => void;
+  onPlayBusTransition?: () => void;
 }
 
 export default function ProfileView({
@@ -36,8 +42,10 @@ export default function ProfileView({
   onOpenEditModal,
   onUpdateStatus,
   onSignOut,
+  onPlayBusTransition,
 }: ProfileViewProps) {
   const { isDark, toggleTheme } = useTheme();
+  const { isLightUi, toggleUiMode, setUiMode } = useUiMode();
 
   if (!profile) return null;
 
@@ -46,8 +54,16 @@ export default function ProfileView({
       {/* 1. TOP HEADER: UIU Student Profile */}
       <div className="flex items-center justify-between gap-3 pb-1 border-b border-zinc-800/80">
         <div className="flex items-center gap-2.5">
-          <div className="w-9 h-9 rounded-xl bg-orange-500/10 border border-orange-500/30 flex items-center justify-center text-orange-400 shadow-sm shrink-0">
-            <GraduationCap className="w-5 h-5" />
+          <div className="w-9 h-9 rounded-xl bg-orange-500/10 border border-orange-500/30 flex items-center justify-center text-orange-400 shadow-sm shrink-0 overflow-hidden">
+            {!isLightUi ? (
+              <img
+                src="/images/icon-student-id.png"
+                alt="Student ID"
+                className="w-6 h-6 object-contain"
+              />
+            ) : (
+              <GraduationCap className="w-5 h-5" />
+            )}
           </div>
           <div>
             <h1 className="text-base sm:text-lg font-bold text-zinc-100 tracking-tight">
@@ -260,6 +276,133 @@ export default function ProfileView({
           </button>
         </div>
       </div>
+
+      {/* 5B. UI ICON MODE (LIGHT MODE UI vs HEAVY MODE UI) */}
+      <div className="space-y-3">
+        <div className="flex items-center justify-between">
+          <h3 className="text-xs font-semibold text-zinc-400 uppercase tracking-wider flex items-center gap-2">
+            <Sliders className="w-3.5 h-3.5 text-orange-400" />
+            UI Icon Mode (Light Mode UI)
+          </h3>
+          <button
+            type="button"
+            onClick={toggleUiMode}
+            className={`flex items-center gap-2 px-2.5 py-1 rounded-full text-[10px] font-bold uppercase tracking-wider border transition-all ${
+              isLightUi
+                ? "bg-zinc-800 border-zinc-700 text-zinc-300"
+                : "bg-orange-500/15 border-orange-500/40 text-orange-400"
+            }`}
+          >
+            <span>{isLightUi ? "Light UI: ON" : "Light UI: OFF (Heavy)"}</span>
+            <div
+              className={`w-6 h-3 rounded-full p-0.5 transition-colors duration-200 flex items-center ${
+                isLightUi ? "bg-orange-500 justify-end" : "bg-zinc-700 justify-start"
+              }`}
+            >
+              <div className="w-2 h-2 rounded-full bg-white shadow-sm" />
+            </div>
+          </button>
+        </div>
+
+        <div className="grid grid-cols-2 gap-3">
+          {/* Heavy UI Option */}
+          <button
+            type="button"
+            onClick={() => {
+              if (isLightUi) setUiMode("heavy");
+            }}
+            className={`flex flex-col justify-between p-3.5 rounded-xl border text-left transition-all ${
+              !isLightUi
+                ? "bg-orange-600/15 border-orange-500 text-white shadow-sm ring-1 ring-orange-500/30"
+                : "bg-zinc-900/60 border-zinc-800 text-zinc-400 hover:text-orange-400 hover:border-orange-500/40 hover:bg-zinc-900"
+            }`}
+          >
+            <div className="flex items-center justify-between w-full mb-2">
+              <div className="flex items-center gap-1.5">
+                <img
+                  src="/images/icon-lounge.png"
+                  alt="Lounge"
+                  className="w-5 h-5 object-contain"
+                />
+                <img
+                  src="/images/icon-1on1-match.png"
+                  alt="1-on-1 Match"
+                  className="w-5 h-5 object-contain"
+                />
+                <img
+                  src="/images/icon-hangouts.png"
+                  alt="Hangouts"
+                  className="w-5 h-5 object-contain"
+                />
+                <img
+                  src="/images/icon-student-id.png"
+                  alt="Student ID"
+                  className="w-5 h-5 object-contain"
+                />
+              </div>
+              {!isLightUi && <Check className="w-3.5 h-3.5 text-orange-400" />}
+            </div>
+            <div>
+              <span className="text-xs font-semibold text-zinc-200 block">Heavy Mode UI</span>
+              <span className="text-[10px] text-zinc-400">Custom 3D / Illustrated Icons</span>
+            </div>
+          </button>
+
+          {/* Light Mode UI Option */}
+          <button
+            type="button"
+            onClick={() => {
+              if (!isLightUi) setUiMode("light");
+            }}
+            className={`flex flex-col justify-between p-3.5 rounded-xl border text-left transition-all ${
+              isLightUi
+                ? "bg-orange-600/15 border-orange-500 text-white shadow-sm ring-1 ring-orange-500/30"
+                : "bg-zinc-900/60 border-zinc-800 text-zinc-400 hover:text-orange-400 hover:border-orange-500/40 hover:bg-zinc-900"
+            }`}
+          >
+            <div className="flex items-center justify-between w-full mb-2">
+              <div className="flex items-center gap-2 text-orange-400">
+                <MessageSquare className="w-4 h-4" />
+                <Video className="w-4 h-4" />
+                <Users className="w-4 h-4" />
+                <User className="w-4 h-4" />
+              </div>
+              {isLightUi && <Check className="w-3.5 h-3.5 text-orange-400" />}
+            </div>
+            <div>
+              <span className="text-xs font-semibold text-zinc-200 block">Light Mode UI</span>
+              <span className="text-[10px] text-zinc-400">Clean Classic Vector Icons</span>
+            </div>
+          </button>
+        </div>
+      </div>
+
+      {/* 5C. CINEMATIC UIU BUS ENTRANCE REPLAY */}
+      {onPlayBusTransition && (
+        <div className="rounded-xl bg-zinc-900/40 p-4 border border-zinc-800/80 flex flex-col sm:flex-row items-center justify-between gap-4">
+          <div className="flex items-center gap-3 text-center sm:text-left">
+            <div className="w-9 h-9 rounded-xl bg-orange-500/10 border border-orange-500/30 flex items-center justify-center text-orange-400 text-lg shadow-sm shrink-0">
+              🚌
+            </div>
+            <div>
+              <p className="text-xs font-semibold text-zinc-200">
+                UIU Bus Cinematic Entrance
+              </p>
+              <p className="text-[11px] text-zinc-400">
+                Replay signature campus transit login animation
+              </p>
+            </div>
+          </div>
+
+          <button
+            type="button"
+            onClick={onPlayBusTransition}
+            className="w-full sm:w-auto px-4 py-2 rounded-lg bg-orange-600 hover:bg-orange-500 active:scale-95 text-white font-semibold text-xs transition-all shadow-md shadow-orange-600/20 flex items-center justify-center gap-2 shrink-0 cursor-pointer"
+          >
+            <span>🚌 Replay Animation</span>
+          </button>
+        </div>
+      )}
 
       {/* 6. ACCOUNT SESSION & LOG OUT */}
       {onSignOut && (

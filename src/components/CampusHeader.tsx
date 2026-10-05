@@ -8,6 +8,7 @@ import {
 } from "@/lib/supabase";
 import StudentAvatar from "@/components/StudentAvatar";
 import { useTheme } from "@/context/ThemeContext";
+import { useUiMode } from "@/context/UiModeContext";
 import {
   Wifi,
   ChevronDown,
@@ -21,6 +22,7 @@ import {
   Sun,
   Moon,
 } from "lucide-react";
+import { motion } from "framer-motion";
 
 interface CampusHeaderProps {
   profile: UserProfile | null;
@@ -42,6 +44,7 @@ export default function CampusHeader({
   onTabChange,
 }: CampusHeaderProps) {
   const { isDark, toggleTheme } = useTheme();
+  const { uiMode, isLightUi, toggleUiMode } = useUiMode();
   const [statusDropdownOpen, setStatusDropdownOpen] = useState(false);
 
   const handleSelectStatus = async (statusLabel: string) => {
@@ -53,9 +56,25 @@ export default function CampusHeader({
   };
 
   const desktopNavItems = [
-    { id: "lounge" as const, label: "Lounge & Feed", icon: MessageSquare },
-    { id: "match" as const, label: "1-on-1 Match", icon: Video, badge: "LIVE" },
-    { id: "hangouts" as const, label: "Hangouts", icon: Users },
+    {
+      id: "lounge" as const,
+      label: "Lounge & Feed",
+      icon: MessageSquare,
+      customIcon: "/images/icon-lounge.png",
+    },
+    {
+      id: "match" as const,
+      label: "1-on-1 Match",
+      icon: Video,
+      customIcon: "/images/icon-1on1-match.png",
+      badge: "LIVE",
+    },
+    {
+      id: "hangouts" as const,
+      label: "Hangouts",
+      icon: Users,
+      customIcon: "/images/icon-hangouts.png",
+    },
   ];
 
   return (
@@ -88,26 +107,104 @@ export default function CampusHeader({
               United International University
             </span>
           </div>
+
+          {/* PC-only UI Mode Toggle: App logo shathe thakbe */}
+          <div className="hidden md:flex items-center ml-2 pl-3 border-l border-zinc-800/80">
+            <button
+              type="button"
+              onClick={toggleUiMode}
+              title={
+                isLightUi
+                  ? "Light Mode UI is ON (Clean vector icons). Click to switch to Heavy Mode UI (Custom illustrated 3D icons)"
+                  : "Heavy Mode UI is ON (Custom illustrated 3D icons). Click to switch to Light Mode UI (Clean vector icons)"
+              }
+              className={`flex items-center gap-2 px-2.5 py-1 rounded-lg text-[11px] font-semibold border transition-all select-none ${
+                isLightUi
+                  ? "bg-zinc-900/90 border-zinc-700 text-zinc-300 hover:border-orange-500/40 hover:text-white"
+                  : "bg-orange-500/10 border-orange-500/40 text-orange-400 hover:bg-orange-500/20 shadow-sm shadow-orange-500/10"
+              }`}
+            >
+              <span className="text-[10px] tracking-tight text-zinc-400 font-medium">Light UI</span>
+              {/* Slider switch */}
+              <div
+                className={`w-7 h-3.5 rounded-full p-0.5 transition-colors duration-200 flex items-center ${
+                  isLightUi ? "bg-orange-500 justify-end" : "bg-zinc-700 justify-start"
+                }`}
+              >
+                <div className="w-2.5 h-2.5 rounded-full bg-white shadow-sm" />
+              </div>
+              <span
+                className={`text-[9px] px-1 py-0.2 rounded font-bold uppercase ${
+                  isLightUi ? "bg-orange-500/20 text-orange-300" : "bg-zinc-800 text-zinc-400"
+                }`}
+              >
+                {isLightUi ? "ON" : "OFF"}
+              </span>
+            </button>
+          </div>
         </div>
 
         {/* Center: Desktop Navigation (Options turn Orange on hover like photo) & Online Pill */}
         <div className="hidden md:flex items-center gap-3">
           {onTabChange && currentTab && (
-            <div className="flex items-center gap-1 p-1 bg-zinc-900/90 rounded-lg border border-zinc-800">
+            <div
+              className={`flex items-center gap-1 p-1 rounded-lg border transition-all duration-300 relative ${
+                !isLightUi
+                  ? isDark
+                    ? "bg-zinc-950/80 border-white/10 backdrop-blur-xl shadow-lg shadow-black/40"
+                    : "bg-slate-100/90 border-slate-200 backdrop-blur-xl shadow-sm"
+                  : isDark
+                    ? "bg-zinc-900/90 border-zinc-800"
+                    : "bg-slate-100 border-slate-200"
+              }`}
+            >
               {desktopNavItems.map((item) => {
                 const isActive = currentTab === item.id;
                 const Icon = item.icon;
+                const useCustom = !isLightUi && Boolean(item.customIcon);
+
                 return (
                   <button
                     key={item.id}
                     onClick={() => onTabChange(item.id)}
-                    className={`flex items-center gap-1.5 px-3 py-1 rounded-md text-xs font-medium transition-colors ${
+                    className={`relative flex items-center gap-1.5 px-3 py-1.5 rounded-md text-xs font-medium transition-all duration-200 select-none ${
                       isActive
-                        ? "bg-zinc-800 text-orange-400 border border-orange-500/30 shadow-sm"
-                        : "text-zinc-300 hover:text-orange-500 hover:bg-orange-500/10"
+                        ? isLightUi
+                          ? isDark
+                            ? "bg-zinc-800 text-orange-400 border border-orange-500/30 shadow-sm"
+                            : "bg-white text-orange-600 border border-orange-400/40 shadow-sm font-semibold"
+                          : isDark
+                            ? "text-white font-bold"
+                            : "text-zinc-900 font-bold"
+                        : isDark
+                          ? "text-zinc-300 hover:text-orange-400 hover:bg-orange-500/10 active:scale-95"
+                          : "text-slate-600 hover:text-orange-600 hover:bg-orange-500/10 active:scale-95"
                     }`}
                   >
-                    <Icon className="w-3.5 h-3.5" />
+                    {!isLightUi && isActive && (
+                      <motion.div
+                        layoutId="desktop-liquid-glass"
+                        className="absolute inset-0 rounded-md liquid-glass-pill -z-10 pointer-events-none"
+                        transition={{
+                          type: "spring",
+                          stiffness: 420,
+                          damping: 30,
+                          mass: 0.8,
+                        }}
+                      />
+                    )}
+
+                    {useCustom ? (
+                      <img
+                        src={item.customIcon}
+                        alt={item.label}
+                        className={`w-4 h-4 object-contain shrink-0 transition-transform ${
+                          isActive ? "scale-110 liquid-glass-active-icon" : "group-hover:scale-105"
+                        }`}
+                      />
+                    ) : (
+                      <Icon className="w-3.5 h-3.5" />
+                    )}
                     <span>{item.label}</span>
                     {item.badge && (
                       <span className="px-1 py-0.2 rounded text-[9px] font-bold bg-orange-500/20 text-orange-400 border border-orange-500/30">

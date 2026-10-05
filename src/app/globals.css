@@ -76,7 +76,8 @@ body.light,
   .bg-\[\#090a0f\],
   .bg-zinc-950,
   .bg-zinc-950\/95,
-  .bg-zinc-950\/90 {
+  .bg-zinc-950\/90,
+  .bg-zinc-950\/80 {
     background-color: #ffffff !important;
   }
 
@@ -285,3 +286,243 @@ body.light,
   height: 100% !important;
   border-radius: 0.875rem;
 }
+
+/* ========================================================
+   HEAVY MODE UI: LIQUID GLASS MORPH & SWITCH ANIMATIONS
+   ======================================================== */
+
+/* Liquid Glass Active Pill for Tabs (PC & Mobile) - Dark default */
+.liquid-glass-pill {
+  background: linear-gradient(
+    135deg,
+    rgba(255, 255, 255, 0.16) 0%,
+    rgba(249, 115, 22, 0.28) 45%,
+    rgba(234, 88, 12, 0.18) 100%
+  ) !important;
+  backdrop-filter: blur(20px) saturate(210%) !important;
+  -webkit-backdrop-filter: blur(20px) saturate(210%) !important;
+  border: 1px solid rgba(255, 255, 255, 0.35) !important;
+  box-shadow: 
+    0 8px 30px -4px rgba(249, 115, 22, 0.35),
+    inset 0 1px 2px 0 rgba(255, 255, 255, 0.65),
+    inset 0 -1.5px 3px 0 rgba(0, 0, 0, 0.45) !important;
+}
+
+/* Liquid Glass Active Pill for Light Mode (Clean translucent warm glass) */
+[data-theme="light"] .liquid-glass-pill,
+.light .liquid-glass-pill {
+  background: linear-gradient(
+    135deg,
+    rgba(255, 255, 255, 0.95) 0%,
+    rgba(254, 215, 170, 0.75) 45%,
+    rgba(251, 146, 60, 0.4) 100%
+  ) !important;
+  backdrop-filter: blur(16px) saturate(180%) !important;
+  -webkit-backdrop-filter: blur(16px) saturate(180%) !important;
+  border: 1px solid rgba(249, 115, 22, 0.45) !important;
+  box-shadow: 
+    0 4px 16px -2px rgba(249, 115, 22, 0.3),
+    inset 0 1px 2px 0 rgba(255, 255, 255, 0.95),
+    inset 0 -1px 2px 0 rgba(234, 88, 12, 0.1) !important;
+}
+
+/* Liquid Glass Bottom Nav Container - Dark default */
+.liquid-glass-bar {
+  background: rgba(12, 14, 22, 0.82) !important;
+  backdrop-filter: blur(28px) saturate(200%) !important;
+  -webkit-backdrop-filter: blur(28px) saturate(200%) !important;
+  border: 1px solid rgba(255, 255, 255, 0.14) !important;
+  box-shadow: 
+    0 16px 48px -8px rgba(0, 0, 0, 0.75),
+    inset 0 1px 1px 0 rgba(255, 255, 255, 0.18) !important;
+}
+
+/* Liquid Glass Nav Container for Light Mode (Clean crisp translucent glass) */
+[data-theme="light"] .liquid-glass-bar,
+.light .liquid-glass-bar {
+  background: rgba(255, 255, 255, 0.92) !important;
+  backdrop-filter: blur(28px) saturate(180%) !important;
+  -webkit-backdrop-filter: blur(28px) saturate(180%) !important;
+  border: 1px solid rgba(226, 232, 240, 0.9) !important;
+  box-shadow: 
+    0 10px 30px -5px rgba(0, 0, 0, 0.08),
+    0 0 0 1px rgba(0, 0, 0, 0.04),
+    inset 0 1px 1px 0 rgba(255, 255, 255, 0.9) !important;
+}
+
+/* Fluid Liquid Pop on Active Icons */
+.liquid-glass-active-icon {
+  filter: drop-shadow(0 4px 12px rgba(249, 115, 22, 0.55));
+  animation: liquid-icon-pop 0.35s cubic-bezier(0.34, 1.56, 0.64, 1);
+}
+
+[data-theme="light"] .liquid-glass-active-icon,
+.light .liquid-glass-active-icon {
+  filter: drop-shadow(0 2px 8px rgba(234, 88, 12, 0.45));
+}
+
+@keyframes liquid-icon-pop {
+  0% {
+    transform: scale(0.8);
+  }
+  50% {
+    transform: scale(1.18) translateY(-2px);
+  }
+  100% {
+    transform: scale(1) translateY(0);
+  }
+}
+
+/* Liquid Glass Screen Morph & Sweep Transition on Tab Switch */
+.animate-liquid-glass {
+  animation: liquid-glass-fade-in 0.36s cubic-bezier(0.16, 1, 0.3, 1) forwards;
+  will-change: transform, opacity, filter;
+  position: relative;
+}
+
+@keyframes liquid-glass-fade-in {
+  0% {
+    opacity: 0.15;
+    transform: scale(0.988) translateY(6px);
+    filter: blur(6px) brightness(1.1);
+  }
+  50% {
+    opacity: 0.9;
+    transform: scale(1.004) translateY(-1px);
+    filter: blur(1.5px) brightness(1.04);
+  }
+  100% {
+    opacity: 1;
+    transform: scale(1) translateY(0);
+    filter: blur(0px) brightness(1);
+  }
+}
+
+/* Liquid iridescent shimmer wave across the screen when switching */
+.animate-liquid-glass::before {
+  content: "";
+  position: fixed;
+  top: 0;
+  left: 0;
+  width: 100vw;
+  height: 100vh;
+  pointer-events: none;
+  background: linear-gradient(
+    115deg,
+    transparent 0%,
+    rgba(255, 255, 255, 0.03) 30%,
+    rgba(249, 115, 22, 0.08) 50%,
+    rgba(255, 255, 255, 0.04) 70%,
+    transparent 100%
+  );
+  z-index: 99;
+  animation: liquid-shimmer-sweep 0.42s cubic-bezier(0.16, 1, 0.3, 1) forwards;
+}
+
+@keyframes liquid-shimmer-sweep {
+  0% {
+    transform: translateX(-100%) scaleX(1.4);
+    opacity: 0.9;
+  }
+  100% {
+    transform: translateX(100%) scaleX(1.4);
+    opacity: 0;
+  }
+}
+
+/* ========================================================
+   CINEMATIC UIU BUS LOGIN TRANSITION: DUST & TIRE PARTICLES
+   ======================================================== */
+@keyframes dust-puff-expand {
+  0% {
+    transform: scale(0.35) translate(0, 0);
+    opacity: 0.85;
+  }
+  40% {
+    opacity: 0.55;
+  }
+  100% {
+    transform: scale(2.4) translate(40px, -24px);
+    opacity: 0;
+  }
+}
+
+.dust-puff {
+  position: absolute;
+  border-radius: 50%;
+  background: radial-gradient(circle, rgba(230, 235, 245, 0.75) 0%, rgba(190, 195, 205, 0.4) 45%, transparent 70%);
+  pointer-events: none;
+  filter: blur(2.5px);
+  will-change: transform, opacity;
+}
+
+.dust-puff-1 {
+  width: 42px;
+  height: 42px;
+  animation: dust-puff-expand 0.55s infinite ease-out;
+}
+
+.dust-puff-2 {
+  width: 54px;
+  height: 54px;
+  animation: dust-puff-expand 0.65s infinite ease-out 0.18s;
+}
+
+.dust-puff-3 {
+  width: 36px;
+  height: 36px;
+  animation: dust-puff-expand 0.5s infinite ease-out 0.32s;
+}
+
+.dust-puff-front {
+  width: 32px;
+  height: 32px;
+  animation: dust-puff-expand 0.52s infinite ease-out 0.14s;
+}
+
+/* ========================================================
+   ORANGE SURGE & ENERGY PLUMES ERUPTING FROM BUS REAR
+   ======================================================== */
+@keyframes orange-surge-expand {
+  0% {
+    transform: translate(0, 0) scale(0.35);
+    opacity: 0.95;
+  }
+  40% {
+    opacity: 0.8;
+  }
+  100% {
+    transform: translate(140px, -50px) scale(3.2);
+    opacity: 0;
+  }
+}
+
+.orange-surge-puff {
+  position: absolute;
+  border-radius: 50%;
+  background: radial-gradient(circle, rgba(255, 180, 50, 0.9) 0%, rgba(242, 101, 34, 0.6) 45%, transparent 75%);
+  pointer-events: none;
+  filter: blur(4px);
+  will-change: transform, opacity;
+}
+
+.orange-surge-1 {
+  width: 65px;
+  height: 65px;
+  animation: orange-surge-expand 0.65s infinite ease-out;
+}
+
+.orange-surge-2 {
+  width: 90px;
+  height: 90px;
+  animation: orange-surge-expand 0.8s infinite ease-out 0.22s;
+}
+
+.orange-surge-3 {
+  width: 50px;
+  height: 50px;
+  animation: orange-surge-expand 0.55s infinite ease-out 0.42s;
+}
+
+
+

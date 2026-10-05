@@ -24,12 +24,18 @@ interface AuthScreenProps {
   onAuthSuccess: () => void;
   initialInfo?: string;
   initialLoginInput?: string;
+  onStartBusTransition?: () => void;
+  onCancelBusTransition?: () => void;
+  isBusTransitionActive?: boolean;
 }
 
 export default function AuthScreen({
   onAuthSuccess,
   initialInfo = "",
   initialLoginInput = "",
+  onStartBusTransition,
+  onCancelBusTransition,
+  isBusTransitionActive = false,
 }: AuthScreenProps) {
   // Core Login State
   const [loginInput, setLoginInput] = useState(initialLoginInput);
@@ -189,6 +195,7 @@ export default function AuthScreen({
     setLoading(true);
     try {
       if (password.trim()) {
+        onStartBusTransition?.();
         const { data, error } = await supabase.auth.signInWithPassword({
           email: targetEmail,
           password: password.trim(),
@@ -201,6 +208,7 @@ export default function AuthScreen({
         }
 
         if (error) {
+          onCancelBusTransition?.();
           console.warn("Password login failed, offering OTP fallback:", error.message);
           setErrorMessage(error.message || "Invalid credentials. Try logging in via OTP passcode.");
           setLoading(false);
@@ -223,6 +231,7 @@ export default function AuthScreen({
       setResendCooldown(30);
       setInfoMessage(`6-digit passcode dispatched to ${targetEmail}`);
     } catch (err: unknown) {
+      onCancelBusTransition?.();
       const error = err as Error;
       console.error("Login Error:", error);
       if (error.message?.includes("uiu.ac.bd") || error.message?.includes("Only official UIU")) {
@@ -281,6 +290,7 @@ export default function AuthScreen({
       return;
     }
 
+    onStartBusTransition?.();
     setLoading(true);
     setErrorMessage("");
     try {
@@ -299,6 +309,7 @@ export default function AuthScreen({
         throw new Error("Verification completed, but session was not returned.");
       }
     } catch (err: unknown) {
+      onCancelBusTransition?.();
       const error = err as Error;
       console.error("OTP verification error:", error);
       setErrorMessage(error.message || "Invalid or expired passcode. Please try again.");
@@ -324,6 +335,7 @@ export default function AuthScreen({
       return;
     }
 
+    onStartBusTransition?.();
     setLoading(true);
     const assignedAvatar =
       regGender === "female"
@@ -434,7 +446,13 @@ export default function AuthScreen({
   };
 
   return (
-    <div className="relative min-h-screen w-full flex flex-col justify-between overflow-x-hidden bg-gradient-to-br from-[#0f172a] via-[#090d16] to-[#020617] text-slate-100 selection:bg-orange-600 selection:text-white">
+    <div
+      className={`relative min-h-screen w-full flex flex-col justify-between overflow-x-hidden bg-gradient-to-br from-[#0f172a] via-[#090d16] to-[#020617] text-slate-100 selection:bg-orange-600 selection:text-white transition-all duration-500 ${
+        isBusTransitionActive
+          ? "filter grayscale contrast-125 brightness-75 pointer-events-none"
+          : ""
+      }`}
+    >
       {/* ================================================================= */}
       {/* 1. SEAMLESS AMBIENT GLOWS & BACKGROUND BLEND                      */}
       {/* ================================================================= */}
@@ -966,7 +984,7 @@ export default function AuthScreen({
                 </div>
 
                 {/* 6. Prominent "Create new account" Button (Facebook-Style in UIU Orange Accent) */}
-                <div className="flex justify-center">
+                <div className="flex flex-col items-center gap-2">
                   <button
                     type="button"
                     onClick={() => {
@@ -977,6 +995,15 @@ export default function AuthScreen({
                     className="px-6 py-2.5 rounded-lg border-2 border-orange-500/80 hover:bg-orange-500/10 text-orange-400 hover:text-orange-300 font-semibold text-sm transition-all shadow-sm active:scale-95 cursor-pointer"
                   >
                     Create new account
+                  </button>
+
+                  <button
+                    type="button"
+                    onClick={() => onStartBusTransition?.()}
+                    className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-slate-900/80 hover:bg-orange-600/20 text-slate-400 hover:text-orange-400 border border-slate-800 hover:border-orange-500/40 text-[11px] font-semibold transition-all cursor-pointer mt-1"
+                  >
+                    <span>🚌</span>
+                    <span>Preview UIU Bus Transition</span>
                   </button>
                 </div>
               </form>

@@ -39,9 +39,13 @@ export default function StudentAvatar({
   const isFemaleStudent = (n: string = "", av: string = "") => {
     const text = `${n} ${av}`.toLowerCase();
     return (
+      text.includes("female") ||
+      text.includes("girl") ||
+      text.includes("woman") ||
       text.includes("priya") ||
       text.includes("anika") ||
       text.includes("sara") ||
+      text.includes("sarah") ||
       text.includes("ayesha") ||
       text.includes("nusrat") ||
       text.includes("maya") ||
@@ -49,11 +53,22 @@ export default function StudentAvatar({
       text.includes("chloe") ||
       text.includes("fatima") ||
       text.includes("aisha") ||
-      text.includes("female") ||
-      text.includes("girl") ||
       text.includes("sharma") ||
       text.includes("tabassum") ||
-      text.includes("jahan")
+      text.includes("jahan") ||
+      text.includes("tasnim") ||
+      text.includes("mim") ||
+      text.includes("sadia") ||
+      text.includes("sumaiya") ||
+      text.includes("afia") ||
+      text.includes("farhana") ||
+      text.includes("tanzina") ||
+      text.includes("jannat") ||
+      text.includes("fariha") ||
+      text.includes("samia") ||
+      text.includes("noshin") ||
+      text.includes("nowshin") ||
+      text.includes("lamia")
     );
   };
 

@@ -23,13 +23,17 @@ import GroupHangout from "@/components/GroupHangout";
 import ProfileView from "@/components/ProfileView";
 import ProfileOnboardingModal from "@/components/ProfileOnboardingModal";
 import IncomingCallModal from "@/components/IncomingCallModal";
+import UiuBusTransition from "@/components/UiuBusTransition";
 import { Sparkles, Radio } from "lucide-react";
+import { useUiMode } from "@/context/UiModeContext";
 
 export default function CampusHubHome() {
+  const { isLightUi } = useUiMode();
   const [session, setSession] = useState<Session | null>(null);
   const [authLoading, setAuthLoading] = useState(true);
   const [needsOnboarding, setNeedsOnboarding] = useState(false);
   const [profile, setProfile] = useState<UserProfile | null>(null);
+  const [showBusTransition, setShowBusTransition] = useState(false);
 
   // App navigation & state
   const [students, setStudents] = useState<UserProfile[]>([]);
@@ -235,7 +239,7 @@ export default function CampusHubHome() {
   };
 
   // 1. Initial Auth Loading Splash
-  if (authLoading) {
+  if (authLoading && !showBusTransition) {
     return (
       <div className="min-h-screen flex flex-col items-center justify-center bg-[#090a0f] text-zinc-100">
         <div className="relative flex items-center justify-center w-14 h-14 mb-4">
@@ -251,143 +255,153 @@ export default function CampusHubHome() {
     );
   }
 
-  // 2. Unauthenticated: Show Mobile-First Gmail OTP Auth Screen
-  if (!session || !session.user) {
-    return (
-      <AuthScreen
-        initialInfo={authNotice}
-        initialLoginInput={authPreFill}
-        onAuthSuccess={() => {
-          setAuthNotice("");
-          setAuthPreFill("");
-          checkAuthAndProfile();
-        }}
-      />
-    );
-  }
-
-  // 3. Authenticated but Needs Onboarding: Show Student Profile Setup
-  if (needsOnboarding) {
-    return (
-      <OnboardingScreen
-        user={session.user}
-        onProfileCreated={handleProfileCreated}
-      />
-    );
-  }
-
-  // 4. Authenticated & Profile Ready: Render Campus Hub Application
   return (
-    <div className="relative min-h-screen flex flex-col bg-[#090a0f] text-zinc-100 selection:bg-orange-600 selection:text-white overflow-x-hidden">
-      {/* Background Subtle Watermark: Campus Hub Emblem centered with 5% opacity */}
-      <div
-        aria-hidden="true"
-        className="fixed inset-0 pointer-events-none z-0 flex items-center justify-center overflow-hidden select-none"
-      >
-        <img
-          src="/images/campus-hub-emblem-tight.png"
-          alt=""
-          className="uiu-watermark w-[720px] sm:w-[920px] md:w-[1080px] max-w-none opacity-[0.05] filter contrast-125 object-contain"
+    <>
+      {/* 2. Unauthenticated: Show Mobile-First Gmail OTP Auth Screen */}
+      {!session || !session.user ? (
+        <AuthScreen
+          initialInfo={authNotice}
+          initialLoginInput={authPreFill}
+          onAuthSuccess={() => {
+            setAuthNotice("");
+            setAuthPreFill("");
+            checkAuthAndProfile();
+          }}
+          onStartBusTransition={() => setShowBusTransition(true)}
+          onCancelBusTransition={() => setShowBusTransition(false)}
+          isBusTransitionActive={showBusTransition}
         />
-      </div>
-
-      <div className="relative z-10 flex flex-col flex-1 min-h-screen">
-        {/* Global Campus Header with Active Status & Sign Out - Completely hidden during calls */}
-        {!isInCall && (
-          <CampusHeader
-            profile={profile}
-            onlineCount={students.length}
-            onOpenProfileModal={() => setEditProfileOpen(true)}
-            onStatusChange={handleStatusChange}
-            onSignOut={handleSignOut}
-            currentTab={currentTab}
-            onTabChange={handleTabChange}
-          />
-        )}
-
-      {/* Main Workspace View Router */}
-      <main className="flex-1 flex flex-col w-full">
-        {currentTab === "lounge" && (
-          <CampusLounge
-            currentProfile={profile}
-            students={students}
-            onInviteToCall={handleInviteToCall}
-            onOpen1on1Match={() => {
-              setDirectRoomToJoin(null);
-              setCurrentTab("match");
-            }}
-            onJoinHangout={(roomId) => {
-              setSelectedHangoutRoomId(roomId);
-              setCurrentTab("hangouts");
-            }}
-          />
-        )}
-
-        {currentTab === "match" && (
-          <RandomMatch
-            currentProfile={profile}
-            onEndMatch={() => {
-              setDirectRoomToJoin(null);
-              setIsInCall(false);
-              setCurrentTab("lounge");
-            }}
-            directRoomName={directRoomToJoin}
-            onInCallChange={setIsInCall}
-          />
-        )}
-
-        {currentTab === "hangouts" && (
-          <GroupHangout
-            currentProfile={profile}
-            initialRoomId={selectedHangoutRoomId}
-            onInCallChange={setIsInCall}
-          />
-        )}
-
-        {currentTab === "profile" && (
-          <ProfileView
-            profile={profile}
-            onOpenEditModal={() => setEditProfileOpen(true)}
-            onUpdateStatus={handleStatusChange}
-            onSignOut={handleSignOut}
-          />
-        )}
-      </main>
-
-      {/* Persistent Mobile Bottom Navigation Bar - Completely hidden during calls */}
-      {!isInCall && (
-        <BottomNavigation
-          currentTab={currentTab}
-          onTabChange={handleTabChange}
+      ) : needsOnboarding ? (
+        /* 3. Authenticated but Needs Onboarding: Show Student Profile Setup */
+        <OnboardingScreen
+          user={session.user}
+          onProfileCreated={handleProfileCreated}
         />
+      ) : (
+        /* 4. Authenticated & Profile Ready: Render Campus Hub Application */
+        <div className="relative min-h-screen flex flex-col bg-[#090a0f] text-zinc-100 selection:bg-orange-600 selection:text-white overflow-x-hidden">
+          {/* Background Subtle Watermark: Campus Hub Emblem centered with 5% opacity */}
+          <div
+            aria-hidden="true"
+            className="fixed inset-0 pointer-events-none z-0 flex items-center justify-center overflow-hidden select-none"
+          >
+            <img
+              src="/images/campus-hub-emblem-tight.png"
+              alt=""
+              className="uiu-watermark w-[720px] sm:w-[920px] md:w-[1080px] max-w-none opacity-[0.05] filter contrast-125 object-contain"
+            />
+          </div>
+
+          <div className="relative z-10 flex flex-col flex-1 min-h-screen">
+            {/* Global Campus Header with Active Status & Sign Out - Completely hidden during calls */}
+            {!isInCall && (
+              <CampusHeader
+                profile={profile}
+                onlineCount={students.length}
+                onOpenProfileModal={() => setEditProfileOpen(true)}
+                onStatusChange={handleStatusChange}
+                onSignOut={handleSignOut}
+                currentTab={currentTab}
+                onTabChange={handleTabChange}
+              />
+            )}
+
+            {/* Main Workspace View Router with Liquid Glass Switch Animation */}
+            <main className="flex-1 flex flex-col w-full relative">
+              <div
+                key={currentTab}
+                className={`flex-1 flex flex-col w-full ${!isLightUi ? "animate-liquid-glass" : ""}`}
+              >
+                {currentTab === "lounge" && (
+                  <CampusLounge
+                    currentProfile={profile}
+                    students={students}
+                    onInviteToCall={handleInviteToCall}
+                    onOpen1on1Match={() => {
+                      setDirectRoomToJoin(null);
+                      setCurrentTab("match");
+                    }}
+                    onJoinHangout={(roomId) => {
+                      setSelectedHangoutRoomId(roomId);
+                      setCurrentTab("hangouts");
+                    }}
+                  />
+                )}
+
+                {currentTab === "match" && (
+                  <RandomMatch
+                    currentProfile={profile}
+                    onEndMatch={() => {
+                      setDirectRoomToJoin(null);
+                      setIsInCall(false);
+                      setCurrentTab("lounge");
+                    }}
+                    directRoomName={directRoomToJoin}
+                    onInCallChange={setIsInCall}
+                  />
+                )}
+
+                {currentTab === "hangouts" && (
+                  <GroupHangout
+                    currentProfile={profile}
+                    initialRoomId={selectedHangoutRoomId}
+                    onInCallChange={setIsInCall}
+                  />
+                )}
+
+                {currentTab === "profile" && (
+                  <ProfileView
+                    profile={profile}
+                    onOpenEditModal={() => setEditProfileOpen(true)}
+                    onUpdateStatus={handleStatusChange}
+                    onSignOut={handleSignOut}
+                    onPlayBusTransition={() => setShowBusTransition(true)}
+                  />
+                )}
+              </div>
+            </main>
+
+            {/* Persistent Mobile Bottom Navigation Bar - Completely hidden during calls */}
+            {!isInCall && (
+              <BottomNavigation
+                currentTab={currentTab}
+                onTabChange={handleTabChange}
+              />
+            )}
+
+            {/* Student Profile Edit Modal */}
+            <ProfileOnboardingModal
+              isOpen={editProfileOpen}
+              onClose={() => setEditProfileOpen(false)}
+              currentProfile={profile}
+              onSaveProfile={(updated) => {
+                setProfile(updated);
+                saveLocalProfile(updated);
+                syncProfileWithSupabase(updated);
+              }}
+              onRequireRelogin={async () => {
+                const userIdentifier = profile?.email || profile?.id || "";
+                setAuthPreFill(userIdentifier);
+                setAuthNotice("Profile updated successfully! For security, please log in with your password again.");
+                setEditProfileOpen(false);
+                await handleSignOut();
+              }}
+            />
+
+            {/* Incoming Video Call Modal */}
+            <IncomingCallModal
+              invite={incomingInvite}
+              onAccept={handleAcceptInvite}
+              onDecline={handleDeclineInvite}
+            />
+          </div>
+        </div>
       )}
 
-      {/* Student Profile Edit Modal */}
-      <ProfileOnboardingModal
-        isOpen={editProfileOpen}
-        onClose={() => setEditProfileOpen(false)}
-        currentProfile={profile}
-        onSaveProfile={(updated) => {
-          setProfile(updated);
-          saveLocalProfile(updated);
-          syncProfileWithSupabase(updated);
-        }}
-        onRequireRelogin={async () => {
-          const userIdentifier = profile?.email || profile?.id || "";
-          setAuthPreFill(userIdentifier);
-          setAuthNotice("Profile updated successfully! For security, please log in with your password again.");
-          setEditProfileOpen(false);
-          await handleSignOut();
-        }}
-      />
-
-      {/* Incoming Video Call Modal */}
-      <IncomingCallModal
-        invite={incomingInvite}
-        onAccept={handleAcceptInvite}
-        onDecline={handleDeclineInvite}
-      />
-      </div>
-    </div>
+      {/* Global UIU Bus Cinematic Transition Overlay */}
+      {showBusTransition && (
+        <UiuBusTransition onComplete={() => setShowBusTransition(false)} />
+      )}
+    </>
   );
 }
