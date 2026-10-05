@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useState, useEffect, useRef } from "react";
+import React, { useState, useEffect, useRef, useCallback } from "react";
 import {
   LiveKitRoom,
   RoomAudioRenderer,
@@ -12,7 +12,7 @@ import {
   isTrackReference,
 } from "@livekit/components-react";
 import { Track } from "livekit-client";
-import { UserProfile } from "@/lib/supabase";
+import { supabase, UserProfile } from "@/lib/supabase";
 import { fetchLiveKitToken } from "@/lib/livekit";
 import StudentAvatar from "@/components/StudentAvatar";
 import {
@@ -28,11 +28,11 @@ import {
   Send,
   X,
   FlipHorizontal,
-  RefreshCw,
   Flame,
   Coffee,
   Code,
   Music,
+  Users,
 } from "lucide-react";
 import confetti from "canvas-confetti";
 
@@ -51,6 +51,18 @@ const MATCH_TOPICS = [
   { id: "music", label: "Music & Indie Vibes 🎸", icon: Music },
 ];
 
+interface MatchPresence {
+  clientId: string;
+  userId: string;
+  userName: string;
+  avatar: string;
+  department: string;
+  topic: string;
+  joinedAt: number;
+  status: "searching" | "matched";
+  roomName?: string;
+}
+
 export default function RandomMatch({
   currentProfile,
   onEndMatch,
@@ -62,8 +74,6 @@ export default function RandomMatch({
   const [roomName, setRoomName] = useState<string>("");
   const [livekitToken, setLivekitToken] = useState<string>("");
   const [livekitUrl, setLivekitUrl] = useState<string>("");
-  const [isMuted, setIsMuted] = useState(false);
-  const [isVideoOff, setIsVideoOff] = useState(false);
   const [chatOpen, setChatOpen] = useState(false);
   const [chatMessages, setChatMessages] = useState<
     Array<{ sender: string; text: string; time: string; isSelf: boolean }>
@@ -72,8 +82,36 @@ export default function RandomMatch({
   const [searchTimer, setSearchTimer] = useState<number>(0);
   const [isSwappedLayout, setIsSwappedLayout] = useState(false);
   const [errorMsg, setErrorMsg] = useState("");
+  const [queueCount, setQueueCount] = useState<number>(0);
+  const [peerLeftNotice, setPeerLeftNotice] = useState<string>("");
 
+  // Unique client ID per browser tab to allow testing across multiple tabs
+  const clientIdRef = useRef<string>(
+    typeof window !== "undefined"
+      ? `client_${Math.random().toString(36).substring(2, 9)}_${Date.now().toString(36)}`
+      : "client_ssr"
+  );
+  const myClientId = clientIdRef.current;
+
+  // Refs for real-time coordinator
+  const matchStateRef = useRef<"idle" | "searching" | "connected">("idle");
+  const selectedTopicRef = useRef<string>("random");
+  const myJoinedAtRef = useRef<number>(0);
+  const isConnectingRef = useRef<boolean>(false);
+  const currentRoomNameRef = useRef<string>("");
+  const currentPeerClientIdRef = useRef<string | null>(null);
+  const recentlySkippedRef = useRef<Set<string>>(new Set());
   const searchingIntervalRef = useRef<NodeJS.Timeout | null>(null);
+  const channelRef = useRef<ReturnType<typeof supabase.channel> | null>(null);
+
+  // Sync refs with state
+  useEffect(() => {
+    matchStateRef.current = matchState;
+  }, [matchState]);
+
+  useEffect(() => {
+    selectedTopicRef.current = selectedTopic;
+  }, [selectedTopic]);
 
   // Sync call state with parent to hide navigation bars
   useEffect(() => {
@@ -84,104 +122,371 @@ export default function RandomMatch({
     };
   }, [matchState, livekitToken, onInCallChange]);
 
-  // If a direct room was requested via an invite
+  // Helper to connect to a LiveKit room
+  const connectToRoom = useCallback(
+    async (targetRoom: string) => {
+      try {
+        setErrorMsg("");
+        setPeerLeftNotice("");
+        if (searchingIntervalRef.current) clearInterval(searchingIntervalRef.current);
+        currentRoomNameRef.current = targetRoom;
+        setRoomName(targetRoom);
+
+        // Keep identity unique per tab/session to avoid LiveKit duplicate eviction
+        const sessionSuffix = myClientId.slice(-4);
+        const identity = currentProfile?.id
+          ? `${currentProfile.id}_${sessionSuffix}`
+          : `student_${myClientId}`;
+        const name = currentProfile?.full_name || "Campus Student";
+
+        const { token, url } = await fetchLiveKitToken(targetRoom, identity, name);
+        setLivekitToken(token);
+        setLivekitUrl(url);
+        setMatchState("connected");
+
+        try {
+          confetti({
+            particleCount: 25,
+            spread: 60,
+            origin: { y: 0.6 },
+          });
+        } catch {}
+      } catch (err: unknown) {
+        const error = err as Error;
+        console.error("Match connection error:", error);
+        setErrorMsg(error.message || "Failed to connect to LiveKit video server");
+        setMatchState("idle");
+        isConnectingRef.current = false;
+        if (channelRef.current) {
+          try {
+            channelRef.current.untrack();
+          } catch {}
+        }
+      }
+    },
+    [currentProfile, myClientId]
+  );
+
+  // If a direct room was requested via an invite from lounge
   useEffect(() => {
     if (directRoomName) {
       connectToRoom(directRoomName);
     }
-  }, [directRoomName]);
+  }, [directRoomName, connectToRoom]);
 
-  const connectToRoom = async (targetRoom: string) => {
-    try {
-      setErrorMsg("");
-      setMatchState("searching");
-      setRoomName(targetRoom);
+  // Evaluate matchmaking queue deterministically
+  const evaluateMatch = useCallback(() => {
+    if (matchStateRef.current !== "searching") return;
+    if (isConnectingRef.current) return;
+    if (!channelRef.current) return;
 
-      const identity = currentProfile?.id || `student_${Date.now().toString(36)}`;
-      const name = currentProfile?.full_name || "Campus Student";
+    const presState = channelRef.current.presenceState();
+    const searchers: MatchPresence[] = [];
 
-      const { token, url } = await fetchLiveKitToken(targetRoom, identity, name);
-      setLivekitToken(token);
-      setLivekitUrl(url);
+    Object.values(presState).forEach((presList: any) => {
+      presList.forEach((pres: any) => {
+        if (pres && pres.clientId && pres.status === "searching") {
+          searchers.push(pres);
+        }
+      });
+    });
 
-      // Short search delay simulation to mimic matching radar if not direct
-      if (!directRoomName) {
-        setTimeout(() => {
-          setMatchState("connected");
-          try {
-            confetti({
-              particleCount: 20,
-              spread: 50,
-              origin: { y: 0.6 },
-            });
-          } catch {}
-        }, 1600);
-      } else {
-        setMatchState("connected");
+    setQueueCount(searchers.length);
+
+    const myTopic = selectedTopicRef.current;
+    const myJoinedAt = myJoinedAtRef.current;
+    const waitSec = (Date.now() - myJoinedAt) / 1000;
+
+    // Filter available candidates
+    const eligiblePeers = searchers.filter((p) => {
+      if (p.clientId === myClientId) return false;
+      if (recentlySkippedRef.current.has(p.clientId)) return false;
+
+      // Topic matching:
+      // If either is "random", or topics match, or user has waited > 6s (expand search):
+      return (
+        myTopic === "random" ||
+        p.topic === "random" ||
+        p.topic === myTopic ||
+        waitSec > 6
+      );
+    });
+
+    if (eligiblePeers.length === 0) return;
+
+    // Pick peer who waited longest
+    eligiblePeers.sort((a, b) => (a.joinedAt || 0) - (b.joinedAt || 0));
+    const targetPeer = eligiblePeers[0];
+
+    // Deterministic host election:
+    // The user who joined earlier acts as Match Host. If tied, use string comparison of clientId.
+    const peerJoinedAt = targetPeer.joinedAt || 0;
+    const isHost =
+      myJoinedAt < peerJoinedAt ||
+      (myJoinedAt === peerJoinedAt && myClientId < targetPeer.clientId);
+
+    if (isHost) {
+      isConnectingRef.current = true;
+      currentPeerClientIdRef.current = targetPeer.clientId;
+      const matchRoom = `uiu_match_${Date.now()}_${Math.random().toString(36).substring(2, 7)}`;
+
+      channelRef.current.send({
+        type: "broadcast",
+        event: "match-found",
+        payload: {
+          hostClientId: myClientId,
+          peerClientId: targetPeer.clientId,
+          roomName: matchRoom,
+          topic: myTopic,
+        },
+      });
+
+      // Mark status as matched so no other client attempts to pair
+      channelRef.current.track({
+        clientId: myClientId,
+        status: "matched",
+        roomName: matchRoom,
+      });
+
+      connectToRoom(matchRoom);
+    }
+  }, [myClientId, connectToRoom]);
+
+  // Subscribe to Realtime Matchmaking Channel
+  useEffect(() => {
+    const channel = supabase.channel("campus-1on1-matchmaking", {
+      config: {
+        presence: { key: myClientId },
+        broadcast: { self: false },
+      },
+    });
+    channelRef.current = channel;
+
+    // Listen for presence changes
+    channel.on("presence", { event: "sync" }, () => {
+      evaluateMatch();
+    });
+
+    // Listen for incoming match proposal
+    channel.on("broadcast", { event: "match-found" }, async ({ payload }) => {
+      if (matchStateRef.current !== "searching") return;
+      if (payload.peerClientId !== myClientId) return;
+      if (isConnectingRef.current) return;
+
+      isConnectingRef.current = true;
+      currentPeerClientIdRef.current = payload.hostClientId;
+
+      channel.track({
+        clientId: myClientId,
+        status: "matched",
+        roomName: payload.roomName,
+      });
+
+      connectToRoom(payload.roomName);
+    });
+
+    // Peer skipped notification
+    channel.on("broadcast", { event: "peer-skipped" }, ({ payload }) => {
+      if (payload.roomName === currentRoomNameRef.current) {
+        setPeerLeftNotice("Your peer skipped to the next student 👋");
       }
-    } catch (err: unknown) {
-      const error = err as Error;
-      console.error("Match connection error:", error);
-      setErrorMsg(error.message || "Failed to connect to LiveKit video server");
-      setMatchState("idle");
+    });
+
+    // Peer ended call notification
+    channel.on("broadcast", { event: "peer-ended" }, ({ payload }) => {
+      if (payload.roomName === currentRoomNameRef.current) {
+        setPeerLeftNotice("Your peer left the call 👋");
+      }
+    });
+
+    // In-call text chat messages broadcast
+    channel.on("broadcast", { event: "chat-msg" }, ({ payload }) => {
+      if (payload.roomName === currentRoomNameRef.current) {
+        setChatMessages((prev) => [
+          ...prev,
+          {
+            sender: payload.sender,
+            text: payload.text,
+            time: payload.time,
+            isSelf: false,
+          },
+        ]);
+      }
+    });
+
+    channel.subscribe();
+
+    return () => {
+      try {
+        channel.untrack();
+        supabase.removeChannel(channel);
+      } catch {}
+    };
+  }, [myClientId, evaluateMatch, connectToRoom]);
+
+  // Track user in matchmaking presence
+  const trackSearching = async (topic: string) => {
+    if (!channelRef.current) return;
+    try {
+      await channelRef.current.track({
+        clientId: myClientId,
+        userId: currentProfile?.id || `anon_${myClientId}`,
+        userName: currentProfile?.full_name || "Campus Student",
+        avatar: currentProfile?.avatar || "/images/avatar-male.png",
+        department: currentProfile?.department || "CSE",
+        topic,
+        joinedAt: Date.now(),
+        status: "searching",
+      });
+    } catch (err) {
+      console.warn("Matchmaking track error:", err);
     }
   };
 
-  const startFindingMatch = () => {
+  // Start Matching
+  const startFindingMatch = async () => {
+    setErrorMsg("");
+    setPeerLeftNotice("");
     setMatchState("searching");
     setSearchTimer(0);
-
-    const roomBucket = Math.floor(Date.now() / (1000 * 60 * 30));
-    const randomSalt = Math.floor(Math.random() * 4);
-    const newRoomName = `campus_match_${selectedTopic}_${roomBucket}_${randomSalt}`;
+    myJoinedAtRef.current = Date.now();
+    isConnectingRef.current = false;
 
     if (searchingIntervalRef.current) clearInterval(searchingIntervalRef.current);
     searchingIntervalRef.current = setInterval(() => {
-      setSearchTimer((prev) => prev + 1);
+      setSearchTimer((prev) => {
+        const next = prev + 1;
+        // Periodic check to catch any queue events
+        if (next % 2 === 0) {
+          evaluateMatch();
+        }
+        return next;
+      });
     }, 1000);
 
-    setTimeout(() => {
-      if (searchingIntervalRef.current) clearInterval(searchingIntervalRef.current);
-      connectToRoom(newRoomName);
-    }, 1500);
+    await trackSearching(selectedTopic);
+    evaluateMatch();
   };
 
+  // Cancel Search
   const cancelSearch = () => {
     if (searchingIntervalRef.current) clearInterval(searchingIntervalRef.current);
     setMatchState("idle");
     setSearchTimer(0);
+    isConnectingRef.current = false;
+    if (channelRef.current) {
+      try {
+        channelRef.current.untrack();
+      } catch {}
+    }
   };
 
-  const skipToNextMatch = () => {
+  // Skip / Next Match
+  const skipToNextMatch = async () => {
+    if (channelRef.current && currentRoomNameRef.current) {
+      channelRef.current.send({
+        type: "broadcast",
+        event: "peer-skipped",
+        payload: {
+          roomName: currentRoomNameRef.current,
+          fromClientId: myClientId,
+        },
+      });
+    }
+
+    if (currentPeerClientIdRef.current) {
+      const prevPeer = currentPeerClientIdRef.current;
+      recentlySkippedRef.current.add(prevPeer);
+      setTimeout(() => {
+        recentlySkippedRef.current.delete(prevPeer);
+      }, 20000);
+    }
+
+    currentPeerClientIdRef.current = null;
+    currentRoomNameRef.current = "";
+    setPeerLeftNotice("");
     setLivekitToken("");
+    setChatMessages([]);
+    isConnectingRef.current = false;
     setMatchState("searching");
-    setChatMessages([]);
+    setSearchTimer(0);
+    myJoinedAtRef.current = Date.now();
 
-    const newSalt = Math.random().toString(36).substring(2, 7);
-    const nextRoom = `campus_match_${selectedTopic}_${Date.now()}_${newSalt}`;
-    connectToRoom(nextRoom);
+    if (searchingIntervalRef.current) clearInterval(searchingIntervalRef.current);
+    searchingIntervalRef.current = setInterval(() => {
+      setSearchTimer((prev) => {
+        const next = prev + 1;
+        if (next % 2 === 0) {
+          evaluateMatch();
+        }
+        return next;
+      });
+    }, 1000);
+
+    await trackSearching(selectedTopicRef.current);
+    evaluateMatch();
   };
 
+  // End Call / Exit
   const handleEndCall = () => {
+    if (channelRef.current && currentRoomNameRef.current) {
+      channelRef.current.send({
+        type: "broadcast",
+        event: "peer-ended",
+        payload: {
+          roomName: currentRoomNameRef.current,
+          fromClientId: myClientId,
+        },
+      });
+    }
+
+    if (searchingIntervalRef.current) clearInterval(searchingIntervalRef.current);
+    currentPeerClientIdRef.current = null;
+    currentRoomNameRef.current = "";
+    setPeerLeftNotice("");
     setLivekitToken("");
-    setMatchState("idle");
     setChatMessages([]);
+    isConnectingRef.current = false;
+    setMatchState("idle");
+    if (channelRef.current) {
+      try {
+        channelRef.current.untrack();
+      } catch {}
+    }
     onEndMatch();
   };
 
+  // Handle in-call text chat submit
   const handleSendMessage = (e: React.FormEvent) => {
     e.preventDefault();
     if (!chatInput.trim()) return;
 
+    const text = chatInput.trim();
+    const time = new Date().toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" });
+    const sender = currentProfile?.full_name || "Campus Student";
+
     const newMsg = {
-      sender: currentProfile?.full_name || "You",
-      text: chatInput.trim(),
-      time: new Date().toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" }),
+      sender: "You",
+      text,
+      time,
       isSelf: true,
     };
 
     setChatMessages((prev) => [...prev, newMsg]);
     setChatInput("");
+
+    if (channelRef.current && currentRoomNameRef.current) {
+      channelRef.current.send({
+        type: "broadcast",
+        event: "chat-msg",
+        payload: {
+          roomName: currentRoomNameRef.current,
+          sender,
+          text,
+          time,
+        },
+      });
+    }
   };
 
   return (
@@ -260,35 +565,59 @@ export default function RandomMatch({
         <div className="flex-1 flex flex-col items-center justify-center text-center space-y-6 animate-in fade-in duration-200">
           {/* Concentric Radar Rings */}
           <div className="relative flex items-center justify-center w-48 h-48">
-            <div className="absolute inset-0 rounded-full border border-zinc-800/80 radar-wave-1" />
-            <div className="absolute inset-0 rounded-full border border-zinc-700/60 radar-wave-2" />
-            <div className="absolute inset-0 rounded-full border border-zinc-600/40 radar-wave-3" />
+            <div className="absolute inset-0 rounded-full border border-orange-500/20 radar-wave-1" />
+            <div className="absolute inset-0 rounded-full border border-orange-500/30 radar-wave-2" />
+            <div className="absolute inset-0 rounded-full border border-orange-500/40 radar-wave-3" />
 
-            <div className="relative w-24 h-24 rounded-full bg-zinc-900 border border-zinc-700/80 shadow-xl flex flex-col items-center justify-center p-2 z-10">
-              <Search className="w-6 h-6 text-zinc-300 animate-pulse mb-1" />
-              <span className="text-[11px] font-semibold text-zinc-300">
+            <div className="relative w-24 h-24 rounded-full bg-zinc-900 border border-orange-500/50 shadow-xl shadow-orange-500/10 flex flex-col items-center justify-center p-2 z-10">
+              <Search className="w-6 h-6 text-orange-400 animate-pulse mb-1" />
+              <span className="text-[11px] font-semibold text-zinc-200">
                 {searchTimer}s
               </span>
             </div>
           </div>
 
-          <div className="space-y-1 max-w-sm">
+          <div className="space-y-1.5 max-w-sm">
+            <div className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full bg-zinc-900/90 border border-zinc-800 text-[11px] text-zinc-300">
+              <span className="w-2 h-2 rounded-full bg-emerald-400 animate-pulse" />
+              <span>
+                {queueCount > 1
+                  ? `${queueCount} students active in queue`
+                  : "Searching campus network..."}
+              </span>
+            </div>
             <h3 className="text-base font-bold text-zinc-100 tracking-tight">
-              Looking for a campus peer...
+              {queueCount > 1
+                ? "Peer found! Connecting video stream..."
+                : "Looking for another student..."}
             </h3>
             <p className="text-xs text-zinc-400">
-              Matching for: <span className="text-zinc-200 font-medium">{MATCH_TOPICS.find((t) => t.id === selectedTopic)?.label}</span>
+              Selected mood:{" "}
+              <span className="text-zinc-200 font-medium">
+                {MATCH_TOPICS.find((t) => t.id === selectedTopic)?.label}
+              </span>
             </p>
+            {searchTimer > 5 && selectedTopic !== "random" && (
+              <p className="text-[11px] text-orange-400/90 animate-pulse">
+                Expanding search to all moods for faster matching...
+              </p>
+            )}
           </div>
 
           <div className="flex items-center gap-2.5">
-            <button
-              onClick={skipToNextMatch}
-              className="px-4 py-2 rounded-xl bg-zinc-800 hover:bg-zinc-700 border border-zinc-700 text-xs font-semibold text-zinc-200 transition-colors flex items-center gap-1.5"
-            >
-              <RefreshCw className="w-3.5 h-3.5 animate-spin" />
-              Retry Next Room
-            </button>
+            {selectedTopic !== "random" && (
+              <button
+                onClick={() => {
+                  setSelectedTopic("random");
+                  selectedTopicRef.current = "random";
+                  trackSearching("random");
+                }}
+                className="px-4 py-2 rounded-xl bg-orange-600/20 hover:bg-orange-600/30 border border-orange-500/40 text-xs font-semibold text-orange-300 transition-colors flex items-center gap-1.5"
+              >
+                <Sparkles className="w-3.5 h-3.5" />
+                Match Any Mood
+              </button>
+            )}
 
             <button
               onClick={cancelSearch}
@@ -328,6 +657,7 @@ export default function RandomMatch({
             onSendMessage={handleSendMessage}
             isSwappedLayout={isSwappedLayout}
             onToggleSwap={() => setIsSwappedLayout(!isSwappedLayout)}
+            peerLeftNotice={peerLeftNotice}
           />
         </LiveKitRoom>
       )}
@@ -348,6 +678,7 @@ interface ConnectedMatchContentProps {
   onSendMessage: (e: React.FormEvent) => void;
   isSwappedLayout: boolean;
   onToggleSwap: () => void;
+  peerLeftNotice?: string;
 }
 
 function ConnectedMatchContent({
@@ -362,6 +693,7 @@ function ConnectedMatchContent({
   onSendMessage,
   isSwappedLayout,
   onToggleSwap,
+  peerLeftNotice,
 }: ConnectedMatchContentProps) {
   const room = useRoomContext();
   const participants = useParticipants();
@@ -369,6 +701,17 @@ function ConnectedMatchContent({
   const tracks = useTracks([Track.Source.Camera]);
   const [isCamToggling, setIsCamToggling] = useState(false);
   const [isMicToggling, setIsMicToggling] = useState(false);
+
+  const remoteParticipant = participants.find((p) => !p.isLocal);
+  const hasSeenPeerRef = useRef(false);
+
+  useEffect(() => {
+    if (remoteParticipant) {
+      hasSeenPeerRef.current = true;
+    }
+  }, [remoteParticipant]);
+
+  const isPeerDisconnected = Boolean(peerLeftNotice) || (hasSeenPeerRef.current && !remoteParticipant);
 
   const handleToggleCam = async () => {
     if (!room || !room.localParticipant || isCamToggling) return;
@@ -394,7 +737,6 @@ function ConnectedMatchContent({
     }
   };
 
-  const remoteParticipant = participants.find((p) => !p.isLocal);
   const remoteTrack = tracks.find(
     (t) =>
       !t.participant.isLocal &&
@@ -661,7 +1003,7 @@ function ConnectedMatchContent({
           <div className="flex items-center gap-3 px-4 py-2 rounded-2xl bg-zinc-900/90 border border-zinc-800/90 backdrop-blur-xl shadow-2xl">
             <button
               onClick={onSkip}
-              className="flex items-center gap-2 px-4 py-2 rounded-xl bg-orange-600 hover:bg-orange-500 text-white font-semibold text-xs shadow-sm active:scale-95 transition-all"
+              className="flex items-center gap-2 px-4 py-2 rounded-xl bg-orange-600 hover:bg-orange-500 text-white font-semibold text-xs shadow-sm active:scale-95 transition-all cursor-pointer"
             >
               <SkipForward className="w-4 h-4 text-white" />
               <span>Next Match</span>
@@ -709,7 +1051,7 @@ function ConnectedMatchContent({
 
             <button
               onClick={onEndCall}
-              className="p-2.5 rounded-xl bg-rose-600 hover:bg-rose-500 text-white border border-rose-500/40 active:scale-95 transition-all shadow-sm"
+              className="p-2.5 rounded-xl bg-rose-600 hover:bg-rose-500 text-white border border-rose-500/40 active:scale-95 transition-all shadow-sm cursor-pointer"
               title="End Call"
             >
               <PhoneOff className="w-4 h-4" />
@@ -718,7 +1060,37 @@ function ConnectedMatchContent({
         </div>
       </div>
 
-      {/* In-Call Text Chat Drawer Overlay (Used by both mobile & desktop) */}
+      {/* Disconnected / Peer Left Overlay */}
+      {isPeerDisconnected && (
+        <div className="absolute inset-0 z-50 bg-black/90 backdrop-blur-md flex flex-col items-center justify-center p-6 text-center animate-in fade-in duration-200">
+          <div className="w-16 h-16 rounded-2xl bg-zinc-900 border border-zinc-800 flex items-center justify-center mb-4 shadow-xl">
+            <PhoneOff className="w-7 h-7 text-rose-400" />
+          </div>
+          <h3 className="text-base sm:text-lg font-bold text-white mb-1.5">
+            {peerLeftNotice || "Your match left the conversation"}
+          </h3>
+          <p className="text-xs text-zinc-400 max-w-xs mb-6">
+            The student skipped or disconnected. Tap below to immediately match with someone else!
+          </p>
+          <div className="flex flex-col sm:flex-row items-center gap-3 w-full max-w-xs">
+            <button
+              onClick={onSkip}
+              className="w-full py-3 px-4 rounded-xl bg-orange-600 hover:bg-orange-500 text-white font-semibold text-xs flex items-center justify-center gap-2 active:scale-95 transition-all shadow-lg cursor-pointer"
+            >
+              <SkipForward className="w-4 h-4 text-white" />
+              <span>Find Next Match</span>
+            </button>
+            <button
+              onClick={onEndCall}
+              className="w-full py-3 px-4 rounded-xl bg-zinc-900 hover:bg-zinc-800 text-zinc-300 font-semibold text-xs border border-zinc-800 active:scale-95 transition-all cursor-pointer"
+            >
+              Exit to Lounge
+            </button>
+          </div>
+        </div>
+      )}
+
+      {/* In-Call Text Chat Drawer Overlay */}
       {chatOpen && (
         <div className="absolute top-0 right-0 bottom-0 w-full sm:w-80 bg-zinc-950/95 backdrop-blur-2xl border-l border-zinc-800 p-4 z-40 flex flex-col justify-between animate-in slide-in-from-right duration-200 shadow-2xl">
           <div className="flex items-center justify-between pb-3 border-b border-zinc-800">
@@ -782,4 +1154,3 @@ function ConnectedMatchContent({
     </div>
   );
 }
-
