@@ -165,8 +165,8 @@ export default function CampusHeader({
           )}
         </div>
 
-        {/* Right: Theme Toggle, User Profile Chip & Log Out */}
-        <div className="flex items-center gap-2">
+        {/* Right: Theme Toggle, User Profile Chip & Log Out (Desktop Only - mobile actions exist in Student ID tab) */}
+        <div className="hidden md:flex items-center gap-2">
           {/* Light / Dark Mode Toggle Button */}
           <button
             onClick={toggleTheme}
