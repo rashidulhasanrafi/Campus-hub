@@ -8,9 +8,9 @@ export const CREATOR_INFO = {
   department: "Department of CSE",
   institution: "United International University (UIU)",
   role: "UIU Student & Lead Developer",
-  // Default WhatsApp contact number (can be overridden via NEXT_PUBLIC_CREATOR_WHATSAPP in .env)
-  whatsappNumber: process.env.NEXT_PUBLIC_CREATOR_WHATSAPP || "8801700000000",
-  whatsappDisplayNumber: "+880 1700-000000",
+  whatsappNumber: process.env.NEXT_PUBLIC_CREATOR_WHATSAPP || "8801570222989",
+  whatsappDisplayNumber: "01570222989",
+  whatsappInternational: "+880 1570-222989",
   email: "rashidulhasanrafi@gmail.com",
 };
 
@@ -22,7 +22,10 @@ export function getWhatsAppFeedbackUrl(
   customMessage?: string
 ): string {
   // Strip non-digit characters for standard wa.me format
-  const rawNumber = CREATOR_INFO.whatsappNumber.replace(/[^0-9]/g, "");
+  let rawNumber = (CREATOR_INFO.whatsappNumber || "8801570222989").replace(/[^0-9]/g, "");
+  if (rawNumber.startsWith("0")) {
+    rawNumber = "88" + rawNumber;
+  }
   
   let text = `Hello Rafi! I am using UIU Campus Hub and wanted to share some feedback: `;
 
