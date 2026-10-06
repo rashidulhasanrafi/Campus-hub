@@ -475,8 +475,8 @@ export default function GroupHangout({
           audio={true}
           options={roomOptions}
           onError={(err) => {
-            console.error("LiveKit error:", err);
-            setErrorMsg(err.message || "Failed to connect to LiveKit room");
+            console.error("Room connection error:", err);
+            setErrorMsg("Failed to connect to hangout room. Please try again.");
           }}
           onMediaDeviceFailure={(failure) => {
             console.warn("Media device failure:", failure);

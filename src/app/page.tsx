@@ -26,6 +26,7 @@ import IncomingCallModal from "@/components/IncomingCallModal";
 import UiuBusTransition from "@/components/UiuBusTransition";
 import { Sparkles, Radio } from "lucide-react";
 import { useUiMode } from "@/context/UiModeContext";
+import { CREATOR_INFO, getWhatsAppFeedbackUrl } from "@/config/creator";
 
 export default function CampusHubHome() {
   const { isLightUi } = useUiMode();
@@ -361,6 +362,29 @@ export default function CampusHubHome() {
                 )}
               </div>
             </main>
+
+            {/* Desktop / Global App Footer with Creator Credits */}
+            {!isInCall && (
+              <footer className="w-full text-center py-4 px-4 pb-24 md:pb-6 text-[11px] text-zinc-500 border-t border-zinc-900/60 mt-auto">
+                <p className="font-medium text-zinc-400">
+                  App Created by{" "}
+                  <span className="text-orange-400 font-bold">{CREATOR_INFO.name}</span> •{" "}
+                  <span>{CREATOR_INFO.department}, UIU Student</span>
+                </p>
+                <div className="flex items-center justify-center gap-2 text-[10px] text-zinc-500 mt-1">
+                  <a
+                    href={getWhatsAppFeedbackUrl("general")}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="inline-flex items-center gap-1 text-emerald-400 hover:text-emerald-300 transition-colors font-medium"
+                  >
+                    <span>💬 WhatsApp Feedback / Bug Report: {CREATOR_INFO.whatsappDisplayNumber}</span>
+                  </a>
+                  <span>•</span>
+                  <span>UIU Campus Hub</span>
+                </div>
+              </footer>
+            )}
 
             {/* Persistent Mobile Bottom Navigation Bar - Completely hidden during calls */}
             {!isInCall && (

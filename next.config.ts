@@ -1,7 +1,9 @@
 import type { NextConfig } from "next";
 
 const nextConfig: NextConfig = {
-  /* config options here */
+  // Security Hardening: Never emit browser source maps in production to prevent code inspection
+  productionBrowserSourceMaps: false,
+  poweredByHeader: false,
 };
 
 export default nextConfig;

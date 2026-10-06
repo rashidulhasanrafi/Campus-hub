@@ -32,6 +32,14 @@ yarn-error.log*
 
 # env files (can opt-in for committing if needed)
 .env*
+.env*.local
+
+# Database & Backend Schema Security (Never expose SQL/migrations to public git)
+supabase/
+*.sql
+*.sql.gz
+database/
+migrations/
 
 # vercel
 .vercel

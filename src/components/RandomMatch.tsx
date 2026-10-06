@@ -158,7 +158,7 @@ export default function RandomMatch({
       } catch (err: unknown) {
         const error = err as Error;
         console.error("Match connection error:", error);
-        setErrorMsg(error.message || "Failed to connect to LiveKit video server");
+        setErrorMsg("Failed to connect to video call server. Please try again.");
         setMatchState("idle");
         isConnectingRef.current = false;
         if (channelRef.current) {
@@ -559,7 +559,7 @@ export default function RandomMatch({
           </button>
 
           <p className="text-[11px] text-zinc-500">
-            Powered by LiveKit Cloud WebRTC • Camera & Mic enabled on join
+            Secure Campus Match • Camera & Mic enabled on join
           </p>
         </div>
       )}
@@ -642,7 +642,7 @@ export default function RandomMatch({
           video={isLightUi ? { resolution: { width: 1280, height: 720, frameRate: 30 } } : true}
           audio={true}
           options={roomOptions}
-          onError={(err) => setErrorMsg(err.message || "LiveKit connection error")}
+          onError={(err) => setErrorMsg(err?.message || "Video connection error. Please reconnect.")}
           onMediaDeviceFailure={(failure) => {
             console.warn("Media device failure:", failure);
             setErrorMsg("Could not access camera or microphone. Please check browser permissions.");
