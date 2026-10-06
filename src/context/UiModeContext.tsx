@@ -29,13 +29,34 @@ export function UiModeProvider({ children }: { children: React.ReactNode }) {
       if (stored === "light" || stored === "heavy") {
         setUiModeState(stored);
       } else {
-        // Default to heavy mode so the illustrated custom icons are displayed
-        setUiModeState("heavy");
+        // Smart default: If on mobile / Android WebView, default to light UI to prevent overheating
+        const isMobile =
+          typeof window !== "undefined" &&
+          (/Android|webOS|iPhone|iPad|iPod|BlackBerry|IEMobile|Opera Mini|Mobile|wv/i.test(
+            navigator.userAgent || ""
+          ) ||
+            window.innerWidth < 768);
+
+        setUiModeState(isMobile ? "light" : "heavy");
       }
     } catch {
       setUiModeState("heavy");
     }
   }, []);
+
+  // Sync data-ui-mode to document root so global lightweight CSS styles apply
+  useEffect(() => {
+    if (typeof document !== "undefined") {
+      document.documentElement.setAttribute("data-ui-mode", uiMode);
+      if (uiMode === "light") {
+        document.documentElement.classList.add("light-ui-mode");
+        document.documentElement.classList.remove("heavy-ui-mode");
+      } else {
+        document.documentElement.classList.add("heavy-ui-mode");
+        document.documentElement.classList.remove("light-ui-mode");
+      }
+    }
+  }, [uiMode]);
 
   const setUiMode = (mode: UiMode) => {
     setUiModeState(mode);

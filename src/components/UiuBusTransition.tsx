@@ -9,28 +9,27 @@ interface UiuBusTransitionProps {
 
 export default function UiuBusTransition({ onComplete }: UiuBusTransitionProps) {
   // Timeline Stages:
-  // 1: "bus" (Bus driving from right to left with orange energy wave erupting from rear bumper) -> 0s to 5.0s
-  // 2: "welcome" (Screen is full orange; Welcome typography appears within 1s, displays for 2s; 3.0s total orange screen) -> 5.0s to 8.0s
-  // 3: "frosted" (Frosted translucent glass sheet dissolving to reveal real dashboard) -> 8.0s to 8.65s
+  // 1: "bus" (Bus driving from right to left with orange energy wave) -> 0s to 3.0s (3s pass)
+  // 2: "welcome" (Screen is full orange; "Welcome to UIU Campus Hub" typography appears and displays for 2.0s) -> 3.0s to 5.0s
+  // 3: "frosted" (Smooth dissolve into real dashboard UI within 2s) -> 4.6s to 5.0s
   const [stage, setStage] = useState<"bus" | "welcome" | "frosted">("bus");
 
   useEffect(() => {
-    // Stage 1: Bus driving across the screen takes 5.0 seconds
+    // Stage 1: Bus driving across the screen takes 3.0 seconds
     const tWelcome = setTimeout(() => {
       setStage("welcome");
-    }, 5000);
+    }, 3000);
 
-    // Stage 2: Orange page with Welcome typography visible for 3.0 seconds (5.0s -> 8.0s)
-    // Within 1st second (5.0s -> 6.0s), "Welcome to Campus Hub" appears smoothly.
-    // For 2.0 seconds (6.0s -> 8.0s), it displays, and at 8.0s departs.
+    // Stage 2: Orange page with "Welcome to UIU Campus Hub" displays for 2.0 seconds
+    // At 4.6s, smoothly starts dissolving so that exactly at 5.0s total the UI arrives
     const tFrosted = setTimeout(() => {
       setStage("frosted");
-    }, 8000);
+    }, 4600);
 
-    // Stage 3: Frosted glass reveal dissolves into real dashboard (8.0s -> 8.65s)
+    // Within 2 seconds of orange page, real UI is fully active (at 5.0s)
     const tComplete = setTimeout(() => {
       onComplete();
-    }, 8650);
+    }, 5000);
 
     return () => {
       clearTimeout(tWelcome);
@@ -47,19 +46,19 @@ export default function UiuBusTransition({ onComplete }: UiuBusTransitionProps) 
         animate={{
           opacity: stage === "frosted" ? 0 : 1,
         }}
-        transition={{ duration: 0.6, ease: "easeOut" }}
+        transition={{ duration: 0.4, ease: "easeOut" }}
         className="absolute inset-0 bg-[#07090f]/85 backdrop-grayscale backdrop-contrast-125 z-0"
       />
 
       {/* 2. STAGE 1: MOVING ASSEMBLY (BUS AT FRONT + DYNAMIC ORANGE WAKE ERUPTING FROM REAR BUMPER) */}
-      {/* Drives across the screen for 5.0 seconds */}
+      {/* Drives across the screen for 3.0 seconds */}
       <motion.div
         initial={{ x: "100vw" }}
         animate={{
           x: "calc(-1 * (min(860px, 94vw) + 340px))",
         }}
         transition={{
-          duration: 5.0,
+          duration: 3.0,
           ease: [0.25, 0.1, 0.25, 1], // Smooth, natural automotive momentum
         }}
         className="absolute inset-y-0 left-0 flex flex-row pointer-events-none will-change-transform z-20"
@@ -126,7 +125,7 @@ export default function UiuBusTransition({ onComplete }: UiuBusTransitionProps) 
           animate={{
             opacity: stage === "frosted" ? 0 : 1,
           }}
-          transition={{ duration: 0.65, ease: "easeInOut" }}
+          transition={{ duration: 0.4, ease: "easeInOut" }}
           className="relative h-full flex flex-row shrink-0 overflow-visible"
           style={{
             marginLeft: "-1.5%", // Flush against rear bumper with zero gap
@@ -192,14 +191,14 @@ export default function UiuBusTransition({ onComplete }: UiuBusTransitionProps) 
         </motion.div>
       </motion.div>
 
-      {/* 3. STAGE 2: BOLD MODERN WELCOME TYPOGRAPHY (APPEARS WITHIN 1 SEC, VIEWED FOR 2 SECS OVER FULL ORANGE SCREEN) */}
+      {/* 3. STAGE 2: BOLD MODERN WELCOME TYPOGRAPHY (APPEARS SWIFTLY, DISPLAYS OVER FULL ORANGE SCREEN FOR 2 SECS) */}
       <AnimatePresence>
         {stage === "welcome" && (
           <motion.div
-            initial={{ opacity: 0, scale: 0.9, y: 18 }}
+            initial={{ opacity: 0, scale: 0.92, y: 14 }}
             animate={{ opacity: 1, scale: 1, y: 0 }}
-            exit={{ opacity: 0, scale: 1.05, filter: "blur(12px)" }}
-            transition={{ duration: 0.75, ease: [0.16, 1, 0.3, 1] }}
+            exit={{ opacity: 0, scale: 1.04, filter: "blur(8px)" }}
+            transition={{ duration: 0.45, ease: [0.16, 1, 0.3, 1] }}
             className="absolute inset-0 z-40 flex flex-col items-center justify-center text-center px-4"
           >
             {/* Ambient Radiant Center Glow */}
@@ -215,7 +214,7 @@ export default function UiuBusTransition({ onComplete }: UiuBusTransitionProps) 
             <h1 className="text-3xl sm:text-5xl md:text-6xl font-black text-white tracking-tight drop-shadow-[0_4px_30px_rgba(0,0,0,0.4)]">
               Welcome to{" "}
               <span className="text-amber-200 drop-shadow-[0_0_25px_rgba(255,255,255,0.7)]">
-                Campus Hub
+                UIU Campus Hub
               </span>
             </h1>
 
@@ -234,7 +233,7 @@ export default function UiuBusTransition({ onComplete }: UiuBusTransitionProps) 
           opacity: stage === "frosted" ? 0 : 1,
         }}
         transition={{
-          duration: 0.75,
+          duration: 0.4,
           ease: [0.16, 1, 0.3, 1],
         }}
         className={`absolute inset-0 z-30 transition-all pointer-events-none ${

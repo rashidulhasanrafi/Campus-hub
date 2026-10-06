@@ -280,17 +280,19 @@ export default function CampusHubHome() {
       ) : (
         /* 4. Authenticated & Profile Ready: Render Campus Hub Application */
         <div className="relative min-h-screen flex flex-col bg-[#090a0f] text-zinc-100 selection:bg-orange-600 selection:text-white overflow-x-hidden">
-          {/* Background Subtle Watermark: Campus Hub Emblem centered with 5% opacity */}
-          <div
-            aria-hidden="true"
-            className="fixed inset-0 pointer-events-none z-0 flex items-center justify-center overflow-hidden select-none"
-          >
-            <img
-              src="/images/campus-hub-emblem-tight.png"
-              alt=""
-              className="uiu-watermark w-[720px] sm:w-[920px] md:w-[1080px] max-w-none opacity-[0.05] filter contrast-125 object-contain"
-            />
-          </div>
+          {/* Background Subtle Watermark: Campus Hub Emblem centered with 5% opacity - Hidden in Light UI to eliminate GPU compositing overhead & overheating */}
+          {!isLightUi && (
+            <div
+              aria-hidden="true"
+              className="fixed inset-0 pointer-events-none z-0 flex items-center justify-center overflow-hidden select-none"
+            >
+              <img
+                src="/images/campus-hub-emblem-tight.png"
+                alt=""
+                className="uiu-watermark w-[720px] sm:w-[920px] md:w-[1080px] max-w-none opacity-[0.05] filter contrast-125 object-contain"
+              />
+            </div>
+          )}
 
           <div className="relative z-10 flex flex-col flex-1 min-h-screen">
             {/* Global Campus Header with Active Status & Sign Out - Completely hidden during calls */}
@@ -355,7 +357,6 @@ export default function CampusHubHome() {
                     onOpenEditModal={() => setEditProfileOpen(true)}
                     onUpdateStatus={handleStatusChange}
                     onSignOut={handleSignOut}
-                    onPlayBusTransition={() => setShowBusTransition(true)}
                   />
                 )}
               </div>

@@ -552,5 +552,87 @@ body.light,
   animation: orange-surge-expand 0.55s infinite ease-out 0.42s;
 }
 
+/* ========================================================
+   LIGHT UI MODE: ULTRA-LIGHTWEIGHT ZERO-OVERHEAT ENGINE
+   Targeted for Android WebView & 2GB RAM budget phones:
+   - Strips expensive GPU backdrop-blur passes
+   - Removes background watermark images
+   - Freezes idle continuous radar & infinite loop animations
+   - Caps shadow compositing to eliminate GPU thermal throttling
+   ======================================================== */
+[data-ui-mode="light"],
+.light-ui-mode {
+  /* 1. Hide background watermark and logo emblems completely */
+  .uiu-watermark {
+    display: none !important;
+  }
+
+  /* 2. Disable heavy GPU backdrop-filter blur across panels and docks */
+  .glass-panel,
+  .glass-dock,
+  .liquid-glass-bar,
+  .liquid-glass-docked-bar,
+  .liquid-glass-pill,
+  [class*="backdrop-blur-"] {
+    backdrop-filter: none !important;
+    -webkit-backdrop-filter: none !important;
+  }
+
+  /* 3. Solid high-opacity lightweight background fills (Dark Theme) */
+  .glass-panel {
+    background-color: #0f1118 !important;
+    border-color: rgba(255, 255, 255, 0.08) !important;
+  }
+
+  .glass-dock,
+  .liquid-glass-docked-bar {
+    background-color: #090a0f !important;
+    border-top-color: rgba(255, 255, 255, 0.1) !important;
+    box-shadow: 0 -4px 16px rgba(0, 0, 0, 0.5) !important;
+  }
+
+  /* 4. Active Pill: Lightweight solid UIU Orange with zero GPU blur */
+  .liquid-glass-pill {
+    background: #ea580c !important;
+    border-color: #f97316 !important;
+    box-shadow: 0 2px 8px rgba(234, 88, 12, 0.3) !important;
+  }
+
+  /* 5. Freeze continuous CPU/GPU radar pulse waves when searching */
+  .radar-wave-1,
+  .radar-wave-2,
+  .radar-wave-3 {
+    animation: none !important;
+    opacity: 0.12 !important;
+  }
+
+  /* 6. Simplify heavy multi-stop box shadows */
+  .shadow-2xl {
+    box-shadow: 0 4px 12px rgba(0, 0, 0, 0.35) !important;
+  }
+
+  /* 7. Optimize text rendering for battery efficiency on low-end chips */
+  text-rendering: optimizeSpeed;
+}
+
+/* Light theme overrides when Light UI mode is active */
+[data-ui-mode="light"][data-theme="light"],
+.light-ui-mode.light,
+[data-theme="light"] .light-ui-mode {
+  .glass-dock,
+  .liquid-glass-docked-bar {
+    background-color: #ffffff !important;
+    border-top-color: #e2e8f0 !important;
+    box-shadow: 0 -2px 10px rgba(0, 0, 0, 0.04) !important;
+  }
+
+  .liquid-glass-pill {
+    background: #ea580c !important;
+    color: #ffffff !important;
+    border-color: #ea580c !important;
+    box-shadow: 0 2px 6px rgba(234, 88, 12, 0.25) !important;
+  }
+}
+
 
 

@@ -13,7 +13,8 @@ import {
 } from "@livekit/components-react";
 import { Track } from "livekit-client";
 import { supabase, UserProfile } from "@/lib/supabase";
-import { fetchLiveKitToken } from "@/lib/livekit";
+import { fetchLiveKitToken, getOptimalLiveKitOptions } from "@/lib/livekit";
+import { useUiMode } from "@/context/UiModeContext";
 import StudentAvatar from "@/components/StudentAvatar";
 import {
   Video,
@@ -69,6 +70,9 @@ export default function RandomMatch({
   directRoomName,
   onInCallChange,
 }: RandomMatchProps) {
+  const { isLightUi } = useUiMode();
+  const roomOptions = React.useMemo(() => getOptimalLiveKitOptions(isLightUi), [isLightUi]);
+
   const [selectedTopic, setSelectedTopic] = useState("random");
   const [matchState, setMatchState] = useState<"idle" | "searching" | "connected">("idle");
   const [roomName, setRoomName] = useState<string>("");
@@ -635,8 +639,9 @@ export default function RandomMatch({
           serverUrl={livekitUrl}
           token={livekitToken}
           connect={true}
-          video={true}
+          video={isLightUi ? { resolution: { width: 1280, height: 720, frameRate: 30 } } : true}
           audio={true}
+          options={roomOptions}
           onError={(err) => setErrorMsg(err.message || "LiveKit connection error")}
           onMediaDeviceFailure={(failure) => {
             console.warn("Media device failure:", failure);

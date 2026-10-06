@@ -1284,15 +1284,6 @@ export default function AuthScreen({
                   >
                     Create new account
                   </button>
-
-                  <button
-                    type="button"
-                    onClick={() => onStartBusTransition?.()}
-                    className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-slate-900/80 hover:bg-orange-600/20 text-slate-400 hover:text-orange-400 border border-slate-800 hover:border-orange-500/40 text-[11px] font-semibold transition-all cursor-pointer mt-1"
-                  >
-                    <span>🚌</span>
-                    <span>Preview UIU Bus Transition</span>
-                  </button>
                 </div>
               </form>
             )}

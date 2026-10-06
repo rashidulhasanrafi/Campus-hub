@@ -105,3 +105,74 @@ export async function fetchLiveKitToken(
     throw err;
   }
 }
+
+import { RoomOptions, VideoPresets } from "livekit-client";
+
+/**
+ * Detect mobile / Android WebView / small-screen low-end device
+ */
+export function isMobileOrLowEndDevice(): boolean {
+  if (typeof window === "undefined") return false;
+  const ua = navigator.userAgent || "";
+  const isMobileUa = /Android|webOS|iPhone|iPad|iPod|BlackBerry|IEMobile|Opera Mini|Mobile|wv/i.test(ua);
+  const isSmallScreen = window.innerWidth < 768;
+  return isMobileUa || isSmallScreen;
+}
+
+/**
+ * Returns dynamic RoomOptions for LiveKit WebRTC video calls.
+ * When Light UI is active or running on a mobile device / Android WebView:
+ * - Dynamic resolution strictly capped at max 720p (1280x720) and 30fps
+ * - Dynamically adapts and pauses invisible streams (dynacast & adaptiveStream)
+ * - VP8 codec with multi-layer simulcast (180p, 360p, 720p)
+ * - Max bitrate capped to 1.2 Mbps to prevent phone overheating & thermal throttling
+ * On PC with Heavy UI:
+ * - Unrestricted max resolution (1080p)
+ */
+export function getOptimalLiveKitOptions(isLightUi: boolean): RoomOptions {
+  const isMobile = isMobileOrLowEndDevice();
+  const useLightweight = isLightUi || isMobile;
+
+  if (useLightweight) {
+    return {
+      adaptiveStream: true,
+      dynacast: true,
+      stopLocalTrackOnUnpublish: true,
+      videoCaptureDefaults: {
+        resolution: {
+          width: 1280,
+          height: 720,
+          frameRate: 30,
+        },
+        facingMode: "user",
+      },
+      publishDefaults: {
+        simulcast: true,
+        videoSimulcastLayers: [
+          VideoPresets.h180,
+          VideoPresets.h360,
+          VideoPresets.h720,
+        ],
+        videoCodec: "vp8",
+        videoEncoding: {
+          maxBitrate: 1_200_000, // 1.2 Mbps cap protects against GPU/CPU thermal runaway
+          maxFramerate: 30,
+        },
+      },
+    };
+  }
+
+  // Full / Unrestricted for PC when Light UI is off
+  return {
+    adaptiveStream: true,
+    dynacast: true,
+    stopLocalTrackOnUnpublish: true,
+    videoCaptureDefaults: {
+      resolution: VideoPresets.h1080.resolution,
+    },
+    publishDefaults: {
+      simulcast: true,
+      videoCodec: "vp8",
+    },
+  };
+}

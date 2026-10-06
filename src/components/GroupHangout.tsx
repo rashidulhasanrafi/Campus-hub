@@ -16,6 +16,7 @@ import { UserProfile, supabase } from "@/lib/supabase";
 import {
   HangoutRoomConfig,
   fetchLiveKitToken,
+  getOptimalLiveKitOptions,
 } from "@/lib/livekit";
 import StudentAvatar from "@/components/StudentAvatar";
 import { useUiMode } from "@/context/UiModeContext";
@@ -62,6 +63,7 @@ export default function GroupHangout({
   onInCallChange,
 }: GroupHangoutProps) {
   const { isLightUi } = useUiMode();
+  const roomOptions = React.useMemo(() => getOptimalLiveKitOptions(isLightUi), [isLightUi]);
   // Dynamic ephemeral rooms only (no demo rooms)
   const [rooms, setRooms] = useState<HangoutRoomConfig[]>([]);
   const [roomParticipantCounts, setRoomParticipantCounts] = useState<Record<string, number>>({});
@@ -469,8 +471,9 @@ export default function GroupHangout({
           serverUrl={livekitUrl}
           token={livekitToken}
           connect={true}
-          video={true}
+          video={isLightUi ? { resolution: { width: 1280, height: 720, frameRate: 30 } } : true}
           audio={true}
+          options={roomOptions}
           onError={(err) => {
             console.error("LiveKit error:", err);
             setErrorMsg(err.message || "Failed to connect to LiveKit room");

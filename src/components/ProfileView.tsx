@@ -34,7 +34,6 @@ interface ProfileViewProps {
   onOpenEditModal: () => void;
   onUpdateStatus: (status: string) => void;
   onSignOut?: () => void;
-  onPlayBusTransition?: () => void;
 }
 
 export default function ProfileView({
@@ -42,7 +41,6 @@ export default function ProfileView({
   onOpenEditModal,
   onUpdateStatus,
   onSignOut,
-  onPlayBusTransition,
 }: ProfileViewProps) {
   const { isDark, toggleTheme } = useTheme();
   const { isLightUi, toggleUiMode, setUiMode } = useUiMode();
@@ -78,12 +76,14 @@ export default function ProfileView({
 
       {/* 2. DIGITAL STUDENT ID CARD - Sleek UIU Badge */}
       <div className="relative overflow-hidden rounded-2xl p-5 sm:p-7 bg-zinc-900/60 border border-zinc-800/80 hover:border-orange-500/30 backdrop-blur-md shadow-sm transition-colors">
-        {/* Subtle Watermark on ID Card */}
-        <img
-          src="/images/campus-hub-emblem-tight.png"
-          alt=""
-          className="absolute -right-8 -bottom-8 w-56 h-auto opacity-[0.06] pointer-events-none select-none filter contrast-125"
-        />
+        {/* Subtle Watermark on ID Card - Hidden in Light UI to avoid GPU rendering on low-end phones */}
+        {!isLightUi && (
+          <img
+            src="/images/campus-hub-emblem-tight.png"
+            alt=""
+            className="absolute -right-8 -bottom-8 w-56 h-auto opacity-[0.06] pointer-events-none select-none filter contrast-125"
+          />
+        )}
 
         <div className="relative z-10 flex flex-col sm:flex-row items-center sm:items-start justify-between gap-5">
           <div className="flex flex-col sm:flex-row items-center sm:items-start gap-4 text-center sm:text-left">
@@ -116,6 +116,41 @@ export default function ProfileView({
                 </span>
               </div>
             </div>
+          </div>
+
+          {/* Quick UI Mode Switch directly inside Student ID Card (Mobile & Desktop) */}
+          <div className="flex flex-col items-center sm:items-end gap-1.5 w-full sm:w-auto">
+            <button
+              type="button"
+              onClick={toggleUiMode}
+              title={
+                isLightUi
+                  ? "Light Mode UI is ON (Dynamic 720p 30fps video calls, no background logos, zero overheat on 2GB RAM phones). Tap to switch to Heavy Mode UI."
+                  : "Heavy Mode UI is ON (3D illustrated icons, ambient watermarks). Tap to switch to Light Mode UI."
+              }
+              className={`flex items-center gap-2.5 px-3 py-1.5 rounded-xl border text-xs font-semibold transition-all active:scale-95 shadow-sm ${
+                isLightUi
+                  ? "bg-orange-500/15 border-orange-500/50 text-orange-300 ring-1 ring-orange-500/30"
+                  : "bg-zinc-800/90 border-zinc-700/80 text-zinc-300 hover:text-white hover:border-zinc-600"
+              }`}
+            >
+              <div className="flex flex-col text-left">
+                <span className="text-[10px] uppercase tracking-wider font-bold flex items-center gap-1">
+                  <Sliders className="w-3 h-3 text-orange-400" />
+                  {isLightUi ? "Light UI (Active)" : "Heavy UI (Active)"}
+                </span>
+                <span className="text-[9px] text-zinc-400 font-normal">
+                  {isLightUi ? "Max 720p 30fps • 0 Heat" : "3D Icons • Unrestricted"}
+                </span>
+              </div>
+              <div
+                className={`w-7 h-3.5 rounded-full p-0.5 transition-colors duration-200 flex items-center ml-1 ${
+                  isLightUi ? "bg-orange-500 justify-end" : "bg-zinc-700 justify-start"
+                }`}
+              >
+                <div className="w-2.5 h-2.5 rounded-full bg-white shadow-sm" />
+              </div>
+            </button>
           </div>
         </div>
 
@@ -277,13 +312,18 @@ export default function ProfileView({
         </div>
       </div>
 
-      {/* 5B. UI ICON MODE (LIGHT MODE UI vs HEAVY MODE UI) */}
+      {/* 5B. UI & PERFORMANCE MODE (LIGHT MODE UI vs HEAVY MODE UI) */}
       <div className="space-y-3">
         <div className="flex items-center justify-between">
-          <h3 className="text-xs font-semibold text-zinc-400 uppercase tracking-wider flex items-center gap-2">
-            <Sliders className="w-3.5 h-3.5 text-orange-400" />
-            UI Icon Mode (Light Mode UI)
-          </h3>
+          <div>
+            <h3 className="text-xs font-semibold text-zinc-400 uppercase tracking-wider flex items-center gap-2">
+              <Sliders className="w-3.5 h-3.5 text-orange-400" />
+              Performance & UI Mode (Light UI)
+            </h3>
+            <p className="text-[11px] text-zinc-500 mt-0.5">
+              Optimized for Android WebView & 2GB RAM phones (prevents overheating)
+            </p>
+          </div>
           <button
             type="button"
             onClick={toggleUiMode}
@@ -304,7 +344,7 @@ export default function ProfileView({
           </button>
         </div>
 
-        <div className="grid grid-cols-2 gap-3">
+        <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
           {/* Heavy UI Option */}
           <button
             type="button"
@@ -343,8 +383,10 @@ export default function ProfileView({
               {!isLightUi && <Check className="w-3.5 h-3.5 text-orange-400" />}
             </div>
             <div>
-              <span className="text-xs font-semibold text-zinc-200 block">Heavy Mode UI</span>
-              <span className="text-[10px] text-zinc-400">Custom 3D / Illustrated Icons</span>
+              <span className="text-xs font-semibold text-zinc-200 block">Heavy Mode UI (Default)</span>
+              <span className="text-[10px] text-zinc-400 leading-tight block mt-0.5">
+                Custom 3D illustrated icons, ambient background watermark, maximum desktop fidelity.
+              </span>
             </div>
           </button>
 
@@ -370,39 +412,16 @@ export default function ProfileView({
               {isLightUi && <Check className="w-3.5 h-3.5 text-orange-400" />}
             </div>
             <div>
-              <span className="text-xs font-semibold text-zinc-200 block">Light Mode UI</span>
-              <span className="text-[10px] text-zinc-400">Clean Classic Vector Icons</span>
+              <span className="text-xs font-semibold text-zinc-200 block">
+                Light Mode UI <span className="text-orange-400 text-[10px] font-bold">★ Zero Overheat</span>
+              </span>
+              <span className="text-[10px] text-zinc-400 leading-tight block mt-0.5">
+                Dynamic max 720p @ 30fps video calls, no background logos or heavy blurs. Smooth for 2GB RAM phones.
+              </span>
             </div>
           </button>
         </div>
       </div>
-
-      {/* 5C. CINEMATIC UIU BUS ENTRANCE REPLAY */}
-      {onPlayBusTransition && (
-        <div className="rounded-xl bg-zinc-900/40 p-4 border border-zinc-800/80 flex flex-col sm:flex-row items-center justify-between gap-4">
-          <div className="flex items-center gap-3 text-center sm:text-left">
-            <div className="w-9 h-9 rounded-xl bg-orange-500/10 border border-orange-500/30 flex items-center justify-center text-orange-400 text-lg shadow-sm shrink-0">
-              🚌
-            </div>
-            <div>
-              <p className="text-xs font-semibold text-zinc-200">
-                UIU Bus Cinematic Entrance
-              </p>
-              <p className="text-[11px] text-zinc-400">
-                Replay signature campus transit login animation
-              </p>
-            </div>
-          </div>
-
-          <button
-            type="button"
-            onClick={onPlayBusTransition}
-            className="w-full sm:w-auto px-4 py-2 rounded-lg bg-orange-600 hover:bg-orange-500 active:scale-95 text-white font-semibold text-xs transition-all shadow-md shadow-orange-600/20 flex items-center justify-center gap-2 shrink-0 cursor-pointer"
-          >
-            <span>🚌 Replay Animation</span>
-          </button>
-        </div>
-      )}
 
       {/* 6. ACCOUNT SESSION & LOG OUT */}
       {onSignOut && (
