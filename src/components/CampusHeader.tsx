@@ -23,6 +23,7 @@ import {
   Moon,
   Bell,
   BellOff,
+  UserCheck,
 } from "lucide-react";
 import { motion } from "framer-motion";
 import { getWhatsAppFeedbackUrl } from "@/config/creator";
@@ -34,8 +35,9 @@ interface CampusHeaderProps {
   onStatusChange: (newStatus: string) => void;
   onToggleCallRestriction?: () => void;
   onSignOut?: () => void;
-  currentTab?: "lounge" | "match" | "hangouts" | "profile";
-  onTabChange?: (tab: "lounge" | "match" | "hangouts" | "profile") => void;
+  currentTab?: "lounge" | "match" | "hangouts" | "friends" | "profile";
+  onTabChange?: (tab: "lounge" | "match" | "hangouts" | "friends" | "profile") => void;
+  pendingRequestsCount?: number;
 }
 
 export default function CampusHeader({
@@ -47,6 +49,7 @@ export default function CampusHeader({
   onSignOut,
   currentTab,
   onTabChange,
+  pendingRequestsCount = 0,
 }: CampusHeaderProps) {
   const { isDark, toggleTheme } = useTheme();
   const { uiMode, isLightUi, toggleUiMode } = useUiMode();
@@ -79,6 +82,12 @@ export default function CampusHeader({
       label: "Hangouts",
       icon: Users,
       customIcon: "/images/icon-hangouts.png",
+    },
+    {
+      id: "friends" as const,
+      label: "Friends",
+      icon: UserCheck,
+      badge: pendingRequestsCount > 0 ? `${pendingRequestsCount}` : null,
     },
   ];
 

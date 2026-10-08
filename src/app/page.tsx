@@ -13,6 +13,17 @@ import {
   supabase,
   detectCampusTheme,
 } from "@/lib/supabase";
+import {
+  Friend,
+  FriendRequest,
+  getLocalFriends,
+  saveLocalFriends,
+  getLocalFriendRequests,
+  saveLocalFriendRequests,
+  fetchRemoteFriendships,
+  syncFriendshipToSupabase,
+  deleteFriendshipFromSupabase,
+} from "@/lib/friends";
 import AuthScreen from "@/components/AuthScreen";
 import OnboardingScreen from "@/components/OnboardingScreen";
 import CampusHeader from "@/components/CampusHeader";
@@ -20,6 +31,7 @@ import BottomNavigation, { NavTab } from "@/components/BottomNavigation";
 import CampusLounge from "@/components/CampusLounge";
 import RandomMatch from "@/components/RandomMatch";
 import GroupHangout from "@/components/GroupHangout";
+import FriendsView from "@/components/FriendsView";
 import ProfileView from "@/components/ProfileView";
 import ProfileOnboardingModal from "@/components/ProfileOnboardingModal";
 import IncomingCallModal from "@/components/IncomingCallModal";
@@ -67,6 +79,8 @@ export default function CampusHubHome() {
 
   // App navigation & state - restore tab and room immediately on refresh
   const [students, setStudents] = useState<UserProfile[]>([]);
+  const [friends, setFriends] = useState<Friend[]>([]);
+  const [friendRequests, setFriendRequests] = useState<FriendRequest[]>([]);
   const [currentTab, setCurrentTab] = useState<NavTab>(() => {
     if (activeCallRecovered?.type === "match") return "match";
     if (activeCallRecovered?.type === "hangout") return "hangouts";
@@ -85,6 +99,42 @@ export default function CampusHubHome() {
   const [authNotice, setAuthNotice] = useState("");
   const [authPreFill, setAuthPreFill] = useState("");
   const [isInCall, setIsInCall] = useState(() => Boolean(activeCallRecovered));
+
+  // Load local and remote friendships for active student
+  useEffect(() => {
+    if (!profile) {
+      setFriends([]);
+      setFriendRequests([]);
+      return;
+    }
+
+    const localF = getLocalFriends(profile.id);
+    const localR = getLocalFriendRequests(profile.id);
+    setFriends(localF);
+    setFriendRequests(localR);
+
+    fetchRemoteFriendships(profile.id).then((remote) => {
+      if (remote) {
+        setFriends((prev) => {
+          const map = new Map<string, Friend>();
+          prev.forEach((f) => map.set(f.id, f));
+          remote.friends.forEach((f) => map.set(f.id, f));
+          const merged = Array.from(map.values());
+          saveLocalFriends(profile.id, merged);
+          return merged;
+        });
+
+        setFriendRequests((prev) => {
+          const map = new Map<string, FriendRequest>();
+          prev.forEach((r) => map.set(r.id, r));
+          remote.requests.forEach((r) => map.set(r.id, r));
+          const merged = Array.from(map.values());
+          saveLocalFriendRequests(profile.id, merged);
+          return merged;
+        });
+      }
+    });
+  }, [profile]);
 
   // Apply campus theme attribute on document root (defaults to UIU)
   useEffect(() => {
@@ -181,6 +231,73 @@ export default function CampusHubHome() {
           return;
         }
         setIncomingInvite(invite);
+      }
+    });
+
+    channel.on("broadcast", { event: "friend-request" }, (payload) => {
+      const req = payload.payload as FriendRequest;
+      if (req && req.receiverId === profile.id) {
+        setFriendRequests((prev) => {
+          if (prev.some((r) => r.id === req.id)) return prev;
+          const updated = [req, ...prev];
+          saveLocalFriendRequests(profile.id, updated);
+          return updated;
+        });
+      }
+    });
+
+    channel.on("broadcast", { event: "friend-accept" }, (payload) => {
+      const { requestId, senderId, receiverId, receiverProfile } = payload.payload || {};
+      if (senderId === profile.id) {
+        const newFriend: Friend = {
+          id: receiverId,
+          full_name: receiverProfile?.full_name || "UIU Classmate",
+          department: receiverProfile?.department || "CSE",
+          batch: receiverProfile?.batch || "2024",
+          avatar: receiverProfile?.avatar || "/images/avatar-male.png",
+          status: receiverProfile?.status || "Ready to chat 💬",
+          bio: receiverProfile?.bio,
+          call_restricted: Boolean(receiverProfile?.call_restricted),
+          added_at: Date.now(),
+        };
+
+        setFriends((prev) => {
+          if (prev.some((f) => f.id === receiverId)) return prev;
+          const updated = [newFriend, ...prev];
+          saveLocalFriends(profile.id, updated);
+          return updated;
+        });
+
+        setFriendRequests((prev) => {
+          const updated = prev.filter(
+            (r) => r.id !== requestId && r.receiverId !== receiverId
+          );
+          saveLocalFriendRequests(profile.id, updated);
+          return updated;
+        });
+      }
+    });
+
+    channel.on("broadcast", { event: "friend-decline" }, (payload) => {
+      const { requestId, senderId } = payload.payload || {};
+      if (senderId === profile.id) {
+        setFriendRequests((prev) => {
+          const updated = prev.filter((r) => r.id !== requestId);
+          saveLocalFriendRequests(profile.id, updated);
+          return updated;
+        });
+      }
+    });
+
+    channel.on("broadcast", { event: "friend-remove" }, (payload) => {
+      const { senderId, receiverId } = payload.payload || {};
+      if (senderId === profile.id || receiverId === profile.id) {
+        const targetId = senderId === profile.id ? receiverId : senderId;
+        setFriends((prev) => {
+          const updated = prev.filter((f) => f.id !== targetId);
+          saveLocalFriends(profile.id, updated);
+          return updated;
+        });
       }
     });
 
@@ -321,6 +438,154 @@ export default function CampusHubHome() {
     setIncomingInvite(null);
   };
 
+  // Friend Request & Friendship Handlers
+  const handleSendFriendRequest = (targetStudent: UserProfile) => {
+    if (!profile) return;
+    if (friends.some((f) => f.id === targetStudent.id)) return;
+
+    const requestId = `${profile.id}_${targetStudent.id}`;
+    const newReq: FriendRequest = {
+      id: requestId,
+      senderId: profile.id,
+      senderName: profile.full_name,
+      senderAvatar: profile.avatar,
+      senderDepartment: profile.department,
+      senderBatch: profile.batch,
+      senderBio: profile.bio || profile.status,
+      receiverId: targetStudent.id,
+      receiverName: targetStudent.full_name,
+      receiverAvatar: targetStudent.avatar,
+      receiverDepartment: targetStudent.department,
+      receiverBatch: targetStudent.batch,
+      createdAt: Date.now(),
+      status: "pending",
+    };
+
+    setFriendRequests((prev) => {
+      const updated = [newReq, ...prev.filter((r) => r.id !== requestId)];
+      saveLocalFriendRequests(profile.id, updated);
+      return updated;
+    });
+
+    try {
+      const channel = supabase.channel("campus-lounge");
+      channel.send({
+        type: "broadcast",
+        event: "friend-request",
+        payload: newReq,
+      });
+    } catch {}
+
+    syncFriendshipToSupabase(newReq);
+  };
+
+  const handleAcceptFriendRequest = (requestId: string) => {
+    if (!profile) return;
+    const req = friendRequests.find((r) => r.id === requestId);
+    if (!req) return;
+
+    const newFriend: Friend = {
+      id: req.senderId,
+      full_name: req.senderName,
+      department: req.senderDepartment,
+      batch: req.senderBatch,
+      avatar: req.senderAvatar,
+      bio: req.senderBio,
+      status: "Ready to chat 💬",
+      added_at: Date.now(),
+    };
+
+    setFriends((prev) => {
+      if (prev.some((f) => f.id === req.senderId)) return prev;
+      const updated = [newFriend, ...prev];
+      saveLocalFriends(profile.id, updated);
+      return updated;
+    });
+
+    setFriendRequests((prev) => {
+      const updated = prev.filter((r) => r.id !== requestId);
+      saveLocalFriendRequests(profile.id, updated);
+      return updated;
+    });
+
+    try {
+      const channel = supabase.channel("campus-lounge");
+      channel.send({
+        type: "broadcast",
+        event: "friend-accept",
+        payload: {
+          requestId: req.id,
+          senderId: req.senderId,
+          receiverId: profile.id,
+          receiverProfile: profile,
+        },
+      });
+    } catch {}
+
+    syncFriendshipToSupabase({ ...req, status: "accepted" });
+  };
+
+  const handleDeclineFriendRequest = (requestId: string) => {
+    if (!profile) return;
+    const req = friendRequests.find((r) => r.id === requestId);
+    setFriendRequests((prev) => {
+      const updated = prev.filter((r) => r.id !== requestId);
+      saveLocalFriendRequests(profile.id, updated);
+      return updated;
+    });
+
+    if (req) {
+      try {
+        const channel = supabase.channel("campus-lounge");
+        channel.send({
+          type: "broadcast",
+          event: "friend-decline",
+          payload: {
+            requestId: req.id,
+            senderId: req.senderId,
+            receiverId: profile.id,
+          },
+        });
+      } catch {}
+    }
+
+    deleteFriendshipFromSupabase(requestId);
+  };
+
+  const handleCancelFriendRequest = (requestId: string) => {
+    if (!profile) return;
+    setFriendRequests((prev) => {
+      const updated = prev.filter((r) => r.id !== requestId);
+      saveLocalFriendRequests(profile.id, updated);
+      return updated;
+    });
+    deleteFriendshipFromSupabase(requestId);
+  };
+
+  const handleRemoveFriend = (friendId: string) => {
+    if (!profile) return;
+    setFriends((prev) => {
+      const updated = prev.filter((f) => f.id !== friendId);
+      saveLocalFriends(profile.id, updated);
+      return updated;
+    });
+
+    try {
+      const channel = supabase.channel("campus-lounge");
+      channel.send({
+        type: "broadcast",
+        event: "friend-remove",
+        payload: {
+          senderId: profile.id,
+          receiverId: friendId,
+        },
+      });
+    } catch {}
+
+    deleteFriendshipFromSupabase(`${profile.id}_${friendId}`);
+    deleteFriendshipFromSupabase(`${friendId}_${profile.id}`);
+  };
+
   // Status Change handler
   const handleStatusChange = (newStatus: string) => {
     if (!profile) return;
@@ -411,6 +676,11 @@ export default function CampusHubHome() {
                 onSignOut={handleSignOut}
                 currentTab={currentTab}
                 onTabChange={handleTabChange}
+                pendingRequestsCount={
+                  friendRequests.filter(
+                    (r) => r.receiverId === profile?.id && r.status === "pending"
+                  ).length
+                }
               />
             )}
 
@@ -434,6 +704,20 @@ export default function CampusHubHome() {
                       setSelectedHangoutRoomId(roomId);
                       setCurrentTab("hangouts");
                     }}
+                    friends={friends}
+                    sentRequestIds={friendRequests
+                      .filter((r) => r.senderId === profile?.id && r.status === "pending")
+                      .map((r) => r.receiverId)}
+                    receivedRequestIds={friendRequests
+                      .filter((r) => r.receiverId === profile?.id && r.status === "pending")
+                      .map((r) => r.senderId)}
+                    onSendFriendRequest={handleSendFriendRequest}
+                    onAcceptFriendRequest={(senderId) => {
+                      const req = friendRequests.find(
+                        (r) => r.senderId === senderId && r.receiverId === profile?.id
+                      );
+                      if (req) handleAcceptFriendRequest(req.id);
+                    }}
                   />
                 )}
 
@@ -455,6 +739,21 @@ export default function CampusHubHome() {
                     currentProfile={profile}
                     initialRoomId={selectedHangoutRoomId}
                     onInCallChange={setIsInCall}
+                  />
+                )}
+
+                {currentTab === "friends" && (
+                  <FriendsView
+                    currentProfile={profile}
+                    friends={friends}
+                    friendRequests={friendRequests}
+                    onlineStudents={students}
+                    onInviteToCall={handleInviteToCall}
+                    onAcceptFriendRequest={handleAcceptFriendRequest}
+                    onDeclineFriendRequest={handleDeclineFriendRequest}
+                    onCancelFriendRequest={handleCancelFriendRequest}
+                    onRemoveFriend={handleRemoveFriend}
+                    onNavigateToLounge={() => handleTabChange("lounge")}
                   />
                 )}
 
@@ -503,6 +802,11 @@ export default function CampusHubHome() {
               <BottomNavigation
                 currentTab={currentTab}
                 onTabChange={handleTabChange}
+                pendingRequestsCount={
+                  friendRequests.filter(
+                    (r) => r.receiverId === profile?.id && r.status === "pending"
+                  ).length
+                }
               />
             )}
 

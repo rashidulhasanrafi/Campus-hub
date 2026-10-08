@@ -1,23 +1,25 @@
 "use client";
 
 import React from "react";
-import { MessageSquare, Video, Users, User } from "lucide-react";
+import { MessageSquare, Video, Users, User, UserCheck } from "lucide-react";
 import { useUiMode } from "@/context/UiModeContext";
 import { useTheme } from "@/context/ThemeContext";
 import { motion } from "framer-motion";
 
-export type NavTab = "lounge" | "match" | "hangouts" | "profile";
+export type NavTab = "lounge" | "match" | "hangouts" | "friends" | "profile";
 
 interface BottomNavigationProps {
   currentTab: NavTab;
   onTabChange: (tab: NavTab) => void;
   hasActiveCall?: boolean;
+  pendingRequestsCount?: number;
 }
 
 export default function BottomNavigation({
   currentTab,
   onTabChange,
   hasActiveCall,
+  pendingRequestsCount = 0,
 }: BottomNavigationProps) {
   const { isLightUi } = useUiMode();
   const { isDark } = useTheme();
@@ -31,6 +33,13 @@ export default function BottomNavigation({
       badge: null,
     },
     {
+      id: "hangouts" as NavTab,
+      label: "Hangouts",
+      icon: Users,
+      customIcon: "/images/icon-hangouts.png",
+      badge: "8 Max",
+    },
+    {
       id: "match" as NavTab,
       label: "1-on-1 Match",
       icon: Video,
@@ -39,11 +48,10 @@ export default function BottomNavigation({
       badge: "LIVE",
     },
     {
-      id: "hangouts" as NavTab,
-      label: "Hangouts",
-      icon: Users,
-      customIcon: "/images/icon-hangouts.png",
-      badge: "8 Max",
+      id: "friends" as NavTab,
+      label: "Friends",
+      icon: UserCheck,
+      badge: pendingRequestsCount > 0 ? `${pendingRequestsCount}` : null,
     },
     {
       id: "profile" as NavTab,

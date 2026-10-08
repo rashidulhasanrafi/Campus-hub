@@ -7,6 +7,7 @@ import {
   INITIAL_SHOUTOUTS,
   supabase,
 } from "@/lib/supabase";
+import { Friend } from "@/lib/friends";
 import StudentAvatar from "@/components/StudentAvatar";
 import {
   Search,
@@ -19,6 +20,10 @@ import {
   Users,
   Bell,
   BellOff,
+  UserCheck,
+  UserPlus,
+  Clock,
+  Check,
 } from "lucide-react";
 import confetti from "canvas-confetti";
 
@@ -29,6 +34,11 @@ interface CampusLoungeProps {
   onOpen1on1Match: () => void;
   onJoinHangout: (roomId: string) => void;
   onToggleCallRestriction?: () => void;
+  friends?: Friend[];
+  sentRequestIds?: string[];
+  receivedRequestIds?: string[];
+  onSendFriendRequest?: (targetStudent: UserProfile) => void;
+  onAcceptFriendRequest?: (studentId: string) => void;
 }
 
 export default function CampusLounge({
@@ -38,6 +48,11 @@ export default function CampusLounge({
   onOpen1on1Match,
   onJoinHangout,
   onToggleCallRestriction,
+  friends = [],
+  sentRequestIds = [],
+  receivedRequestIds = [],
+  onSendFriendRequest,
+  onAcceptFriendRequest,
 }: CampusLoungeProps) {
   const [activeTab, setActiveTab] = useState<"students" | "feed">("students");
   const [searchQuery, setSearchQuery] = useState("");
@@ -443,11 +458,54 @@ export default function CampusLounge({
                   )}
                 </div>
 
+                {/* Friend Status / Add Friend Action */}
+                {(() => {
+                  const isFriend = friends.some((f) => f.id === student.id);
+                  const isPendingSent = sentRequestIds.includes(student.id);
+                  const isPendingReceived = receivedRequestIds.includes(student.id);
+
+                  return (
+                    <div className="mt-3">
+                      {isFriend ? (
+                        <div className="w-full py-1.5 px-3 rounded-lg bg-emerald-500/10 border border-emerald-500/30 text-emerald-400 text-xs font-semibold flex items-center justify-center gap-1.5 select-none">
+                          <UserCheck className="w-3.5 h-3.5 text-emerald-400" />
+                          <span>Friends</span>
+                        </div>
+                      ) : isPendingSent ? (
+                        <div className="w-full py-1.5 px-3 rounded-lg bg-amber-500/10 border border-amber-500/30 text-amber-400 text-xs font-medium flex items-center justify-center gap-1.5 select-none">
+                          <Clock className="w-3.5 h-3.5 text-amber-400" />
+                          <span>Friend Request Sent</span>
+                        </div>
+                      ) : isPendingReceived ? (
+                        <button
+                          type="button"
+                          onClick={() => onAcceptFriendRequest && onAcceptFriendRequest(student.id)}
+                          className="w-full py-1.5 px-3 rounded-lg bg-emerald-600 hover:bg-emerald-500 text-white text-xs font-semibold flex items-center justify-center gap-1.5 shadow-sm active:scale-95 transition-all cursor-pointer"
+                        >
+                          <Check className="w-3.5 h-3.5" />
+                          <span>Accept Friend Request</span>
+                        </button>
+                      ) : (
+                        onSendFriendRequest && (
+                          <button
+                            type="button"
+                            onClick={() => onSendFriendRequest(student)}
+                            className="w-full py-1.5 px-3 rounded-lg bg-zinc-900 hover:bg-zinc-800 text-zinc-300 hover:text-orange-400 hover:border-orange-500/50 border border-zinc-750 text-xs font-semibold flex items-center justify-center gap-1.5 transition-all active:scale-95 cursor-pointer"
+                          >
+                            <UserPlus className="w-3.5 h-3.5" />
+                            <span>Add Friend</span>
+                          </button>
+                        )
+                      )}
+                    </div>
+                  );
+                })()}
+
                 {/* Quick Action Buttons:
                     - 'Say Hi': Option button that turns Orange on hover
                     - 'Invite Call' or 'Restricted': Orange button or Disabled Restricted button
                 */}
-                <div className="flex items-center gap-2 mt-4 pt-3 border-t border-zinc-800/70">
+                <div className="flex items-center gap-2 mt-3 pt-3 border-t border-zinc-800/70">
                   <button
                     onClick={() => handleSayHi(student)}
                     className="flex-1 py-1.5 px-3 rounded-lg bg-zinc-800/80 hover:bg-zinc-800 text-zinc-300 hover:text-orange-400 hover:border-orange-500/50 text-xs font-medium transition-colors flex items-center justify-center gap-1.5 border border-zinc-700/60 active:scale-95"
@@ -589,6 +647,52 @@ export default function CampusLounge({
                               <BellOff className="w-2.5 h-2.5 text-rose-400" />
                               Calls Restricted
                             </span>
+                          )}
+                          {post.userId !== currentProfile?.id && (
+                            <>
+                              {friends.some((f) => f.id === post.userId) ? (
+                                <span className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded text-[9px] font-semibold bg-emerald-500/15 text-emerald-400 border border-emerald-500/30">
+                                  <UserCheck className="w-2.5 h-2.5" />
+                                  Friend
+                                </span>
+                              ) : sentRequestIds.includes(post.userId) ? (
+                                <span className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded text-[9px] font-medium bg-amber-500/15 text-amber-400 border border-amber-500/30">
+                                  <Clock className="w-2.5 h-2.5" />
+                                  Requested
+                                </span>
+                              ) : receivedRequestIds.includes(post.userId) ? (
+                                <button
+                                  type="button"
+                                  onClick={() => onAcceptFriendRequest && onAcceptFriendRequest(post.userId)}
+                                  className="inline-flex items-center gap-1 px-2 py-0.5 rounded text-[9px] font-semibold bg-emerald-600 hover:bg-emerald-500 text-white transition-colors cursor-pointer"
+                                >
+                                  <Check className="w-2.5 h-2.5" />
+                                  Accept Request
+                                </button>
+                              ) : (
+                                onSendFriendRequest && (
+                                  <button
+                                    type="button"
+                                    onClick={() => {
+                                      const existing = students.find((s) => s.id === post.userId);
+                                      const target: UserProfile = existing || {
+                                        id: post.userId,
+                                        full_name: post.userName,
+                                        department: post.userDepartment,
+                                        avatar: post.userAvatar,
+                                        batch: "UIU Student",
+                                        status: "Ready to chat 💬",
+                                      };
+                                      onSendFriendRequest(target);
+                                    }}
+                                    className="inline-flex items-center gap-1 px-2 py-0.5 rounded text-[9px] font-semibold bg-zinc-800 hover:bg-orange-600 text-zinc-300 hover:text-white border border-zinc-700 hover:border-orange-500 transition-colors cursor-pointer"
+                                  >
+                                    <UserPlus className="w-2.5 h-2.5" />
+                                    Add Friend
+                                  </button>
+                                )
+                              )}
+                            </>
                           )}
                         </div>
                         <p className="text-[10px] text-zinc-400">
