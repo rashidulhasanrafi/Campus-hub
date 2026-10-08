@@ -47,3 +47,4 @@ migrations/
 # typescript
 *.tsbuildinfo
 next-env.d.ts
+

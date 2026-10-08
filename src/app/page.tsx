@@ -34,18 +34,57 @@ export default function CampusHubHome() {
   const [authLoading, setAuthLoading] = useState(true);
   const [needsOnboarding, setNeedsOnboarding] = useState(false);
   const [profile, setProfile] = useState<UserProfile | null>(null);
-  const [showBusTransition, setShowBusTransition] = useState(false);
 
-  // App navigation & state
+  // Check if recovering an active video call after a page refresh
+  const [activeCallRecovered] = useState<{
+    type: "match" | "hangout";
+    roomName?: string;
+    roomId?: string;
+    hangoutRoom?: any;
+    timestamp?: number;
+  } | null>(() => {
+    if (typeof window === "undefined") return null;
+    try {
+      const saved = sessionStorage.getItem("campus_active_call");
+      if (saved) {
+        const parsed = JSON.parse(saved);
+        if (Date.now() - (parsed.timestamp || 0) < 5 * 60 * 1000) {
+          return parsed;
+        } else {
+          sessionStorage.removeItem("campus_active_call");
+        }
+      }
+    } catch {}
+    return null;
+  });
+
+  // Bus animation: Plays on every normal app launch/refresh before entering the app.
+  // Skipped ONLY if user refreshed while actively in a video call (to instantly reconnect).
+  const [showBusTransition, setShowBusTransition] = useState(() => {
+    if (activeCallRecovered) return false;
+    return true;
+  });
+
+  // App navigation & state - restore tab and room immediately on refresh
   const [students, setStudents] = useState<UserProfile[]>([]);
-  const [currentTab, setCurrentTab] = useState<NavTab>("lounge");
+  const [currentTab, setCurrentTab] = useState<NavTab>(() => {
+    if (activeCallRecovered?.type === "match") return "match";
+    if (activeCallRecovered?.type === "hangout") return "hangouts";
+    return "lounge";
+  });
   const [editProfileOpen, setEditProfileOpen] = useState(false);
   const [incomingInvite, setIncomingInvite] = useState<DirectCallInvite | null>(null);
-  const [directRoomToJoin, setDirectRoomToJoin] = useState<string | null>(null);
-  const [selectedHangoutRoomId, setSelectedHangoutRoomId] = useState<string | null>(null);
+  const [directRoomToJoin, setDirectRoomToJoin] = useState<string | null>(() => {
+    if (activeCallRecovered?.type === "match") return activeCallRecovered.roomName || null;
+    return null;
+  });
+  const [selectedHangoutRoomId, setSelectedHangoutRoomId] = useState<string | null>(() => {
+    if (activeCallRecovered?.type === "hangout") return activeCallRecovered.roomId || activeCallRecovered.roomName || null;
+    return null;
+  });
   const [authNotice, setAuthNotice] = useState("");
   const [authPreFill, setAuthPreFill] = useState("");
-  const [isInCall, setIsInCall] = useState(false);
+  const [isInCall, setIsInCall] = useState(() => Boolean(activeCallRecovered));
 
   // Apply campus theme attribute on document root (defaults to UIU)
   useEffect(() => {
@@ -172,6 +211,9 @@ export default function CampusHubHome() {
 
   // Sign out handler
   const handleSignOut = async () => {
+    try {
+      sessionStorage.removeItem("campus_active_call");
+    } catch {}
     setAuthLoading(true);
     await signOutCampusUser();
     setSession(null);
@@ -179,6 +221,20 @@ export default function CampusHubHome() {
     setNeedsOnboarding(false);
     setAuthLoading(false);
   };
+
+  // Prevent accidental page refresh while in an active video call
+  useEffect(() => {
+    if (!isInCall) return;
+    const handleBeforeUnload = (e: BeforeUnloadEvent) => {
+      e.preventDefault();
+      e.returnValue = "";
+      return "";
+    };
+    window.addEventListener("beforeunload", handleBeforeUnload);
+    return () => {
+      window.removeEventListener("beforeunload", handleBeforeUnload);
+    };
+  }, [isInCall]);
 
   // Send Direct Video Call Invite
   const handleInviteToCall = (targetStudent: UserProfile) => {
@@ -234,6 +290,9 @@ export default function CampusHubHome() {
     if (tab !== "match") setDirectRoomToJoin(null);
     setCurrentTab(tab);
     setIsInCall(false);
+    try {
+      sessionStorage.removeItem("campus_active_call");
+    } catch {}
     if (typeof window !== "undefined") {
       window.scrollTo({ top: 0, behavior: "instant" });
     }

@@ -2,6 +2,7 @@
 
 import React, { useState, useEffect } from "react";
 import { motion, AnimatePresence } from "framer-motion";
+import { ChevronRight } from "lucide-react";
 
 interface UiuBusTransitionProps {
   onComplete: () => void;
@@ -39,15 +40,31 @@ export default function UiuBusTransition({ onComplete }: UiuBusTransitionProps) 
   }, [onComplete]);
 
   return (
-    <div className="fixed inset-0 z-[9999] pointer-events-none select-none overflow-hidden">
-      {/* 1. INITIAL TRIGGER: Background muted into charcoal / dark grayscale */}
+    <div
+      className={`fixed inset-0 z-[9999] select-none overflow-hidden ${
+        stage === "frosted" ? "pointer-events-none" : "pointer-events-auto"
+      }`}
+    >
+      {/* Skip button for quick entry */}
+      <motion.button
+        initial={{ opacity: 0 }}
+        animate={{ opacity: stage === "frosted" ? 0 : 1 }}
+        transition={{ delay: 0.3, duration: 0.2 }}
+        onClick={onComplete}
+        className="absolute top-4 right-4 z-50 px-3.5 py-1.5 rounded-full bg-black/60 hover:bg-black/80 text-white/90 hover:text-white text-xs font-semibold border border-white/20 backdrop-blur-md transition-all active:scale-95 cursor-pointer flex items-center gap-1 shadow-lg"
+      >
+        <span>Skip</span>
+        <ChevronRight className="w-3.5 h-3.5" />
+      </motion.button>
+
+      {/* 1. INITIAL TRIGGER: Solid dark background matching app entry */}
       <motion.div
         initial={{ opacity: 1 }}
         animate={{
           opacity: stage === "frosted" ? 0 : 1,
         }}
         transition={{ duration: 0.4, ease: "easeOut" }}
-        className="absolute inset-0 bg-[#07090f]/85 backdrop-grayscale backdrop-contrast-125 z-0"
+        className="absolute inset-0 bg-[#090a0f] z-0"
       />
 
       {/* 2. STAGE 1: MOVING ASSEMBLY (BUS AT FRONT + DYNAMIC ORANGE WAKE ERUPTING FROM REAR BUMPER) */}

@@ -34,6 +34,7 @@ import {
   Code,
   Music,
   Users,
+  Loader2,
 } from "lucide-react";
 import confetti from "canvas-confetti";
 
@@ -89,10 +90,17 @@ export default function RandomMatch({
   const [queueCount, setQueueCount] = useState<number>(0);
   const [peerLeftNotice, setPeerLeftNotice] = useState<string>("");
 
-  // Unique client ID per browser tab to allow testing across multiple tabs
+  // Unique client ID per browser tab (persisted in sessionStorage so refresh retains the same identity)
   const clientIdRef = useRef<string>(
     typeof window !== "undefined"
-      ? `client_${Math.random().toString(36).substring(2, 9)}_${Date.now().toString(36)}`
+      ? (() => {
+          let cid = sessionStorage.getItem("campus_client_id");
+          if (!cid) {
+            cid = `client_${Math.random().toString(36).substring(2, 9)}_${Date.now().toString(36)}`;
+            sessionStorage.setItem("campus_client_id", cid);
+          }
+          return cid;
+        })()
       : "client_ssr"
   );
   const myClientId = clientIdRef.current;
@@ -126,6 +134,20 @@ export default function RandomMatch({
     };
   }, [matchState, livekitToken, onInCallChange]);
 
+  // Clean up any lingering confetti canvas on mount to ensure video call remains clean
+  useEffect(() => {
+    try {
+      confetti.reset();
+      if (typeof document !== "undefined") {
+        document.querySelectorAll("canvas").forEach((c) => {
+          if (c.style.position === "fixed" && c.style.pointerEvents === "none") {
+            c.remove();
+          }
+        });
+      }
+    } catch {}
+  }, []);
+
   // Helper to connect to a LiveKit room
   const connectToRoom = useCallback(
     async (targetRoom: string) => {
@@ -148,12 +170,29 @@ export default function RandomMatch({
         setLivekitUrl(url);
         setMatchState("connected");
 
+        // Clean up any canvas elements so nothing gets stuck on mobile video call
         try {
-          confetti({
-            particleCount: 25,
-            spread: 60,
-            origin: { y: 0.6 },
-          });
+          confetti.reset();
+          if (typeof document !== "undefined") {
+            document.querySelectorAll("canvas").forEach((c) => {
+              if (c.style.position === "fixed" && c.style.pointerEvents === "none") {
+                c.remove();
+              }
+            });
+          }
+        } catch {}
+
+        // Persist call session for instant seamless recovery on browser reload
+        try {
+          sessionStorage.setItem(
+            "campus_active_call",
+            JSON.stringify({
+              type: "match",
+              roomName: targetRoom,
+              topic: selectedTopicRef.current || "random",
+              timestamp: Date.now(),
+            })
+          );
         } catch {}
       } catch (err: unknown) {
         const error = err as Error;
@@ -161,6 +200,9 @@ export default function RandomMatch({
         setErrorMsg("Failed to connect to video call server. Please try again.");
         setMatchState("idle");
         isConnectingRef.current = false;
+        try {
+          sessionStorage.removeItem("campus_active_call");
+        } catch {}
         if (channelRef.current) {
           try {
             channelRef.current.untrack();
@@ -171,10 +213,25 @@ export default function RandomMatch({
     [currentProfile, myClientId]
   );
 
-  // If a direct room was requested via an invite from lounge
+  // If a direct room was requested via an invite from lounge or session recovery from refresh
   useEffect(() => {
     if (directRoomName) {
       connectToRoom(directRoomName);
+    } else {
+      try {
+        const saved = sessionStorage.getItem("campus_active_call");
+        if (saved) {
+          const parsed = JSON.parse(saved);
+          if (
+            parsed.type === "match" &&
+            parsed.roomName &&
+            matchStateRef.current === "idle" &&
+            Date.now() - (parsed.timestamp || 0) < 5 * 60 * 1000
+          ) {
+            connectToRoom(parsed.roomName);
+          }
+        }
+      } catch {}
     }
   }, [directRoomName, connectToRoom]);
 
@@ -374,6 +431,9 @@ export default function RandomMatch({
 
   // Cancel Search
   const cancelSearch = () => {
+    try {
+      sessionStorage.removeItem("campus_active_call");
+    } catch {}
     if (searchingIntervalRef.current) clearInterval(searchingIntervalRef.current);
     setMatchState("idle");
     setSearchTimer(0);
@@ -387,6 +447,10 @@ export default function RandomMatch({
 
   // Skip / Next Match
   const skipToNextMatch = async () => {
+    try {
+      sessionStorage.removeItem("campus_active_call");
+    } catch {}
+
     if (channelRef.current && currentRoomNameRef.current) {
       channelRef.current.send({
         type: "broadcast",
@@ -433,6 +497,10 @@ export default function RandomMatch({
 
   // End Call / Exit
   const handleEndCall = () => {
+    try {
+      sessionStorage.removeItem("campus_active_call");
+    } catch {}
+
     if (channelRef.current && currentRoomNameRef.current) {
       channelRef.current.send({
         type: "broadcast",
@@ -709,14 +777,48 @@ function ConnectedMatchContent({
 
   const remoteParticipant = participants.find((p) => !p.isLocal);
   const hasSeenPeerRef = useRef(false);
+  const [isPeerReconnecting, setIsPeerReconnecting] = useState(false);
+  const [peerPermanentlyLeft, setPeerPermanentlyLeft] = useState(false);
+  const reconnectTimeoutRef = useRef<NodeJS.Timeout | null>(null);
 
   useEffect(() => {
     if (remoteParticipant) {
       hasSeenPeerRef.current = true;
+      setIsPeerReconnecting(false);
+      setPeerPermanentlyLeft(false);
+      if (reconnectTimeoutRef.current) {
+        clearTimeout(reconnectTimeoutRef.current);
+        reconnectTimeoutRef.current = null;
+      }
+    } else if (hasSeenPeerRef.current) {
+      if (peerLeftNotice) {
+        // Peer intentionally left or skipped
+        setPeerPermanentlyLeft(true);
+        setIsPeerReconnecting(false);
+        if (reconnectTimeoutRef.current) {
+          clearTimeout(reconnectTimeoutRef.current);
+          reconnectTimeoutRef.current = null;
+        }
+      } else {
+        // Peer may have refreshed or is reconnecting: allow 15 seconds grace period
+        setIsPeerReconnecting(true);
+        if (!reconnectTimeoutRef.current) {
+          reconnectTimeoutRef.current = setTimeout(() => {
+            setPeerPermanentlyLeft(true);
+            setIsPeerReconnecting(false);
+          }, 15000);
+        }
+      }
     }
-  }, [remoteParticipant]);
 
-  const isPeerDisconnected = Boolean(peerLeftNotice) || (hasSeenPeerRef.current && !remoteParticipant);
+    return () => {
+      if (reconnectTimeoutRef.current) {
+        clearTimeout(reconnectTimeoutRef.current);
+      }
+    };
+  }, [remoteParticipant, peerLeftNotice]);
+
+  const isPeerDisconnected = peerPermanentlyLeft;
 
   const handleToggleCam = async () => {
     if (!room || !room.localParticipant || isCamToggling) return;
@@ -855,6 +957,14 @@ function ConnectedMatchContent({
           </div>
         </div>
 
+        {/* Reconnecting banner if peer refreshed */}
+        {isPeerReconnecting && (
+          <div className="absolute top-20 inset-x-4 z-40 px-3.5 py-2 rounded-xl bg-orange-600/95 text-white text-xs font-semibold backdrop-blur-md shadow-xl flex items-center justify-center gap-2 border border-orange-400/40 animate-pulse">
+            <Loader2 className="w-3.5 h-3.5 animate-spin shrink-0" />
+            <span>Peer is reconnecting... please wait a moment</span>
+          </div>
+        )}
+
         {/* Floating Local User Preview (PIP) in Corner */}
         <div
           onClick={onToggleSwap}
@@ -943,6 +1053,14 @@ function ConnectedMatchContent({
       {/* 2. DESKTOP / TABLET SPLIT SCREEN VIEW                    */}
       {/* ======================================================== */}
       <div className="hidden md:flex flex-col justify-between w-full h-full p-3">
+        {/* Reconnecting banner if peer refreshed */}
+        {isPeerReconnecting && (
+          <div className="mb-2 px-4 py-2 rounded-xl bg-orange-600/95 text-white text-xs font-semibold backdrop-blur-md shadow-lg flex items-center justify-center gap-2 border border-orange-400/40 animate-pulse">
+            <Loader2 className="w-4 h-4 animate-spin shrink-0" />
+            <span>Peer is reconnecting... please wait a moment</span>
+          </div>
+        )}
+
         {/* Split Video Container */}
         <div className="relative flex-1 grid grid-cols-2 gap-3 w-full h-[calc(100%-4.5rem)] overflow-hidden">
           {/* Feed A: Stranger / Remote Peer */}
@@ -1079,14 +1197,24 @@ function ConnectedMatchContent({
           </p>
           <div className="flex flex-col sm:flex-row items-center gap-3 w-full max-w-xs">
             <button
-              onClick={onSkip}
+              onClick={() => {
+                try {
+                  sessionStorage.removeItem("campus_active_call");
+                } catch {}
+                onSkip();
+              }}
               className="w-full py-3 px-4 rounded-xl bg-orange-600 hover:bg-orange-500 text-white font-semibold text-xs flex items-center justify-center gap-2 active:scale-95 transition-all shadow-lg cursor-pointer"
             >
               <SkipForward className="w-4 h-4 text-white" />
               <span>Find Next Match</span>
             </button>
             <button
-              onClick={onEndCall}
+              onClick={() => {
+                try {
+                  sessionStorage.removeItem("campus_active_call");
+                } catch {}
+                onEndCall();
+              }}
               className="w-full py-3 px-4 rounded-xl bg-zinc-900 hover:bg-zinc-800 text-zinc-300 font-semibold text-xs border border-zinc-800 active:scale-95 transition-all cursor-pointer"
             >
               Exit to Lounge

@@ -312,9 +312,40 @@ export default function GroupHangout({
     }
   }, [activeRoom, myClientId, currentProfile]);
 
-  // Handle deep-link / initial room join
+  // Clean up any lingering confetti canvas on mount to ensure video call remains clean
   useEffect(() => {
-    if (initialRoomId && !activeRoom) {
+    try {
+      confetti.reset();
+      if (typeof document !== "undefined") {
+        document.querySelectorAll("canvas").forEach((c) => {
+          if (c.style.position === "fixed" && c.style.pointerEvents === "none") {
+            c.remove();
+          }
+        });
+      }
+    } catch {}
+  }, []);
+
+  // Handle deep-link / initial room join or session recovery after refresh
+  useEffect(() => {
+    if (activeRoom) return;
+
+    try {
+      const saved = sessionStorage.getItem("campus_active_call");
+      if (saved) {
+        const parsed = JSON.parse(saved);
+        if (
+          parsed.type === "hangout" &&
+          parsed.hangoutRoom &&
+          Date.now() - (parsed.timestamp || 0) < 5 * 60 * 1000
+        ) {
+          handleJoinRoom(parsed.hangoutRoom);
+          return;
+        }
+      }
+    } catch {}
+
+    if (initialRoomId) {
       const target = rooms.find((r) => r.id === initialRoomId || r.code === initialRoomId);
       if (target) {
         if (target.password && target.password.trim().length > 0) {
@@ -383,22 +414,45 @@ export default function GroupHangout({
       setLivekitUrl(url);
       setActiveRoom(room);
 
+      // Clean up any canvas elements so nothing gets stuck on mobile video call
       try {
-        confetti({
-          particleCount: 25,
-          spread: 45,
-          origin: { y: 0.6 },
-          colors: ["#f97316", "#ea580c", "#fbbf24"],
-        });
+        confetti.reset();
+        if (typeof document !== "undefined") {
+          document.querySelectorAll("canvas").forEach((c) => {
+            if (c.style.position === "fixed" && c.style.pointerEvents === "none") {
+              c.remove();
+            }
+          });
+        }
+      } catch {}
+
+      // Persist active room in sessionStorage for recovery on refresh
+      try {
+        sessionStorage.setItem(
+          "campus_active_call",
+          JSON.stringify({
+            type: "hangout",
+            roomName: room.id,
+            roomId: room.id,
+            hangoutRoom: room,
+            timestamp: Date.now(),
+          })
+        );
       } catch {}
     } catch (err: unknown) {
       const error = err as Error;
       console.error("Error joining hangout room:", error);
       setErrorMsg(error.message || "Failed to join hangout room");
+      try {
+        sessionStorage.removeItem("campus_active_call");
+      } catch {}
     }
   };
 
   const handleLeaveRoom = (isLastPerson?: boolean, leftRoomId?: string) => {
+    try {
+      sessionStorage.removeItem("campus_active_call");
+    } catch {}
     if (isLastPerson && leftRoomId) {
       setRooms((prev) => prev.filter((r) => r.id !== leftRoomId));
     }
@@ -1180,10 +1234,21 @@ function GroupHangoutSession({
   const [chatInput, setChatInput] = useState("");
   const chatScrollRef = useRef<HTMLDivElement | null>(null);
 
-  // Reactions state
   const [reactionsOpen, setReactionsOpen] = useState(false);
   const [isCamToggling, setIsCamToggling] = useState(false);
   const [isMicToggling, setIsMicToggling] = useState(false);
+
+  // Floating emoji reactions state (CSS-driven, avoids canvas freeze on mobile)
+  const [floatingReactions, setFloatingReactions] = useState<Array<{ id: string; emoji: string; left: number }>>([]);
+
+  const addFloatingReaction = useCallback((emoji: string) => {
+    const id = `rx_${Date.now()}_${Math.random().toString(36).substring(2, 6)}`;
+    const left = Math.floor(25 + Math.random() * 50);
+    setFloatingReactions((prev) => [...prev, { id, emoji, left }]);
+    setTimeout(() => {
+      setFloatingReactions((prev) => prev.filter((r) => r.id !== id));
+    }, 2000);
+  }, []);
 
   // Track participant count for unmount cleanup
   const participantsCountRef = useRef(participants.length);
@@ -1316,14 +1381,7 @@ function GroupHangoutSession({
             setUnreadCount((prev) => prev + 1);
           }
         } else if (data.type === "reaction") {
-          try {
-            confetti({
-              particleCount: 18,
-              spread: 45,
-              origin: { y: 0.75 },
-              colors: ["#f97316", "#ea580c", "#fbbf24"],
-            });
-          } catch {}
+          addFloatingReaction(data.emoji || "🎉");
         }
       } catch (e) {
         console.error("Error decoding in-room data channel payload:", e);
@@ -1334,7 +1392,7 @@ function GroupHangoutSession({
     return () => {
       livekitRoom.off(RoomEvent.DataReceived, handleDataReceived);
     };
-  }, [livekitRoom, sidebarOpen, activeSidebarTab]);
+  }, [livekitRoom, sidebarOpen, activeSidebarTab, addFloatingReaction]);
 
   // Auto-scroll chat to bottom
   useEffect(() => {
@@ -1371,14 +1429,7 @@ function GroupHangoutSession({
 
   const handleSendReaction = (emoji: string) => {
     setReactionsOpen(false);
-    try {
-      confetti({
-        particleCount: 22,
-        spread: 50,
-        origin: { y: 0.8 },
-        colors: ["#f97316", "#ea580c", "#fbbf24"],
-      });
-    } catch {}
+    addFloatingReaction(emoji);
 
     if (!livekitRoom) return;
     try {
@@ -1463,6 +1514,17 @@ function GroupHangoutSession({
 
   return (
     <div className="relative w-full h-full flex flex-col justify-between overflow-hidden bg-black select-none">
+      {/* Floating In-Room Reaction Emojis */}
+      {floatingReactions.map((r) => (
+        <div
+          key={r.id}
+          style={{ left: `${r.left}%` }}
+          className="absolute bottom-28 pointer-events-none reaction-float-item text-4xl z-50 filter drop-shadow-xl"
+        >
+          {r.emoji}
+        </div>
+      ))}
+
       {/* ======================================================== */}
       {/* 1. MOBILE NATIVE APP VIEW (WhatsApp / Google Meet Style) */}
       {/* ======================================================== */}
