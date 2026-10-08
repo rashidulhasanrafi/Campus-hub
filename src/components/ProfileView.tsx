@@ -25,6 +25,8 @@ import {
   MessageSquare,
   Video,
   Users,
+  Bell,
+  BellOff,
 } from "lucide-react";
 import { useTheme } from "@/context/ThemeContext";
 import { useUiMode } from "@/context/UiModeContext";
@@ -34,6 +36,7 @@ interface ProfileViewProps {
   profile: UserProfile | null;
   onOpenEditModal: () => void;
   onUpdateStatus: (status: string) => void;
+  onToggleCallRestriction?: () => void;
   onSignOut?: () => void;
 }
 
@@ -41,6 +44,7 @@ export default function ProfileView({
   profile,
   onOpenEditModal,
   onUpdateStatus,
+  onToggleCallRestriction,
   onSignOut,
 }: ProfileViewProps) {
   const { isDark, toggleTheme } = useTheme();
@@ -110,11 +114,17 @@ export default function ProfileView({
                 {profile.department}
               </p>
 
-              <div className="flex items-center justify-center sm:justify-start gap-2 pt-1">
+              <div className="flex items-center justify-center sm:justify-start gap-2 pt-1 flex-wrap">
                 <span className="px-2.5 py-0.5 rounded-md text-xs font-medium bg-zinc-800 text-orange-400 border border-orange-500/30 flex items-center gap-1.5">
                   <span className="w-1.5 h-1.5 rounded-full bg-orange-500 animate-pulse" />
                   {profile.status}
                 </span>
+                {profile.call_restricted && (
+                  <span className="px-2.5 py-0.5 rounded-md text-xs font-semibold bg-rose-500/20 text-rose-300 border border-rose-500/40 flex items-center gap-1.5 shadow-sm">
+                    <BellOff className="w-3.5 h-3.5 text-rose-400 animate-pulse" />
+                    Calls Restricted (DND)
+                  </span>
+                )}
               </div>
             </div>
           </div>
@@ -266,6 +276,83 @@ export default function ProfileView({
               </button>
             );
           })}
+        </div>
+      </div>
+
+      {/* 4B. CALL RESTRICTION & PRIVACY (DO NOT DISTURB) */}
+      <div className="rounded-2xl p-4 sm:p-5 bg-zinc-900/60 border border-zinc-800/80 space-y-3">
+        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+          <div className="flex items-center gap-3">
+            <div
+              className={`w-9 h-9 rounded-xl flex items-center justify-center shrink-0 border ${
+                profile.call_restricted
+                  ? "bg-rose-500/20 border-rose-500/40 text-rose-400"
+                  : "bg-zinc-800 border-zinc-700 text-zinc-400"
+              }`}
+            >
+              {profile.call_restricted ? (
+                <BellOff className="w-4 h-4 text-rose-400 animate-pulse" />
+              ) : (
+                <Bell className="w-4 h-4 text-zinc-400" />
+              )}
+            </div>
+            <div>
+              <div className="flex items-center gap-2 flex-wrap">
+                <h3 className="text-xs font-semibold text-zinc-300 uppercase tracking-wider">
+                  Call Restriction (Do Not Disturb)
+                </h3>
+                <span
+                  className={`px-2 py-0.5 rounded text-[10px] font-bold border ${
+                    profile.call_restricted
+                      ? "bg-rose-500/20 text-rose-300 border-rose-500/40"
+                      : "bg-zinc-800 text-zinc-400 border border-zinc-700"
+                  }`}
+                >
+                  {profile.call_restricted ? "RESTRICTION ON" : "RESTRICTION OFF"}
+                </span>
+              </div>
+              <p className="text-[11px] text-zinc-400 mt-0.5">
+                Block repeated incoming call requests from disturbing you across Lounge & Feed
+              </p>
+            </div>
+          </div>
+
+          {onToggleCallRestriction && (
+            <button
+              type="button"
+              onClick={onToggleCallRestriction}
+              className={`px-3.5 py-1.5 rounded-xl text-xs font-semibold border transition-all active:scale-95 shrink-0 self-start sm:self-auto cursor-pointer flex items-center gap-2 ${
+                profile.call_restricted
+                  ? "bg-rose-600 border-rose-500 text-white shadow-rose-600/30"
+                  : "bg-zinc-800 border-zinc-700 text-zinc-300 hover:text-white"
+              }`}
+            >
+              {profile.call_restricted ? (
+                <>
+                  <Bell className="w-3.5 h-3.5" />
+                  <span>Disable Restriction</span>
+                </>
+              ) : (
+                <>
+                  <BellOff className="w-3.5 h-3.5 text-zinc-300" />
+                  <span>Turn ON Restriction</span>
+                </>
+              )}
+            </button>
+          )}
+        </div>
+
+        <div className="p-3 rounded-xl bg-zinc-900/80 border border-zinc-800/80 text-xs text-zinc-400 leading-relaxed">
+          {profile.call_restricted ? (
+            <span className="text-rose-300 flex items-center gap-1.5">
+              <BellOff className="w-4 h-4 text-rose-400 shrink-0" />
+              Restriction is currently ON. Fellow students see &ldquo;Calls Restricted&rdquo; on your ID in both the Lounge & Feed, and incoming calls cannot disturb you.
+            </span>
+          ) : (
+            <span>
+              When enabled, fellow students in the Lounge and Feed will see that you have restricted calls, preventing random call disturbances.
+            </span>
+          )}
         </div>
       </div>
 

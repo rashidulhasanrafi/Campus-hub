@@ -1620,11 +1620,12 @@ function GroupHangoutSession({
               {mobileBackgroundTrack && mobileBackgroundTrack.publication?.track ? (
                 <VideoTrack
                   trackRef={mobileBackgroundTrack}
-                  className={`w-full h-full object-cover ${
+                  className={`w-full h-full !object-cover ${
                     isMobileBackgroundLocal && mobileBackgroundTrack.source === Track.Source.Camera
                       ? "-scale-x-100"
                       : ""
                   }`}
+                  style={{ width: "100%", height: "100%", objectFit: "cover" }}
                 />
               ) : (
                 <div className="flex flex-col items-center justify-center p-6 text-center space-y-3">
@@ -1780,108 +1781,110 @@ function GroupHangoutSession({
         )}
 
         {/* BOTTOM ESSENTIAL CALL CONTROLS DOCK (WhatsApp / Meet circular style) */}
-        <div className="absolute bottom-5 inset-x-0 z-30 flex items-center justify-center gap-3.5 pointer-events-auto px-4">
-          {/* Mic Toggle */}
-          <button
-            type="button"
-            onClick={handleToggleMic}
-            disabled={isMicToggling}
-            className={`w-12 h-12 rounded-full flex items-center justify-center transition-all active:scale-95 shadow-lg ${
-              !isMicrophoneEnabled
-                ? "bg-rose-600 text-white shadow-rose-600/30"
-                : "bg-zinc-800/90 text-white border border-zinc-700/60 backdrop-blur-xl"
-            }`}
-            title={isMicrophoneEnabled ? "Mute Microphone" : "Unmute Microphone"}
-          >
-            {!isMicrophoneEnabled ? <MicOff className="w-5 h-5" /> : <Mic className="w-5 h-5 text-emerald-400" />}
-          </button>
-
-          {/* Video Toggle */}
-          <button
-            type="button"
-            onClick={handleToggleCamera}
-            disabled={isCamToggling}
-            className={`w-12 h-12 rounded-full flex items-center justify-center transition-all active:scale-95 shadow-lg ${
-              !isCameraEnabled
-                ? "bg-rose-600 text-white shadow-rose-600/30"
-                : "bg-zinc-800/90 text-white border border-zinc-700/60 backdrop-blur-xl"
-            }`}
-            title={isCameraEnabled ? "Turn Off Camera" : "Turn On Camera"}
-          >
-            {!isCameraEnabled ? <VideoOff className="w-5 h-5" /> : <Video className="w-5 h-5 text-orange-400" />}
-          </button>
-
-          {/* Screen Share */}
-          <button
-            type="button"
-            onClick={handleToggleScreenShare}
-            className={`w-12 h-12 rounded-full flex items-center justify-center transition-all active:scale-95 shadow-lg ${
-              isScreenShareEnabled
-                ? "bg-orange-600 text-white shadow-orange-600/30"
-                : "bg-zinc-800/90 text-white border border-zinc-700/60 backdrop-blur-xl"
-            }`}
-            title={isScreenShareEnabled ? "Stop Sharing Screen" : "Share Screen"}
-          >
-            <ScreenShare className="w-5 h-5" />
-          </button>
-
-          {/* End / Leave Call Button */}
-          <button
-            type="button"
-            onClick={handleLeaveSession}
-            className="w-14 h-14 rounded-full bg-rose-600 hover:bg-rose-700 text-white flex items-center justify-center shadow-xl shadow-rose-600/40 active:scale-95 transition-all"
-            title="Leave Room"
-          >
-            <PhoneOff className="w-6 h-6" />
-          </button>
-
-          {/* Chat Toggle Button */}
-          <button
-            type="button"
-            onClick={() => {
-              setActiveSidebarTab("chat");
-              setSidebarOpen(true);
-              setUnreadCount(0);
-            }}
-            className="relative w-12 h-12 rounded-full bg-zinc-800/90 text-white border border-zinc-700/60 backdrop-blur-xl flex items-center justify-center shadow-lg active:scale-95 transition-all"
-            title="In-Room Chat"
-          >
-            <MessageSquare className="w-5 h-5" />
-            {unreadCount > 0 && (
-              <span className="absolute -top-1 -right-1 w-5 h-5 rounded-full bg-orange-600 text-white text-[10px] font-bold flex items-center justify-center animate-pulse">
-                {unreadCount}
-              </span>
-            )}
-          </button>
-
-          {/* Emoji Reactions */}
-          <div className="relative">
+        <div className="fixed bottom-4 sm:bottom-6 inset-x-0 z-40 pb-[max(env(safe-area-inset-bottom,0px),10px)] flex items-center justify-center pointer-events-auto px-4">
+          <div className="flex items-center gap-2.5 sm:gap-3 px-3.5 py-2.5 sm:px-5 sm:py-3 rounded-full bg-black/75 border border-white/20 backdrop-blur-2xl shadow-2xl shadow-black/80">
+            {/* Mic Toggle */}
             <button
               type="button"
-              onClick={() => setReactionsOpen(!reactionsOpen)}
+              onClick={handleToggleMic}
+              disabled={isMicToggling}
               className={`w-12 h-12 rounded-full flex items-center justify-center transition-all active:scale-95 shadow-lg ${
-                reactionsOpen
-                  ? "bg-zinc-800 border-orange-500 text-orange-400"
+                !isMicrophoneEnabled
+                  ? "bg-rose-600 text-white shadow-rose-600/30"
                   : "bg-zinc-800/90 text-white border border-zinc-700/60 backdrop-blur-xl"
               }`}
-              title="Send Reaction"
+              title={isMicrophoneEnabled ? "Mute Microphone" : "Unmute Microphone"}
             >
-              <Smile className="w-5 h-5" />
+              {!isMicrophoneEnabled ? <MicOff className="w-5 h-5" /> : <Mic className="w-5 h-5 text-emerald-400" />}
             </button>
-            {reactionsOpen && (
-              <div className="absolute bottom-16 right-0 p-2 rounded-2xl bg-zinc-900 border border-zinc-700/80 backdrop-blur-2xl shadow-2xl flex items-center gap-1.5 z-40 animate-in fade-in zoom-in-95 duration-100">
-                {["🎉", "🔥", "👏", "☕", "❤️", "🚀", "💡"].map((em) => (
-                  <button
-                    key={em}
-                    type="button"
-                    onClick={() => handleSendReaction(em)}
-                    className="p-1.5 hover:scale-125 active:scale-95 transition-transform text-lg"
-                  >
-                    {em}
-                  </button>
-                ))}
-              </div>
-            )}
+
+            {/* Video Toggle */}
+            <button
+              type="button"
+              onClick={handleToggleCamera}
+              disabled={isCamToggling}
+              className={`w-12 h-12 rounded-full flex items-center justify-center transition-all active:scale-95 shadow-lg ${
+                !isCameraEnabled
+                  ? "bg-rose-600 text-white shadow-rose-600/30"
+                  : "bg-zinc-800/90 text-white border border-zinc-700/60 backdrop-blur-xl"
+              }`}
+              title={isCameraEnabled ? "Turn Off Camera" : "Turn On Camera"}
+            >
+              {!isCameraEnabled ? <VideoOff className="w-5 h-5" /> : <Video className="w-5 h-5 text-orange-400" />}
+            </button>
+
+            {/* Screen Share */}
+            <button
+              type="button"
+              onClick={handleToggleScreenShare}
+              className={`w-12 h-12 rounded-full flex items-center justify-center transition-all active:scale-95 shadow-lg ${
+                isScreenShareEnabled
+                  ? "bg-orange-600 text-white shadow-orange-600/30"
+                  : "bg-zinc-800/90 text-white border border-zinc-700/60 backdrop-blur-xl"
+              }`}
+              title={isScreenShareEnabled ? "Stop Sharing Screen" : "Share Screen"}
+            >
+              <ScreenShare className="w-5 h-5" />
+            </button>
+
+            {/* End / Leave Call Button */}
+            <button
+              type="button"
+              onClick={handleLeaveSession}
+              className="w-14 h-14 rounded-full bg-rose-600 hover:bg-rose-700 text-white flex items-center justify-center shadow-xl shadow-rose-600/40 active:scale-95 transition-all"
+              title="Leave Room"
+            >
+              <PhoneOff className="w-6 h-6" />
+            </button>
+
+            {/* Chat Toggle Button */}
+            <button
+              type="button"
+              onClick={() => {
+                setActiveSidebarTab("chat");
+                setSidebarOpen(true);
+                setUnreadCount(0);
+              }}
+              className="relative w-12 h-12 rounded-full bg-zinc-800/90 text-white border border-zinc-700/60 backdrop-blur-xl flex items-center justify-center shadow-lg active:scale-95 transition-all"
+              title="In-Room Chat"
+            >
+              <MessageSquare className="w-5 h-5" />
+              {unreadCount > 0 && (
+                <span className="absolute -top-1 -right-1 w-5 h-5 rounded-full bg-orange-600 text-white text-[10px] font-bold flex items-center justify-center animate-pulse">
+                  {unreadCount}
+                </span>
+              )}
+            </button>
+
+            {/* Emoji Reactions */}
+            <div className="relative">
+              <button
+                type="button"
+                onClick={() => setReactionsOpen(!reactionsOpen)}
+                className={`w-12 h-12 rounded-full flex items-center justify-center transition-all active:scale-95 shadow-lg ${
+                  reactionsOpen
+                    ? "bg-zinc-800 border-orange-500 text-orange-400"
+                    : "bg-zinc-800/90 text-white border border-zinc-700/60 backdrop-blur-xl"
+                }`}
+                title="Send Reaction"
+              >
+                <Smile className="w-5 h-5" />
+              </button>
+              {reactionsOpen && (
+                <div className="absolute bottom-16 right-0 p-2 rounded-2xl bg-zinc-900 border border-zinc-700/80 backdrop-blur-2xl shadow-2xl flex items-center gap-1.5 z-40 animate-in fade-in zoom-in-95 duration-100">
+                  {["🎉", "🔥", "👏", "☕", "❤️", "🚀", "💡"].map((em) => (
+                    <button
+                      key={em}
+                      type="button"
+                      onClick={() => handleSendReaction(em)}
+                      className="p-1.5 hover:scale-125 active:scale-95 transition-transform text-lg"
+                    >
+                      {em}
+                    </button>
+                  ))}
+                </div>
+              )}
+            </div>
           </div>
         </div>
       </div>

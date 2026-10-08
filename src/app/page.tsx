@@ -176,7 +176,20 @@ export default function CampusHubHome() {
     channel.on("broadcast", { event: "call-invite" }, (payload) => {
       const invite = payload.payload as DirectCallInvite;
       if (invite.toId === profile.id) {
+        if (profile.call_restricted) {
+          console.log("[Campus Hub] Call invite discarded because Call Restriction is ON.");
+          return;
+        }
         setIncomingInvite(invite);
+      }
+    });
+
+    channel.on("broadcast", { event: "profile-updated" }, (payload) => {
+      const updated = payload.payload as UserProfile;
+      if (updated && updated.id) {
+        setStudents((prev) =>
+          prev.map((s) => (s.id === updated.id ? { ...s, ...updated } : s))
+        );
       }
     });
 
@@ -236,9 +249,41 @@ export default function CampusHubHome() {
     };
   }, [isInCall]);
 
+  // Toggle Call Restriction (Do Not Disturb) for current student
+  const handleToggleCallRestriction = async () => {
+    if (!profile) return;
+    const newRestricted = !profile.call_restricted;
+    const updated: UserProfile = { ...profile, call_restricted: newRestricted };
+    setProfile(updated);
+    saveLocalProfile(updated);
+
+    try {
+      await syncProfileWithSupabase(updated);
+    } catch (e) {
+      console.warn("Could not sync call_restricted to remote db:", e);
+    }
+
+    try {
+      const channel = supabase.channel("campus-lounge");
+      channel.send({
+        type: "broadcast",
+        event: "profile-updated",
+        payload: updated,
+      });
+      channel.track(updated);
+    } catch {}
+  };
+
   // Send Direct Video Call Invite
   const handleInviteToCall = (targetStudent: UserProfile) => {
     if (!profile) return;
+
+    if (targetStudent.call_restricted) {
+      alert(
+        `${targetStudent.full_name} has turned ON Call Restriction (Do Not Disturb). Direct calls to this student are currently restricted.`
+      );
+      return;
+    }
 
     const roomName = `direct_call_${[profile.id, targetStudent.id].sort().join("_")}`;
     const invite: DirectCallInvite = {
@@ -354,7 +399,7 @@ export default function CampusHubHome() {
             </div>
           )}
 
-          <div className="relative z-10 flex flex-col flex-1 min-h-screen">
+          <div className={`relative z-10 flex flex-col flex-1 ${isInCall ? "fixed inset-0 z-50 h-screen h-[100dvh] w-screen overflow-hidden p-0 m-0" : "min-h-screen"}`}>
             {/* Global Campus Header with Active Status & Sign Out - Completely hidden during calls */}
             {!isInCall && (
               <CampusHeader
@@ -362,6 +407,7 @@ export default function CampusHubHome() {
                 onlineCount={students.length}
                 onOpenProfileModal={() => setEditProfileOpen(true)}
                 onStatusChange={handleStatusChange}
+                onToggleCallRestriction={handleToggleCallRestriction}
                 onSignOut={handleSignOut}
                 currentTab={currentTab}
                 onTabChange={handleTabChange}
@@ -369,16 +415,17 @@ export default function CampusHubHome() {
             )}
 
             {/* Main Workspace View Router with Liquid Glass Switch Animation */}
-            <main className="flex-1 flex flex-col w-full relative">
+            <main className={`flex-1 flex flex-col w-full relative ${isInCall ? "fixed inset-0 z-50 h-screen h-[100dvh] w-screen overflow-hidden p-0 m-0" : ""}`}>
               <div
                 key={currentTab}
-                className={`flex-1 flex flex-col w-full ${!isLightUi ? "animate-liquid-glass" : ""}`}
+                className={`flex-1 flex flex-col w-full ${!isLightUi && !isInCall ? "animate-liquid-glass" : ""} ${isInCall ? "h-screen h-[100dvh] w-screen overflow-hidden" : ""}`}
               >
                 {currentTab === "lounge" && (
                   <CampusLounge
                     currentProfile={profile}
                     students={students}
                     onInviteToCall={handleInviteToCall}
+                    onToggleCallRestriction={handleToggleCallRestriction}
                     onOpen1on1Match={() => {
                       setDirectRoomToJoin(null);
                       setCurrentTab("match");
@@ -416,6 +463,7 @@ export default function CampusHubHome() {
                     profile={profile}
                     onOpenEditModal={() => setEditProfileOpen(true)}
                     onUpdateStatus={handleStatusChange}
+                    onToggleCallRestriction={handleToggleCallRestriction}
                     onSignOut={handleSignOut}
                   />
                 )}

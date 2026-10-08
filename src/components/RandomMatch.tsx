@@ -703,36 +703,39 @@ export default function RandomMatch({
 
       {/* 3. CONNECTED STATE: LIVEKIT SPLIT-SCREEN VIDEO FEEDS & DOCK */}
       {matchState === "connected" && livekitToken && (
-        <LiveKitRoom
-          serverUrl={livekitUrl}
-          token={livekitToken}
-          connect={true}
-          video={isLightUi ? { resolution: { width: 1280, height: 720, frameRate: 30 } } : true}
-          audio={true}
-          options={roomOptions}
-          onError={(err) => setErrorMsg(err?.message || "Video connection error. Please reconnect.")}
-          onMediaDeviceFailure={(failure) => {
-            console.warn("Media device failure:", failure);
-            setErrorMsg("Could not access camera or microphone. Please check browser permissions.");
-          }}
-          className="fixed inset-0 z-50 bg-black h-[100dvh] w-full overflow-hidden flex flex-col justify-between select-none"
-        >
-          <RoomAudioRenderer />
-          <ConnectedMatchContent
-            currentProfile={currentProfile}
-            onSkip={skipToNextMatch}
-            onEndCall={handleEndCall}
-            chatOpen={chatOpen}
-            onToggleChat={() => setChatOpen(!chatOpen)}
-            chatMessages={chatMessages}
-            chatInput={chatInput}
-            onChatInputChange={setChatInput}
-            onSendMessage={handleSendMessage}
-            isSwappedLayout={isSwappedLayout}
-            onToggleSwap={() => setIsSwappedLayout(!isSwappedLayout)}
-            peerLeftNotice={peerLeftNotice}
-          />
-        </LiveKitRoom>
+        <div className="fixed inset-0 z-[9999] w-screen h-screen h-[100dvh] bg-black overflow-hidden select-none m-0 p-0">
+          <LiveKitRoom
+            serverUrl={livekitUrl}
+            token={livekitToken}
+            connect={true}
+            video={isLightUi ? { resolution: { width: 1280, height: 720, frameRate: 30 } } : true}
+            audio={true}
+            options={roomOptions}
+            onError={(err) => setErrorMsg(err?.message || "Video connection error. Please reconnect.")}
+            onMediaDeviceFailure={(failure) => {
+              console.warn("Media device failure:", failure);
+              setErrorMsg("Could not access camera or microphone. Please check browser permissions.");
+            }}
+            className="fixed inset-0 w-full h-full h-[100dvh] overflow-hidden flex flex-col justify-between bg-black select-none"
+          >
+            <RoomAudioRenderer />
+            <ConnectedMatchContent
+              currentProfile={currentProfile}
+              onSkip={skipToNextMatch}
+              onEndCall={handleEndCall}
+              chatOpen={chatOpen}
+              onToggleChat={() => setChatOpen(!chatOpen)}
+              chatMessages={chatMessages}
+              chatInput={chatInput}
+              onChatInputChange={setChatInput}
+              onSendMessage={handleSendMessage}
+              isSwappedLayout={isSwappedLayout}
+              onToggleSwap={() => setIsSwappedLayout(!isSwappedLayout)}
+              peerLeftNotice={peerLeftNotice}
+              isDirectCall={Boolean(directRoomName)}
+            />
+          </LiveKitRoom>
+        </div>
       )}
     </div>
   );
@@ -752,6 +755,7 @@ interface ConnectedMatchContentProps {
   isSwappedLayout: boolean;
   onToggleSwap: () => void;
   peerLeftNotice?: string;
+  isDirectCall?: boolean;
 }
 
 function ConnectedMatchContent({
@@ -767,6 +771,7 @@ function ConnectedMatchContent({
   isSwappedLayout,
   onToggleSwap,
   peerLeftNotice,
+  isDirectCall,
 }: ConnectedMatchContentProps) {
   const room = useRoomContext();
   const participants = useParticipants();
@@ -881,13 +886,14 @@ function ConnectedMatchContent({
       {/* ======================================================== */}
       {/* 1. MOBILE NATIVE APP VIEW (WhatsApp / Google Meet Style) */}
       {/* ======================================================== */}
-      <div className="md:hidden relative w-full h-full overflow-hidden flex flex-col justify-between">
+      <div className="md:hidden fixed inset-0 w-screen h-screen h-[100dvh] overflow-hidden flex flex-col justify-between z-10 bg-black">
         {/* Full-Screen Remote Background Stream */}
         <div className="absolute inset-0 w-full h-full bg-zinc-950 flex items-center justify-center overflow-hidden">
           {backgroundTrack && backgroundTrack.publication?.track ? (
             <VideoTrack
               trackRef={backgroundTrack}
-              className={`w-full h-full object-cover ${isBackgroundLocal ? "-scale-x-100" : ""}`}
+              className={`w-full h-full !object-cover ${isBackgroundLocal ? "-scale-x-100" : ""}`}
+              style={{ width: "100%", height: "100%", objectFit: "cover" }}
             />
           ) : (
             <div className="flex flex-col items-center justify-center p-6 text-center space-y-3">
@@ -996,21 +1002,21 @@ function ConnectedMatchContent({
           </div>
         </div>
 
-        {/* Essential Floating Call Controls at Bottom */}
-        <div className="absolute bottom-6 inset-x-0 z-30 pb-safe px-4 flex items-center justify-center pointer-events-auto">
-          <div className="flex items-center gap-3 px-4 py-2.5 rounded-full bg-black/65 border border-white/15 backdrop-blur-xl shadow-2xl">
+        {/* Essential Floating Call Controls at Bottom (WhatsApp Style) */}
+        <div className="fixed bottom-4 sm:bottom-6 inset-x-0 z-40 pb-[max(env(safe-area-inset-bottom,0px),10px)] px-4 flex items-center justify-center pointer-events-auto">
+          <div className="flex items-center gap-3.5 px-5 py-3 rounded-full bg-black/75 border border-white/20 backdrop-blur-2xl shadow-2xl shadow-black/80">
             {/* Mic Toggle */}
             <button
               onClick={handleToggleMicrophone}
               disabled={isMicToggling}
               title={isMicrophoneEnabled ? "Mute Microphone" : "Unmute Microphone"}
-              className={`w-12 h-12 rounded-full flex items-center justify-center border transition-all active:scale-90 ${
+              className={`w-12 h-12 rounded-full flex items-center justify-center transition-all active:scale-90 shadow-lg ${
                 !isMicrophoneEnabled
-                  ? "bg-rose-500/25 border-rose-500 text-rose-400"
-                  : "bg-white/10 hover:bg-white/20 border-white/15 text-white"
+                  ? "bg-rose-600 text-white shadow-rose-600/40"
+                  : "bg-zinc-800/90 text-white border border-white/10 hover:bg-zinc-700/80"
               }`}
             >
-              {!isMicrophoneEnabled ? <MicOff className="w-5 h-5" /> : <Mic className="w-5 h-5" />}
+              {!isMicrophoneEnabled ? <MicOff className="w-5 h-5" /> : <Mic className="w-5 h-5 text-emerald-400" />}
             </button>
 
             {/* Video Toggle */}
@@ -1018,32 +1024,42 @@ function ConnectedMatchContent({
               onClick={handleToggleCam}
               disabled={isCamToggling}
               title={isCameraEnabled ? "Turn Off Camera" : "Turn On Camera"}
-              className={`w-12 h-12 rounded-full flex items-center justify-center border transition-all active:scale-90 ${
+              className={`w-12 h-12 rounded-full flex items-center justify-center transition-all active:scale-90 shadow-lg ${
                 !isCameraEnabled
-                  ? "bg-rose-500/25 border-rose-500 text-rose-400"
-                  : "bg-white/10 hover:bg-white/20 border-white/15 text-white"
+                  ? "bg-rose-600 text-white shadow-rose-600/40"
+                  : "bg-zinc-800/90 text-white border border-white/10 hover:bg-zinc-700/80"
               }`}
             >
-              {!isCameraEnabled ? <VideoOff className="w-5 h-5" /> : <Video className="w-5 h-5" />}
+              {!isCameraEnabled ? <VideoOff className="w-5 h-5" /> : <Video className="w-5 h-5 text-orange-400" />}
             </button>
 
-            {/* Next / Skip Match */}
+            {/* Flip / Swap Preview */}
             <button
-              onClick={onSkip}
-              title="Next Match"
-              className="h-12 px-4 rounded-full bg-orange-600 hover:bg-orange-500 text-white font-semibold text-xs flex items-center gap-1.5 shadow-lg active:scale-95 transition-all"
+              onClick={onToggleSwap}
+              title="Flip / Swap Video View"
+              className="w-12 h-12 rounded-full flex items-center justify-center bg-zinc-800/90 text-white border border-white/10 hover:bg-zinc-700/80 shadow-lg active:scale-90 transition-all"
             >
-              <SkipForward className="w-4 h-4 text-white" />
-              <span className="hidden xs:inline">Next</span>
+              <FlipHorizontal className="w-5 h-5 text-zinc-200" />
             </button>
+
+            {/* Next / Skip Match (Hidden in Direct 1-on-1 Calls from Lounge) */}
+            {!isDirectCall && (
+              <button
+                onClick={onSkip}
+                title="Next Match"
+                className="w-12 h-12 rounded-full bg-orange-600 hover:bg-orange-500 text-white flex items-center justify-center shadow-lg shadow-orange-600/40 active:scale-90 transition-all"
+              >
+                <SkipForward className="w-5 h-5 text-white" />
+              </button>
+            )}
 
             {/* Leave / End Call */}
             <button
               onClick={onEndCall}
               title="End Call"
-              className="w-12 h-12 rounded-full bg-rose-600 hover:bg-rose-500 text-white flex items-center justify-center shadow-lg shadow-rose-600/40 active:scale-90 transition-all"
+              className="w-14 h-14 rounded-full bg-rose-600 hover:bg-rose-500 text-white flex items-center justify-center shadow-xl shadow-rose-600/50 active:scale-90 transition-all"
             >
-              <PhoneOff className="w-5 h-5" />
+              <PhoneOff className="w-6 h-6" />
             </button>
           </div>
         </div>

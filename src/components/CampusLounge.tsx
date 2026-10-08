@@ -17,6 +17,8 @@ import {
   Heart,
   Send,
   Users,
+  Bell,
+  BellOff,
 } from "lucide-react";
 import confetti from "canvas-confetti";
 
@@ -26,6 +28,7 @@ interface CampusLoungeProps {
   onInviteToCall: (targetStudent: UserProfile) => void;
   onOpen1on1Match: () => void;
   onJoinHangout: (roomId: string) => void;
+  onToggleCallRestriction?: () => void;
 }
 
 export default function CampusLounge({
@@ -34,6 +37,7 @@ export default function CampusLounge({
   onInviteToCall,
   onOpen1on1Match,
   onJoinHangout,
+  onToggleCallRestriction,
 }: CampusLoungeProps) {
   const [activeTab, setActiveTab] = useState<"students" | "feed">("students");
   const [searchQuery, setSearchQuery] = useState("");
@@ -155,6 +159,7 @@ export default function CampusLounge({
       tag: newPostTag,
       likes: 0,
       timeAgo: "Just now",
+      isRestricted: currentProfile?.call_restricted,
     };
 
     setShoutouts([newPost, ...shoutouts]);
@@ -235,6 +240,77 @@ export default function CampusLounge({
               1-on-1 Random Match
             </button>
           </div>
+        </div>
+      </div>
+
+      {/* Call Restriction & Disturbance Prevention Toggle Bar (PC & Mobile) */}
+      <div
+        className={`flex flex-col sm:flex-row sm:items-center justify-between gap-3 p-3.5 sm:p-4 rounded-xl border backdrop-blur-md transition-all ${
+          currentProfile?.call_restricted
+            ? "bg-rose-950/20 border-rose-500/40 shadow-sm shadow-rose-950/30"
+            : "bg-zinc-900/60 border-zinc-800/80 hover:border-zinc-700/80"
+        }`}
+      >
+        <div className="flex items-center gap-3 min-w-0">
+          <div
+            className={`w-9 h-9 rounded-xl flex items-center justify-center shrink-0 border ${
+              currentProfile?.call_restricted
+                ? "bg-rose-500/20 border-rose-500/40 text-rose-400"
+                : "bg-zinc-800 border-zinc-700 text-zinc-400"
+            }`}
+          >
+            {currentProfile?.call_restricted ? (
+              <BellOff className="w-4 h-4 text-rose-400 animate-pulse" />
+            ) : (
+              <Bell className="w-4 h-4 text-zinc-400" />
+            )}
+          </div>
+          <div className="min-w-0">
+            <div className="flex items-center gap-2 flex-wrap">
+              <span className="text-xs sm:text-sm font-bold text-zinc-100">
+                Call Restriction (Do Not Disturb)
+              </span>
+              <span
+                className={`px-2 py-0.5 rounded text-[10px] font-bold border ${
+                  currentProfile?.call_restricted
+                    ? "bg-rose-500/20 text-rose-300 border-rose-500/40"
+                    : "bg-zinc-800 text-zinc-400 border border-zinc-700"
+                }`}
+              >
+                {currentProfile?.call_restricted ? "RESTRICTION ON" : "RESTRICTION OFF"}
+              </span>
+            </div>
+            <p className="text-[11px] text-zinc-400 truncate mt-0.5">
+              {currentProfile?.call_restricted
+                ? "Nobody can disturb you with call requests. Your ID shows 'Calls Restricted' in Lounge & Feed."
+                : "Turn ON to block repeated incoming call requests from disturbing you."}
+            </p>
+          </div>
+        </div>
+
+        <div className="flex items-center gap-2 shrink-0 self-end sm:self-auto">
+          {onToggleCallRestriction && (
+            <button
+              onClick={onToggleCallRestriction}
+              className={`px-3.5 py-1.5 rounded-xl text-xs font-semibold transition-all active:scale-95 flex items-center gap-1.5 shadow-sm cursor-pointer ${
+                currentProfile?.call_restricted
+                  ? "bg-rose-600 hover:bg-rose-700 text-white shadow-rose-600/30"
+                  : "bg-zinc-800 hover:bg-zinc-700 text-zinc-200 border border-zinc-700"
+              }`}
+            >
+              {currentProfile?.call_restricted ? (
+                <>
+                  <Bell className="w-3.5 h-3.5" />
+                  <span>Disable Restriction</span>
+                </>
+              ) : (
+                <>
+                  <BellOff className="w-3.5 h-3.5 text-zinc-300" />
+                  <span>Turn ON Restriction</span>
+                </>
+              )}
+            </button>
+          )}
         </div>
       </div>
 
@@ -328,16 +404,31 @@ export default function CampusLounge({
                       isOnline={student.is_online !== false}
                     />
 
-                    {/* Status Badge */}
-                    <div className="px-2 py-0.5 rounded-md text-[11px] font-medium bg-zinc-800/80 border border-zinc-700/60 text-zinc-300 group-hover:border-orange-500/30 truncate max-w-[170px]">
-                      {student.status}
+                    {/* Status & Restriction Badges */}
+                    <div className="flex flex-col items-end gap-1">
+                      <div className="px-2 py-0.5 rounded-md text-[11px] font-medium bg-zinc-800/80 border border-zinc-700/60 text-zinc-300 group-hover:border-orange-500/30 truncate max-w-[170px]">
+                        {student.status}
+                      </div>
+                      {student.call_restricted && (
+                        <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-md text-[10px] font-bold bg-rose-500/20 text-rose-300 border border-rose-500/40 animate-pulse">
+                          <BellOff className="w-2.5 h-2.5 text-rose-400" />
+                          <span>Calls Restricted</span>
+                        </span>
+                      )}
                     </div>
                   </div>
 
                   {/* Student Details */}
-                  <h3 className="text-sm font-semibold text-zinc-100 group-hover:text-orange-400 transition-colors truncate">
-                    {student.full_name}
-                  </h3>
+                  <div className="flex items-center gap-1.5 flex-wrap">
+                    <h3 className="text-sm font-semibold text-zinc-100 group-hover:text-orange-400 transition-colors truncate">
+                      {student.full_name}
+                    </h3>
+                    {student.call_restricted && (
+                      <span className="text-[10px] font-semibold text-rose-400 bg-rose-500/10 px-1.5 py-0.2 rounded border border-rose-500/25">
+                        Restricted
+                      </span>
+                    )}
+                  </div>
                   <p className="text-xs text-zinc-400 truncate mt-0.5">
                     {student.department}
                   </p>
@@ -354,7 +445,7 @@ export default function CampusLounge({
 
                 {/* Quick Action Buttons:
                     - 'Say Hi': Option button that turns Orange on hover
-                    - 'Invite Call': Orange button that turns Dark Gray on hover
+                    - 'Invite Call' or 'Restricted': Orange button or Disabled Restricted button
                 */}
                 <div className="flex items-center gap-2 mt-4 pt-3 border-t border-zinc-800/70">
                   <button
@@ -365,13 +456,24 @@ export default function CampusLounge({
                     Say Hi
                   </button>
 
-                  <button
-                    onClick={() => onInviteToCall(student)}
-                    className="flex-1 py-1.5 px-3 rounded-lg bg-orange-600 hover:bg-zinc-800 text-white text-xs font-semibold transition-all flex items-center justify-center gap-1.5 shadow-sm active:scale-95"
-                  >
-                    <Video className="w-3.5 h-3.5 text-white" />
-                    Invite Call
-                  </button>
+                  {student.call_restricted ? (
+                    <button
+                      disabled
+                      title={`${student.full_name} has enabled call restriction to avoid disturbance.`}
+                      className="flex-1 py-1.5 px-3 rounded-lg bg-zinc-900/90 border border-rose-500/30 text-rose-400/80 text-xs font-semibold flex items-center justify-center gap-1.5 cursor-not-allowed opacity-80"
+                    >
+                      <BellOff className="w-3.5 h-3.5 text-rose-400" />
+                      <span>Restricted</span>
+                    </button>
+                  ) : (
+                    <button
+                      onClick={() => onInviteToCall(student)}
+                      className="flex-1 py-1.5 px-3 rounded-lg bg-orange-600 hover:bg-zinc-800 text-white text-xs font-semibold transition-all flex items-center justify-center gap-1.5 shadow-sm active:scale-95"
+                    >
+                      <Video className="w-3.5 h-3.5 text-white" />
+                      Invite Call
+                    </button>
+                  )}
                 </div>
               </div>
             ))}
@@ -452,54 +554,87 @@ export default function CampusLounge({
 
           {/* Shoutouts Feed List */}
           <div className="space-y-3">
-            {shoutouts.map((post) => (
-              <div
-                key={post.id}
-                className="rounded-xl bg-zinc-900/40 border border-zinc-800/80 hover:border-orange-500/40 transition-colors p-4 space-y-2.5"
-              >
-                <div className="flex items-center justify-between gap-3">
-                  <div className="flex items-center gap-2.5">
-                    <StudentAvatar
-                      avatar={post.userAvatar}
-                      name={post.userName}
-                      size="sm"
-                      showOnlineBadge={false}
-                    />
-                    <div>
-                      <div className="text-xs font-semibold text-zinc-200 flex items-center gap-2">
-                        <span className="hover:text-orange-400 transition-colors">{post.userName}</span>
-                        <span className="px-1.5 py-0.2 rounded-md text-[9px] font-semibold bg-zinc-800 text-orange-400 border border-orange-500/30">
-                          {post.tag}
-                        </span>
+            {shoutouts.map((post) => {
+              const authorStudent = students.find((s) => s.id === post.userId);
+              const isAuthorRestricted = Boolean(
+                authorStudent?.call_restricted ??
+                  (post.userId === currentProfile?.id
+                    ? currentProfile?.call_restricted
+                    : post.isRestricted)
+              );
+
+              return (
+                <div
+                  key={post.id}
+                  className="rounded-xl bg-zinc-900/40 border border-zinc-800/80 hover:border-orange-500/40 transition-colors p-4 space-y-2.5"
+                >
+                  <div className="flex items-center justify-between gap-3">
+                    <div className="flex items-center gap-2.5">
+                      <StudentAvatar
+                        avatar={post.userAvatar}
+                        name={post.userName}
+                        size="sm"
+                        showOnlineBadge={false}
+                      />
+                      <div>
+                        <div className="text-xs font-semibold text-zinc-200 flex items-center gap-2 flex-wrap">
+                          <span className="hover:text-orange-400 transition-colors">
+                            {post.userName}
+                          </span>
+                          <span className="px-1.5 py-0.2 rounded-md text-[9px] font-semibold bg-zinc-800 text-orange-400 border border-orange-500/30">
+                            {post.tag}
+                          </span>
+                          {isAuthorRestricted && (
+                            <span className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded text-[9px] font-bold bg-rose-500/15 text-rose-300 border border-rose-500/30">
+                              <BellOff className="w-2.5 h-2.5 text-rose-400" />
+                              Calls Restricted
+                            </span>
+                          )}
+                        </div>
+                        <p className="text-[10px] text-zinc-400">
+                          {post.userDepartment}
+                        </p>
                       </div>
-                      <p className="text-[10px] text-zinc-400">{post.userDepartment}</p>
                     </div>
+                    <span className="text-[10px] text-zinc-500">{post.timeAgo}</span>
                   </div>
-                  <span className="text-[10px] text-zinc-500">{post.timeAgo}</span>
+
+                  <p className="text-xs text-zinc-300 leading-relaxed pl-10">
+                    {post.content}
+                  </p>
+
+                  <div className="flex items-center justify-between pl-10 pt-1">
+                    <button
+                      onClick={() => handleLikePost(post.id)}
+                      className="flex items-center gap-1.5 text-xs text-zinc-400 hover:text-orange-400 transition-colors"
+                    >
+                      <Heart className="w-3.5 h-3.5 text-orange-500 fill-orange-500/20 hover:fill-orange-500" />
+                      <span className="text-[11px] font-medium">{post.likes}</span>
+                    </button>
+
+                    {isAuthorRestricted ? (
+                      <span className="text-[11px] font-semibold text-rose-400/90 flex items-center gap-1 bg-rose-950/30 px-2 py-0.5 rounded border border-rose-800/40">
+                        <BellOff className="w-3 h-3 text-rose-400" />
+                        Calls Restricted (DND)
+                      </span>
+                    ) : (
+                      <button
+                        onClick={() => {
+                          if (authorStudent && onInviteToCall) {
+                            onInviteToCall(authorStudent);
+                          } else {
+                            onOpen1on1Match();
+                          }
+                        }}
+                        className="text-xs font-medium text-zinc-400 hover:text-orange-400 flex items-center gap-1 transition-colors"
+                      >
+                        Connect Now →
+                      </button>
+                    )}
+                  </div>
                 </div>
-
-                <p className="text-xs text-zinc-300 leading-relaxed pl-10">
-                  {post.content}
-                </p>
-
-                <div className="flex items-center justify-between pl-10 pt-1">
-                  <button
-                    onClick={() => handleLikePost(post.id)}
-                    className="flex items-center gap-1.5 text-xs text-zinc-400 hover:text-orange-400 transition-colors"
-                  >
-                    <Heart className="w-3.5 h-3.5 text-orange-500 fill-orange-500/20 hover:fill-orange-500" />
-                    <span className="text-[11px] font-medium">{post.likes}</span>
-                  </button>
-
-                  <button
-                    onClick={onOpen1on1Match}
-                    className="text-xs font-medium text-zinc-400 hover:text-orange-400 flex items-center gap-1 transition-colors"
-                  >
-                    Connect Now →
-                  </button>
-                </div>
-              </div>
-            ))}
+              );
+            })}
 
             {shoutouts.length === 0 && (
               <div className="text-center py-12 rounded-xl bg-zinc-900/30 border border-zinc-800/80 p-8">

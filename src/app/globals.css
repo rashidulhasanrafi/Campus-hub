@@ -656,6 +656,37 @@ body.light,
   user-select: none;
 }
 
+/* ========================================================
+   WHATSAPP-STYLE FULLSCREEN MOBILE VIDEO CALL STYLES
+   ======================================================== */
+.lk-participant-media-video {
+  width: 100% !important;
+  height: 100% !important;
+  object-fit: cover !important;
+  background-color: #000000 !important;
+}
 
+/* Force portrait phone camera feeds to cover container edge-to-edge instead of letterboxing */
+.lk-participant-media-video[data-lk-orientation="portrait"],
+video[data-lk-orientation="portrait"] {
+  object-fit: cover !important;
+  background-color: #000000 !important;
+}
 
+/* Screen sharing retains full document context */
+.lk-participant-media-video[data-lk-source="screen_share"] {
+  object-fit: contain !important;
+  background-color: #090a0f !important;
+}
 
+/* Mobile video call container safety */
+.mobile-video-stage {
+  position: fixed !important;
+  inset: 0 !important;
+  width: 100vw !important;
+  height: 100dvh !important;
+  height: 100vh !important;
+  overflow: hidden !important;
+  background-color: #000000 !important;
+  z-index: 50 !important;
+}

@@ -71,6 +71,7 @@ export default function ProfileOnboardingModal({
       bio: bio.trim(),
       is_online: true,
       last_seen: new Date().toISOString(),
+      call_restricted: currentProfile?.call_restricted ?? false,
     };
 
     onSaveProfile(newProfile);

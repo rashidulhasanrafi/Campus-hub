@@ -41,6 +41,7 @@ export interface UserProfile {
   bio?: string;
   is_online?: boolean;
   last_seen?: string;
+  call_restricted?: boolean;
 }
 
 export interface DirectCallInvite {
@@ -64,6 +65,7 @@ export interface ShoutoutPost {
   tag: string;
   likes: number;
   timeAgo: string;
+  isRestricted?: boolean;
 }
 
 export const UIU_PROGRAMS = [
@@ -219,6 +221,7 @@ export async function fetchUserProfile(userId: string): Promise<UserProfile | nu
       .maybeSingle();
 
     if (!error && data && data.full_name) {
+      const local = getLocalProfile(userId);
       const profile: UserProfile = {
         id: data.id,
         email: data.email,
@@ -230,6 +233,7 @@ export async function fetchUserProfile(userId: string): Promise<UserProfile | nu
         bio: data.bio || "Campus Hub student",
         is_online: true,
         last_seen: data.last_seen,
+        call_restricted: Boolean(data.call_restricted ?? local?.call_restricted),
       };
       saveLocalProfile(profile);
       return profile;
@@ -250,23 +254,32 @@ export async function fetchUserProfile(userId: string): Promise<UserProfile | nu
 export async function syncProfileWithSupabase(profile: UserProfile): Promise<void> {
   saveLocalProfile(profile);
   try {
+    const payload: any = {
+      id: profile.id,
+      email: profile.email,
+      full_name: profile.full_name,
+      department: profile.department,
+      batch: profile.batch,
+      avatar: profile.avatar,
+      status: profile.status,
+      bio: profile.bio || "Campus Hub Student",
+      is_online: true,
+      last_seen: new Date().toISOString(),
+      call_restricted: Boolean(profile.call_restricted),
+    };
+
     const { error } = await supabase.from("profiles").upsert(
-      {
-        id: profile.id,
-        email: profile.email,
-        full_name: profile.full_name,
-        department: profile.department,
-        batch: profile.batch,
-        avatar: profile.avatar,
-        status: profile.status,
-        bio: profile.bio || "Campus Hub Student",
-        is_online: true,
-        last_seen: new Date().toISOString(),
-      },
+      payload,
       { onConflict: "id" }
     );
     if (error) {
-      console.warn("Supabase profiles table sync note:", error.message);
+      // If column call_restricted doesn't exist remotely, retry without it
+      if (error.message?.includes("call_restricted") || error.code === "PGRST204") {
+        delete payload.call_restricted;
+        await supabase.from("profiles").upsert(payload, { onConflict: "id" });
+      } else {
+        console.warn("Supabase profiles table sync note:", error.message);
+      }
     }
   } catch (err) {
     console.warn("Supabase profiles sync error (fallback active):", err);
@@ -307,6 +320,7 @@ export async function fetchRemoteProfiles(): Promise<UserProfile[]> {
       bio: d.bio,
       is_online: d.is_online ?? true,
       last_seen: d.last_seen,
+      call_restricted: Boolean(d.call_restricted),
     }));
   } catch (err) {
     console.warn("Error fetching remote profiles:", err);
