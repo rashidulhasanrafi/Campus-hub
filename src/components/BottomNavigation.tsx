@@ -55,7 +55,7 @@ export default function BottomNavigation({
     },
     {
       id: "profile" as NavTab,
-      label: "Student ID",
+      label: "Profile",
       icon: User,
       customIcon: "/images/icon-student-id.png",
       badge: null,

@@ -163,12 +163,39 @@ export default function AuthScreen({
     }
   }, [otpDigits]);
 
-  // Helper to normalize email from email or Student ID
-  const normalizeIdentifier = (val: string): string => {
+  // Helper to resolve email from email or Student ID (with Supabase lookup)
+  const resolveTargetEmail = async (val: string): Promise<string> => {
     const trimmed = val.trim().toLowerCase();
     if (!trimmed) return "";
     if (trimmed.includes("@")) return trimmed;
-    const cleanId = trimmed.replace(/\s+/g, "");
+
+    const cleanId = trimmed.replace(/[\s-]+/g, "");
+    try {
+      // 1. Try RPC get_email_by_student_id if Supabase SQL function is deployed
+      const { data: rpcEmail, error: rpcErr } = await supabase.rpc(
+        "get_email_by_student_id",
+        { p_student_id: cleanId }
+      );
+      if (!rpcErr && rpcEmail && typeof rpcEmail === "string" && rpcEmail.includes("@")) {
+        return rpcEmail.trim().toLowerCase();
+      }
+
+      // 2. Direct profiles lookup by student_id or email prefix
+      const { data: profileRow, error: profErr } = await supabase
+        .from("profiles")
+        .select("email")
+        .or(`student_id.eq.${cleanId},student_id.ilike.${cleanId}`)
+        .limit(1)
+        .maybeSingle();
+
+      if (!profErr && profileRow?.email && profileRow.email.includes("@")) {
+        return profileRow.email.trim().toLowerCase();
+      }
+    } catch (e) {
+      console.warn("Identifier resolution query failed, falling back to default:", e);
+    }
+
+    // 3. Fallback default UIU student convention
     return `${cleanId}@bscse.uiu.ac.bd`;
   };
 
@@ -185,18 +212,20 @@ export default function AuthScreen({
     setErrorMessage("");
     setInfoMessage("");
 
-    const targetEmail = normalizeIdentifier(loginInput);
+    setLoading(true);
+    const targetEmail = await resolveTargetEmail(loginInput);
     if (!targetEmail) {
+      setLoading(false);
       setErrorMessage("Please enter your Student Email or Student ID.");
       return;
     }
 
     if (!isOfficialUiuEmail(targetEmail)) {
+      setLoading(false);
       setErrorMessage("Not a valid email! Please login with your official UIU student email (@*.uiu.ac.bd).");
       return;
     }
 
-    setLoading(true);
     try {
       if (password.trim()) {
         onStartBusTransition?.();
@@ -250,13 +279,19 @@ export default function AuthScreen({
 
   // Direct OTP Send Trigger
   const handleSendOtp = async (customEmail?: string) => {
-    const targetEmail = normalizeIdentifier(customEmail || loginInput || otpTargetEmail);
+    setLoading(true);
+    setErrorMessage("");
+    setInfoMessage("");
+
+    const targetEmail = await resolveTargetEmail(customEmail || loginInput || otpTargetEmail);
     if (!targetEmail) {
+      setLoading(false);
       setErrorMessage("Please enter a valid student email or ID.");
       return;
     }
 
     if (!isOfficialUiuEmail(targetEmail)) {
+      setLoading(false);
       setErrorMessage("Not a valid email! Please login with your official UIU student email (@*.uiu.ac.bd).");
       return;
     }
@@ -328,7 +363,9 @@ export default function AuthScreen({
     setErrorMessage("");
     setInfoMessage("");
 
-    const targetEmail = normalizeIdentifier(regEmail || regId);
+    const targetEmail = regEmail.trim()
+      ? (regEmail.includes("@") ? regEmail.trim().toLowerCase() : `${regEmail.trim().replace(/\s+/g, "")}@bscse.uiu.ac.bd`)
+      : await resolveTargetEmail(regId);
     if (!targetEmail || !regName.trim()) {
       setErrorMessage("Please fill in your name and student email/ID.");
       return;
@@ -1189,13 +1226,16 @@ export default function AuthScreen({
                       required
                       value={loginInput}
                       onChange={(e) => setLoginInput(e.target.value)}
-                      placeholder="Student Email or Student ID"
+                      placeholder="Student Email or Student ID (e.g. 011211024)"
                       className="w-full pl-10 pr-4 py-3 rounded-lg bg-slate-950/70 border border-slate-800 text-sm text-slate-100 placeholder-slate-500 focus:outline-none focus:border-orange-500 focus:ring-2 focus:ring-orange-500/25 transition-all"
                     />
                   </div>
-                  {/* Quick Domain Pill helper if user types a name without @ */}
+                  {/* Quick Domain Pill helper if user types an ID or name without @ */}
                   {loginInput && !loginInput.includes("@") && (
-                    <div className="flex items-center gap-1.5 mt-1.5">
+                    <div className="flex items-center justify-between gap-1.5 mt-1.5">
+                      <span className="text-[10px] text-orange-400 font-medium">
+                        Student ID login enabled
+                      </span>
                       <button
                         type="button"
                         onClick={() => setLoginInput(`${loginInput.trim().replace(/\s+/g, "")}@bscse.uiu.ac.bd`)}

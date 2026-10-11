@@ -4,6 +4,7 @@ import React, { useState, useEffect } from "react";
 import {
   UserProfile,
   ShoutoutPost,
+  PostComment,
   INITIAL_SHOUTOUTS,
   supabase,
 } from "@/lib/supabase";
@@ -12,6 +13,7 @@ import StudentAvatar from "@/components/StudentAvatar";
 import {
   Search,
   MessageCircle,
+  MessageSquare,
   Video,
   Hand,
   Sparkles,
@@ -24,8 +26,29 @@ import {
   UserPlus,
   Clock,
   Check,
+  Edit3,
+  Trash2,
+  X,
 } from "lucide-react";
 import confetti from "canvas-confetti";
+
+const FEED_STORAGE_KEY = "campus_hub_feed_posts_cache";
+
+function getCachedShoutouts(): ShoutoutPost[] {
+  if (typeof window === "undefined") return INITIAL_SHOUTOUTS;
+  try {
+    const raw = localStorage.getItem(FEED_STORAGE_KEY);
+    if (raw) return JSON.parse(raw);
+  } catch {}
+  return INITIAL_SHOUTOUTS;
+}
+
+function saveCachedShoutouts(posts: ShoutoutPost[]) {
+  if (typeof window === "undefined") return;
+  try {
+    localStorage.setItem(FEED_STORAGE_KEY, JSON.stringify(posts));
+  } catch {}
+}
 
 interface CampusLoungeProps {
   currentProfile: UserProfile | null;
@@ -55,17 +78,26 @@ export default function CampusLounge({
   onAcceptFriendRequest,
 }: CampusLoungeProps) {
   const [activeTab, setActiveTab] = useState<"students" | "feed">("students");
+  const [feedFilter, setFeedFilter] = useState<"all" | "mine">("all");
   const [searchQuery, setSearchQuery] = useState("");
   const [selectedFilter, setSelectedFilter] = useState("All");
 
-  // Shoutouts / Bulletin Feed
-  const [shoutouts, setShoutouts] = useState<ShoutoutPost[]>(INITIAL_SHOUTOUTS);
+  // Shoutouts / Feed state
+  const [shoutouts, setShoutouts] = useState<ShoutoutPost[]>(getCachedShoutouts);
   const [newPostContent, setNewPostContent] = useState("");
   const [newPostTag, setNewPostTag] = useState("Study Jam");
   const [sayHiToast, setSayHiToast] = useState<{
     toName: string;
     avatar: string;
   } | null>(null);
+
+  // Comments and Editing state
+  const [openComments, setOpenComments] = useState<Record<string, boolean>>({});
+  const [commentInputs, setCommentInputs] = useState<Record<string, string>>({});
+  const [editingPostId, setEditingPostId] = useState<string | null>(null);
+  const [editContent, setEditContent] = useState("");
+  const [editTag, setEditTag] = useState("Study Jam");
+  const [deleteConfirmId, setDeleteConfirmId] = useState<string | null>(null);
 
   // Load real shoutouts from Supabase on mount
   useEffect(() => {
@@ -76,22 +108,33 @@ export default function CampusLounge({
           .from("shoutouts")
           .select("*")
           .order("created_at", { ascending: false })
-          .limit(30);
+          .limit(40);
 
         if (!error && data && data.length > 0 && isMounted) {
-          setShoutouts(
-            data.map((d: any) => ({
-              id: d.id,
-              userId: d.user_id,
-              userName: d.user_name,
-              userDepartment: d.user_department,
-              userAvatar: d.user_avatar,
-              content: d.content,
-              tag: d.category || "Study Jam",
-              likes: d.likes_count || 0,
-              timeAgo: "Recently",
-            }))
-          );
+          setShoutouts((prev) => {
+            const remotePosts: ShoutoutPost[] = data.map((d: any) => {
+              const existing = prev.find((p) => p.id === d.id);
+              return {
+                id: d.id,
+                userId: d.user_id,
+                userName: d.user_name,
+                userDepartment: d.user_department,
+                userAvatar: d.user_avatar,
+                content: d.content,
+                tag: d.category || "Study Jam",
+                likes: d.likes_count || 0,
+                timeAgo: "Recently",
+                comments: existing?.comments || [],
+              };
+            });
+
+            // Keep locally-created posts that aren't yet in remote query
+            const remoteIds = new Set(remotePosts.map((r) => r.id));
+            const localOnly = prev.filter((p) => !remoteIds.has(p.id));
+            const merged = [...localOnly, ...remotePosts];
+            saveCachedShoutouts(merged);
+            return merged;
+          });
         }
       } catch {}
     };
@@ -99,11 +142,86 @@ export default function CampusLounge({
     loadShoutouts();
 
     const channel = supabase.channel("campus-lounge-bulletin");
+
     channel.on("broadcast", { event: "campus-shoutout" }, (payload) => {
       if (payload && payload.payload) {
-        setShoutouts((prev) => [payload.payload as ShoutoutPost, ...prev]);
+        setShoutouts((prev) => {
+          const incoming = payload.payload as ShoutoutPost;
+          if (prev.some((p) => p.id === incoming.id)) return prev;
+          const next = [incoming, ...prev];
+          saveCachedShoutouts(next);
+          return next;
+        });
       }
     });
+
+    channel.on("broadcast", { event: "campus-shoutout-delete" }, (payload) => {
+      if (payload && payload.payload?.postId) {
+        setShoutouts((prev) => {
+          const next = prev.filter((p) => p.id !== payload.payload.postId);
+          saveCachedShoutouts(next);
+          return next;
+        });
+      }
+    });
+
+    channel.on("broadcast", { event: "campus-shoutout-edit" }, (payload) => {
+      if (payload && payload.payload?.postId) {
+        setShoutouts((prev) => {
+          const next = prev.map((p) =>
+            p.id === payload.payload.postId
+              ? { ...p, content: payload.payload.content, tag: payload.payload.tag || p.tag }
+              : p
+          );
+          saveCachedShoutouts(next);
+          return next;
+        });
+      }
+    });
+
+    channel.on("broadcast", { event: "campus-shoutout-comment" }, (payload) => {
+      if (payload && payload.payload?.postId && payload.payload?.comment) {
+        setShoutouts((prev) => {
+          const next = prev.map((p) => {
+            if (p.id !== payload.payload.postId) return p;
+            const comments = p.comments || [];
+            if (comments.some((c) => c.id === payload.payload.comment.id)) return p;
+            return { ...p, comments: [...comments, payload.payload.comment] };
+          });
+          saveCachedShoutouts(next);
+          return next;
+        });
+      }
+    });
+
+    channel.on("broadcast", { event: "campus-shoutout-delete-comment" }, (payload) => {
+      if (payload && payload.payload?.postId && payload.payload?.commentId) {
+        setShoutouts((prev) => {
+          const next = prev.map((p) => {
+            if (p.id !== payload.payload.postId) return p;
+            return {
+              ...p,
+              comments: (p.comments || []).filter((c) => c.id !== payload.payload.commentId),
+            };
+          });
+          saveCachedShoutouts(next);
+          return next;
+        });
+      }
+    });
+
+    channel.on("broadcast", { event: "campus-shoutout-like" }, (payload) => {
+      if (payload && payload.payload?.postId) {
+        setShoutouts((prev) => {
+          const next = prev.map((p) =>
+            p.id === payload.payload.postId ? { ...p, likes: p.likes + 1 } : p
+          );
+          saveCachedShoutouts(next);
+          return next;
+        });
+      }
+    });
+
     channel.subscribe();
 
     return () => {
@@ -164,7 +282,7 @@ export default function CampusLounge({
     if (!newPostContent.trim()) return;
 
     const newPost: ShoutoutPost = {
-      id: `post-${Date.now()}`,
+      id: `post-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`,
       userId: currentProfile?.id || "anon",
       userName: currentProfile?.full_name || "UIU Student",
       userDepartment: currentProfile?.department || "CSE",
@@ -175,15 +293,19 @@ export default function CampusLounge({
       likes: 0,
       timeAgo: "Just now",
       isRestricted: currentProfile?.call_restricted,
+      comments: [],
     };
 
-    setShoutouts([newPost, ...shoutouts]);
+    const updated = [newPost, ...shoutouts];
+    setShoutouts(updated);
+    saveCachedShoutouts(updated);
     setNewPostContent("");
 
     try {
       supabase
         .from("shoutouts")
         .insert({
+          id: newPost.id,
           user_id: newPost.userId,
           user_name: newPost.userName,
           user_department: newPost.userDepartment,
@@ -204,10 +326,158 @@ export default function CampusLounge({
   };
 
   const handleLikePost = (postId: string) => {
-    setShoutouts((prev) =>
-      prev.map((p) => (p.id === postId ? { ...p, likes: p.likes + 1 } : p))
+    const updated = shoutouts.map((p) =>
+      p.id === postId ? { ...p, likes: p.likes + 1 } : p
     );
+    setShoutouts(updated);
+    saveCachedShoutouts(updated);
+
+    try {
+      const channel = supabase.channel("campus-lounge-bulletin");
+      channel.send({
+        type: "broadcast",
+        event: "campus-shoutout-like",
+        payload: { postId },
+      });
+    } catch {}
   };
+
+  // Comments handlers
+  const handleToggleComments = (postId: string) => {
+    setOpenComments((prev) => ({
+      ...prev,
+      [postId]: !prev[postId],
+    }));
+  };
+
+  const handleAddComment = (postId: string, e?: React.FormEvent) => {
+    if (e) e.preventDefault();
+    const commentText = (commentInputs[postId] || "").trim();
+    if (!commentText) return;
+
+    const newComment: PostComment = {
+      id: `comment-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`,
+      postId,
+      userId: currentProfile?.id || "anon",
+      userName: currentProfile?.full_name || "UIU Student",
+      userAvatar: currentProfile?.avatar || "/images/avatar-male.png",
+      content: commentText,
+      createdAt: new Date().toISOString(),
+      timeAgo: "Just now",
+    };
+
+    const updated = shoutouts.map((p) =>
+      p.id === postId
+        ? { ...p, comments: [...(p.comments || []), newComment] }
+        : p
+    );
+
+    setShoutouts(updated);
+    saveCachedShoutouts(updated);
+    setCommentInputs((prev) => ({ ...prev, [postId]: "" }));
+    setOpenComments((prev) => ({ ...prev, [postId]: true }));
+
+    try {
+      const channel = supabase.channel("campus-lounge-bulletin");
+      channel.send({
+        type: "broadcast",
+        event: "campus-shoutout-comment",
+        payload: { postId, comment: newComment },
+      });
+    } catch {}
+  };
+
+  const handleDeleteComment = (postId: string, commentId: string) => {
+    const updated = shoutouts.map((p) =>
+      p.id === postId
+        ? { ...p, comments: (p.comments || []).filter((c) => c.id !== commentId) }
+        : p
+    );
+    setShoutouts(updated);
+    saveCachedShoutouts(updated);
+
+    try {
+      const channel = supabase.channel("campus-lounge-bulletin");
+      channel.send({
+        type: "broadcast",
+        event: "campus-shoutout-delete-comment",
+        payload: { postId, commentId },
+      });
+    } catch {}
+  };
+
+  // Edit post handlers
+  const handleStartEdit = (post: ShoutoutPost) => {
+    setEditingPostId(post.id);
+    setEditContent(post.content);
+    setEditTag(post.tag || "Study Jam");
+  };
+
+  const handleCancelEdit = () => {
+    setEditingPostId(null);
+    setEditContent("");
+  };
+
+  const handleSaveEdit = (postId: string) => {
+    if (!editContent.trim()) return;
+
+    const updated = shoutouts.map((p) =>
+      p.id === postId
+        ? { ...p, content: editContent.trim(), tag: editTag }
+        : p
+    );
+
+    setShoutouts(updated);
+    saveCachedShoutouts(updated);
+    setEditingPostId(null);
+
+    try {
+      supabase
+        .from("shoutouts")
+        .update({ content: editContent.trim(), category: editTag })
+        .eq("id", postId)
+        .then(() => {});
+
+      const channel = supabase.channel("campus-lounge-bulletin");
+      channel.send({
+        type: "broadcast",
+        event: "campus-shoutout-edit",
+        payload: { postId, content: editContent.trim(), tag: editTag },
+      });
+    } catch {}
+  };
+
+  // Delete post handler
+  const handleDeletePost = (postId: string) => {
+    const updated = shoutouts.filter((p) => p.id !== postId);
+    setShoutouts(updated);
+    saveCachedShoutouts(updated);
+    setDeleteConfirmId(null);
+
+    try {
+      supabase
+        .from("shoutouts")
+        .delete()
+        .eq("id", postId)
+        .then(() => {});
+
+      const channel = supabase.channel("campus-lounge-bulletin");
+      channel.send({
+        type: "broadcast",
+        event: "campus-shoutout-delete",
+        payload: { postId },
+      });
+    } catch {}
+  };
+
+  // Filtered posts for Feed
+  const myPostsCount = shoutouts.filter((p) => p.userId === currentProfile?.id).length;
+  const displayedPosts = shoutouts.filter((p) => {
+    if (feedFilter === "mine") {
+      return p.userId === currentProfile?.id;
+    }
+    return true;
+  });
 
   return (
     <div className="w-full max-w-6xl mx-auto px-4 sm:px-6 py-5 pb-28 md:pb-12 space-y-5">
@@ -356,7 +626,7 @@ export default function CampusLounge({
             }`}
           >
             <MessageCircle className="w-3.5 h-3.5" />
-            <span>Campus Bulletin</span>
+            <span>Feed</span>
             <span className="px-1.5 py-0.2 rounded-md text-[10px] font-semibold bg-zinc-900 text-orange-400 border border-orange-500/30">
               {shoutouts.length}
             </span>
@@ -554,9 +824,9 @@ export default function CampusLounge({
           )}
         </div>
       ) : (
-        /* Campus Bulletin & Shoutouts Feed */
+        /* Campus Social Feed */
         <div className="space-y-4">
-          {/* Create Shoutout Box */}
+          {/* Create Post Box */}
           <form
             onSubmit={handlePostShoutout}
             className="rounded-xl bg-zinc-900/50 border border-zinc-800/80 p-4 space-y-3"
@@ -579,10 +849,10 @@ export default function CampusLounge({
               </div>
             </div>
 
-            <div className="flex items-center justify-between gap-2 pt-1">
-              <div className="flex items-center gap-1.5">
+            <div className="flex items-center justify-between gap-2 pt-1 flex-wrap">
+              <div className="flex items-center gap-1.5 flex-wrap">
                 <span className="text-[10px] text-zinc-400 font-medium">Tag:</span>
-                {["Study Jam", "Chit Chat", "Hackathon", "Canteen"].map((tag) => (
+                {["Study Jam", "Chit Chat", "Hackathon", "Canteen", "Questions"].map((tag) => (
                   <button
                     key={tag}
                     type="button"
@@ -602,7 +872,7 @@ export default function CampusLounge({
               <button
                 type="submit"
                 disabled={!newPostContent.trim()}
-                className="px-3.5 py-1.5 rounded-lg bg-orange-600 hover:bg-zinc-800 text-white text-xs font-semibold shadow-sm hover:opacity-90 disabled:opacity-40 disabled:cursor-not-allowed transition-all flex items-center gap-1.5"
+                className="px-3.5 py-1.5 rounded-lg bg-orange-600 hover:bg-zinc-800 text-white text-xs font-semibold shadow-sm hover:opacity-90 disabled:opacity-40 disabled:cursor-not-allowed transition-all flex items-center gap-1.5 cursor-pointer"
               >
                 <Send className="w-3.5 h-3.5 text-white" />
                 Post
@@ -610,23 +880,75 @@ export default function CampusLounge({
             </div>
           </form>
 
+          {/* Feed Filter: All Feed vs Your Posts */}
+          <div className="flex items-center justify-between gap-3 pt-1 pb-1 border-b border-zinc-800/80">
+            <div className="flex items-center gap-2">
+              <button
+                type="button"
+                onClick={() => setFeedFilter("all")}
+                className={`px-3 py-1.5 rounded-lg text-xs font-medium transition-all cursor-pointer ${
+                  feedFilter === "all"
+                    ? "bg-orange-600 hover:bg-zinc-800 text-white shadow-sm font-semibold"
+                    : "bg-zinc-900/90 text-zinc-400 hover:text-orange-400 border border-zinc-800"
+                }`}
+              >
+                All Feed ({shoutouts.length})
+              </button>
+
+              <button
+                type="button"
+                onClick={() => setFeedFilter("mine")}
+                className={`px-3 py-1.5 rounded-lg text-xs font-medium transition-all flex items-center gap-1.5 cursor-pointer ${
+                  feedFilter === "mine"
+                    ? "bg-orange-600 hover:bg-zinc-800 text-white shadow-sm font-semibold"
+                    : "bg-zinc-900/90 text-zinc-400 hover:text-orange-400 border border-zinc-800"
+                }`}
+              >
+                <span>Your Posts</span>
+                <span
+                  className={`px-1.5 py-0.2 rounded-md text-[10px] font-bold ${
+                    feedFilter === "mine"
+                      ? "bg-zinc-900/80 text-orange-400 border border-orange-500/40"
+                      : "bg-zinc-800 text-orange-400 border border-zinc-700"
+                  }`}
+                >
+                  {myPostsCount}
+                </span>
+              </button>
+            </div>
+
+            {feedFilter === "mine" && (
+              <span className="text-[11px] text-zinc-400 hidden sm:inline">
+                Filtering: Only showing posts you created
+              </span>
+            )}
+          </div>
+
           {/* Shoutouts Feed List */}
           <div className="space-y-3">
-            {shoutouts.map((post) => {
+            {displayedPosts.map((post) => {
               const authorStudent = students.find((s) => s.id === post.userId);
+              const isOwnPost = post.userId === currentProfile?.id;
               const isAuthorRestricted = Boolean(
                 authorStudent?.call_restricted ??
-                  (post.userId === currentProfile?.id
-                    ? currentProfile?.call_restricted
-                    : post.isRestricted)
+                  (isOwnPost ? currentProfile?.call_restricted : post.isRestricted)
               );
+              const postComments = post.comments || [];
+              const isCommentsOpen = Boolean(openComments[post.id]);
+              const isEditing = editingPostId === post.id;
+              const isDeleting = deleteConfirmId === post.id;
 
               return (
                 <div
                   key={post.id}
-                  className="rounded-xl bg-zinc-900/40 border border-zinc-800/80 hover:border-orange-500/40 transition-colors p-4 space-y-2.5"
+                  className={`rounded-xl bg-zinc-900/40 border transition-colors p-4 space-y-3 ${
+                    isOwnPost
+                      ? "border-orange-500/30 hover:border-orange-500/60"
+                      : "border-zinc-800/80 hover:border-orange-500/40"
+                  }`}
                 >
-                  <div className="flex items-center justify-between gap-3">
+                  {/* Post Author Bar */}
+                  <div className="flex items-center justify-between gap-3 flex-wrap">
                     <div className="flex items-center gap-2.5">
                       <StudentAvatar
                         avatar={post.userAvatar}
@@ -639,6 +961,11 @@ export default function CampusLounge({
                           <span className="hover:text-orange-400 transition-colors">
                             {post.userName}
                           </span>
+                          {isOwnPost && (
+                            <span className="px-1.5 py-0.2 rounded-md text-[9px] font-bold bg-orange-500/20 text-orange-400 border border-orange-500/40">
+                              Your Post
+                            </span>
+                          )}
                           <span className="px-1.5 py-0.2 rounded-md text-[9px] font-semibold bg-zinc-800 text-orange-400 border border-orange-500/30">
                             {post.tag}
                           </span>
@@ -648,7 +975,7 @@ export default function CampusLounge({
                               Calls Restricted
                             </span>
                           )}
-                          {post.userId !== currentProfile?.id && (
+                          {!isOwnPost && (
                             <>
                               {friends.some((f) => f.id === post.userId) ? (
                                 <span className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded text-[9px] font-semibold bg-emerald-500/15 text-emerald-400 border border-emerald-500/30">
@@ -700,55 +1027,270 @@ export default function CampusLounge({
                         </p>
                       </div>
                     </div>
-                    <span className="text-[10px] text-zinc-500">{post.timeAgo}</span>
+
+                    <div className="flex items-center gap-2">
+                      <span className="text-[10px] text-zinc-500">{post.timeAgo}</span>
+
+                      {/* Edit & Delete actions for user's own post */}
+                      {isOwnPost && (
+                        <div className="flex items-center gap-1 pl-1 border-l border-zinc-800">
+                          <button
+                            type="button"
+                            onClick={() => handleStartEdit(post)}
+                            title="Edit this post"
+                            className="p-1 rounded text-zinc-400 hover:text-orange-400 hover:bg-orange-500/10 transition-colors cursor-pointer"
+                          >
+                            <Edit3 className="w-3.5 h-3.5" />
+                          </button>
+                          <button
+                            type="button"
+                            onClick={() => setDeleteConfirmId(post.id)}
+                            title="Delete this post"
+                            className="p-1 rounded text-zinc-400 hover:text-rose-400 hover:bg-rose-500/10 transition-colors cursor-pointer"
+                          >
+                            <Trash2 className="w-3.5 h-3.5" />
+                          </button>
+                        </div>
+                      )}
+                    </div>
                   </div>
 
-                  <p className="text-xs text-zinc-300 leading-relaxed pl-10">
-                    {post.content}
-                  </p>
+                  {/* Delete Confirmation Alert Banner */}
+                  {isDeleting && (
+                    <div className="p-3 rounded-lg bg-rose-950/30 border border-rose-500/40 flex items-center justify-between gap-3 text-xs animate-in fade-in duration-100">
+                      <span className="text-rose-300 font-medium">
+                        Delete this post? This cannot be undone.
+                      </span>
+                      <div className="flex items-center gap-2 shrink-0">
+                        <button
+                          type="button"
+                          onClick={() => setDeleteConfirmId(null)}
+                          className="px-2.5 py-1 rounded-md text-zinc-400 hover:text-zinc-200 bg-zinc-900 border border-zinc-800 transition-colors cursor-pointer text-[11px]"
+                        >
+                          Cancel
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => handleDeletePost(post.id)}
+                          className="px-2.5 py-1 rounded-md text-white bg-rose-600 hover:bg-rose-700 transition-colors cursor-pointer text-[11px] font-semibold"
+                        >
+                          Yes, Delete
+                        </button>
+                      </div>
+                    </div>
+                  )}
 
-                  <div className="flex items-center justify-between pl-10 pt-1">
-                    <button
-                      onClick={() => handleLikePost(post.id)}
-                      className="flex items-center gap-1.5 text-xs text-zinc-400 hover:text-orange-400 transition-colors"
-                    >
-                      <Heart className="w-3.5 h-3.5 text-orange-500 fill-orange-500/20 hover:fill-orange-500" />
-                      <span className="text-[11px] font-medium">{post.likes}</span>
-                    </button>
+                  {/* Post Content / Inline Edit Form */}
+                  {isEditing ? (
+                    <div className="space-y-2.5 p-3 rounded-lg bg-zinc-950/80 border border-orange-500/40">
+                      <textarea
+                        value={editContent}
+                        onChange={(e) => setEditContent(e.target.value)}
+                        rows={3}
+                        className="w-full bg-zinc-900 border border-zinc-800 rounded-lg p-2.5 text-xs text-zinc-100 focus:outline-none focus:border-orange-500 focus:ring-1 focus:ring-orange-500/30 resize-none"
+                      />
+                      <div className="flex items-center justify-between gap-2 flex-wrap">
+                        <div className="flex items-center gap-1 flex-wrap">
+                          <span className="text-[10px] text-zinc-400 font-medium">Tag:</span>
+                          {["Study Jam", "Chit Chat", "Hackathon", "Canteen", "Questions"].map((t) => (
+                            <button
+                              key={t}
+                              type="button"
+                              onClick={() => setEditTag(t)}
+                              className={`px-2 py-0.5 rounded text-[10px] font-medium transition-colors ${
+                                editTag === t
+                                  ? "bg-orange-600 text-white font-semibold"
+                                  : "bg-zinc-900 text-zinc-400 hover:text-white border border-zinc-800"
+                              }`}
+                            >
+                              {t}
+                            </button>
+                          ))}
+                        </div>
+                        <div className="flex items-center gap-2">
+                          <button
+                            type="button"
+                            onClick={handleCancelEdit}
+                            className="px-2.5 py-1 rounded-md text-xs font-medium text-zinc-400 hover:text-white bg-zinc-800 hover:bg-zinc-700 transition-colors cursor-pointer"
+                          >
+                            Cancel
+                          </button>
+                          <button
+                            type="button"
+                            onClick={() => handleSaveEdit(post.id)}
+                            className="px-3 py-1 rounded-md text-xs font-semibold text-white bg-orange-600 hover:bg-zinc-800 transition-colors flex items-center gap-1 shadow-sm cursor-pointer"
+                          >
+                            <Check className="w-3 h-3" />
+                            Save Changes
+                          </button>
+                        </div>
+                      </div>
+                    </div>
+                  ) : (
+                    <p className="text-xs text-zinc-300 leading-relaxed pl-1 sm:pl-10">
+                      {post.content}
+                    </p>
+                  )}
 
-                    {isAuthorRestricted ? (
-                      <span className="text-[11px] font-semibold text-rose-400/90 flex items-center gap-1 bg-rose-950/30 px-2 py-0.5 rounded border border-rose-800/40">
-                        <BellOff className="w-3 h-3 text-rose-400" />
+                  {/* Post Footer Action Bar: Like & Comment (Connect Now is removed!) */}
+                  <div className="flex items-center justify-between pl-1 sm:pl-10 pt-2 border-t border-zinc-800/70">
+                    <div className="flex items-center gap-4">
+                      {/* Like button */}
+                      <button
+                        type="button"
+                        onClick={() => handleLikePost(post.id)}
+                        className="flex items-center gap-1.5 text-xs text-zinc-400 hover:text-orange-400 transition-colors cursor-pointer group"
+                      >
+                        <Heart className="w-3.5 h-3.5 text-orange-500 fill-orange-500/20 group-hover:fill-orange-500 transition-all" />
+                        <span className="text-[11px] font-medium">{post.likes}</span>
+                      </button>
+
+                      {/* Comment toggle button */}
+                      <button
+                        type="button"
+                        onClick={() => handleToggleComments(post.id)}
+                        className={`flex items-center gap-1.5 text-xs transition-colors cursor-pointer ${
+                          isCommentsOpen
+                            ? "text-orange-400 font-semibold"
+                            : "text-zinc-400 hover:text-orange-400"
+                        }`}
+                      >
+                        <MessageSquare className="w-3.5 h-3.5" />
+                        <span className="text-[11px]">
+                          {postComments.length > 0
+                            ? `${postComments.length} Comments`
+                            : "Comment"}
+                        </span>
+                      </button>
+                    </div>
+
+                    {isAuthorRestricted && (
+                      <span className="text-[10px] font-semibold text-rose-400/90 flex items-center gap-1 bg-rose-950/30 px-2 py-0.5 rounded border border-rose-800/40">
+                        <BellOff className="w-2.5 h-2.5 text-rose-400" />
                         Calls Restricted (DND)
                       </span>
-                    ) : (
-                      <button
-                        onClick={() => {
-                          if (authorStudent && onInviteToCall) {
-                            onInviteToCall(authorStudent);
-                          } else {
-                            onOpen1on1Match();
-                          }
-                        }}
-                        className="text-xs font-medium text-zinc-400 hover:text-orange-400 flex items-center gap-1 transition-colors"
-                      >
-                        Connect Now →
-                      </button>
                     )}
                   </div>
+
+                  {/* Comments Section */}
+                  {isCommentsOpen && (
+                    <div className="pl-1 sm:pl-10 pt-2.5 space-y-2.5 border-t border-zinc-800/60 mt-1">
+                      {/* Comments List */}
+                      {postComments.length > 0 ? (
+                        <div className="space-y-2 max-h-60 overflow-y-auto pr-1">
+                          {postComments.map((comment) => (
+                            <div
+                              key={comment.id}
+                              className="flex items-start justify-between gap-2.5 p-2 rounded-lg bg-zinc-900/70 border border-zinc-800/70"
+                            >
+                              <div className="flex items-start gap-2 min-w-0">
+                                <StudentAvatar
+                                  avatar={comment.userAvatar}
+                                  name={comment.userName}
+                                  size="sm"
+                                  showOnlineBadge={false}
+                                />
+                                <div className="min-w-0">
+                                  <div className="flex items-center gap-1.5 flex-wrap">
+                                    <span className="text-[11px] font-semibold text-zinc-200">
+                                      {comment.userName}
+                                    </span>
+                                    {comment.userId === currentProfile?.id && (
+                                      <span className="text-[9px] px-1 py-0.2 rounded bg-orange-500/15 text-orange-400 font-semibold border border-orange-500/30">
+                                        You
+                                      </span>
+                                    )}
+                                    <span className="text-[10px] text-zinc-500">
+                                      {comment.timeAgo || "Just now"}
+                                    </span>
+                                  </div>
+                                  <p className="text-xs text-zinc-300 mt-0.5 break-words">
+                                    {comment.content}
+                                  </p>
+                                </div>
+                              </div>
+
+                              {comment.userId === currentProfile?.id && (
+                                <button
+                                  type="button"
+                                  onClick={() => handleDeleteComment(post.id, comment.id)}
+                                  title="Delete your comment"
+                                  className="p-1 rounded text-zinc-500 hover:text-rose-400 hover:bg-rose-500/10 transition-colors shrink-0 cursor-pointer"
+                                >
+                                  <Trash2 className="w-3 h-3" />
+                                </button>
+                              )}
+                            </div>
+                          ))}
+                        </div>
+                      ) : (
+                        <p className="text-[11px] text-zinc-500 italic py-1">
+                          No comments yet. Be the first to share your thoughts!
+                        </p>
+                      )}
+
+                      {/* Add Comment Input Form */}
+                      <form
+                        onSubmit={(e) => handleAddComment(post.id, e)}
+                        className="flex items-center gap-2 pt-1"
+                      >
+                        <StudentAvatar
+                          avatar={currentProfile?.avatar}
+                          name={currentProfile?.full_name || "Me"}
+                          size="sm"
+                          showOnlineBadge={false}
+                        />
+                        <div className="relative flex-1">
+                          <input
+                            type="text"
+                            value={commentInputs[post.id] || ""}
+                            onChange={(e) =>
+                              setCommentInputs((prev) => ({
+                                ...prev,
+                                [post.id]: e.target.value,
+                              }))
+                            }
+                            placeholder="Write a comment..."
+                            className="w-full bg-zinc-900 border border-zinc-800 rounded-lg px-3 py-1.5 text-xs text-zinc-100 placeholder-zinc-500 focus:outline-none focus:border-orange-500 focus:ring-1 focus:ring-orange-500/20 transition-colors pr-16"
+                          />
+                          <button
+                            type="submit"
+                            disabled={!(commentInputs[post.id] || "").trim()}
+                            className="absolute right-1 top-1 bottom-1 px-2.5 rounded-md bg-orange-600 hover:bg-zinc-800 disabled:opacity-40 disabled:cursor-not-allowed text-white text-[11px] font-semibold transition-colors flex items-center gap-1 shadow-sm cursor-pointer"
+                          >
+                            <Send className="w-2.5 h-2.5" />
+                            <span>Send</span>
+                          </button>
+                        </div>
+                      </form>
+                    </div>
+                  )}
                 </div>
               );
             })}
 
-            {shoutouts.length === 0 && (
+            {displayedPosts.length === 0 && (
               <div className="text-center py-12 rounded-xl bg-zinc-900/30 border border-zinc-800/80 p-8">
                 <MessageCircle className="w-8 h-8 text-zinc-600 mx-auto mb-2.5" />
                 <p className="text-sm text-zinc-300 font-medium">
-                  No campus shoutouts yet
+                  {feedFilter === "mine"
+                    ? "You haven't posted anything in the Feed yet"
+                    : "No campus posts in Feed yet"}
                 </p>
-                <p className="text-xs text-zinc-500 mt-1">
-                  Be the first UIU student to post a study jam or chat update above!
+                <p className="text-xs text-zinc-500 mt-1 max-w-md mx-auto">
+                  {feedFilter === "mine"
+                    ? "Post a study jam, question, or hangout invite in the form above to see your posts listed under 'Your Posts'!"
+                    : "Be the first UIU student to post a study jam or chat update above!"}
                 </p>
+                {feedFilter === "mine" && (
+                  <button
+                    type="button"
+                    onClick={() => setFeedFilter("all")}
+                    className="mt-3.5 px-3.5 py-1.5 rounded-lg bg-zinc-800 hover:bg-orange-600 text-zinc-200 hover:text-white text-xs font-semibold transition-all cursor-pointer"
+                  >
+                    View All Feed Posts
+                  </button>
+                )}
               </div>
             )}
           </div>

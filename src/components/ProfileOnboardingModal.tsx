@@ -37,6 +37,12 @@ export default function ProfileOnboardingModal({
   const [fullName, setFullName] = useState(
     currentProfile?.full_name || "Alex Chen"
   );
+  const [studentId, setStudentId] = useState(
+    currentProfile?.student_id ||
+      (currentProfile?.email && currentProfile.email.includes("@")
+        ? currentProfile.email.split("@")[0]
+        : "")
+  );
   const [department, setDepartment] = useState(
     currentProfile?.department || UIU_PROGRAMS[0]
   );
@@ -63,6 +69,7 @@ export default function ProfileOnboardingModal({
     const newProfile: UserProfile = {
       id,
       email: currentProfile?.email,
+      student_id: studentId.trim(),
       full_name: fullName.trim(),
       department,
       batch,
@@ -155,21 +162,39 @@ export default function ProfileOnboardingModal({
             </div>
           </div>
 
-          {/* Full Name */}
-          <div>
-            <label className="block text-xs font-medium text-zinc-300 mb-1">
-              Full Student Name
-            </label>
-            <div className="relative">
-              <User className="absolute left-3.5 top-2.5 w-4 h-4 text-zinc-500" />
-              <input
-                type="text"
-                required
-                value={fullName}
-                onChange={(e) => setFullName(e.target.value)}
-                placeholder="e.g. Alex Chen"
-                className="w-full pl-10 pr-4 py-2 rounded-lg bg-zinc-900 border border-zinc-800 text-xs text-zinc-100 placeholder-zinc-500 focus:outline-none focus:border-zinc-600 transition-colors"
-              />
+          {/* Full Name & Student ID Grid */}
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+            <div>
+              <label className="block text-xs font-medium text-orange-400 mb-1">
+                Full Student Name
+              </label>
+              <div className="relative">
+                <User className="absolute left-3.5 top-2.5 w-4 h-4 text-orange-400/70" />
+                <input
+                  type="text"
+                  required
+                  value={fullName}
+                  onChange={(e) => setFullName(e.target.value)}
+                  placeholder="e.g. Rashidul Hasan"
+                  className="w-full pl-10 pr-4 py-2 rounded-lg bg-zinc-900 border border-orange-500/30 text-xs text-zinc-100 placeholder-zinc-500 focus:outline-none focus:border-orange-500 transition-colors"
+                />
+              </div>
+            </div>
+
+            <div>
+              <label className="block text-xs font-medium text-orange-400 mb-1">
+                UIU Student ID
+              </label>
+              <div className="relative">
+                <GraduationCap className="absolute left-3.5 top-2.5 w-4 h-4 text-orange-400/70" />
+                <input
+                  type="text"
+                  value={studentId}
+                  onChange={(e) => setStudentId(e.target.value)}
+                  placeholder="e.g. 011211024"
+                  className="w-full pl-10 pr-4 py-2 rounded-lg bg-zinc-900 border border-orange-500/30 text-xs text-zinc-100 placeholder-zinc-500 focus:outline-none focus:border-orange-500 font-mono transition-colors"
+                />
+              </div>
             </div>
           </div>
 

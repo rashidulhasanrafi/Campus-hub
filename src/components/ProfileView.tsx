@@ -52,6 +52,11 @@ export default function ProfileView({
 
   if (!profile) return null;
 
+  const studentId =
+    profile.student_id ||
+    (profile.email && profile.email.includes("@") ? profile.email.split("@")[0] : null) ||
+    profile.id.toUpperCase().slice(0, 10);
+
   return (
     <div className="w-full max-w-4xl mx-auto px-4 sm:px-6 py-5 pb-32 sm:pb-36 md:pb-12 space-y-5 animate-in fade-in duration-150">
       {/* 1. TOP HEADER: UIU Student Profile */}
@@ -65,7 +70,7 @@ export default function ProfileView({
                 className="w-6 h-6 object-contain"
               />
             ) : (
-              <GraduationCap className="w-5 h-5" />
+              <GraduationCap className="w-5 h-5 text-orange-400" />
             )}
           </div>
           <div>
@@ -81,7 +86,7 @@ export default function ProfileView({
 
       {/* 2. DIGITAL STUDENT ID CARD - Sleek UIU Badge */}
       <div className="relative overflow-hidden rounded-2xl p-5 sm:p-7 bg-zinc-900/60 border border-zinc-800/80 hover:border-orange-500/30 backdrop-blur-md shadow-sm transition-colors">
-        {/* Subtle Watermark on ID Card - Hidden in Light UI to avoid GPU rendering on low-end phones */}
+        {/* Subtle Watermark on ID Card */}
         {!isLightUi && (
           <img
             src="/images/campus-hub-emblem-tight.png"
@@ -101,12 +106,14 @@ export default function ProfileView({
             />
 
             <div className="space-y-1">
-              <div className="inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-md bg-orange-500/10 text-orange-400 text-[11px] font-semibold border border-orange-500/25">
+              {/* Student ID & Batch - Orange Badge */}
+              <div className="inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-md bg-orange-500/15 text-orange-400 text-[11px] font-bold border border-orange-500/30">
                 <GraduationCap className="w-3.5 h-3.5 text-orange-400" />
-                UIU Student ID • {profile.batch}
+                UIU Student ID: <span className="font-mono">{studentId}</span> • {profile.batch}
               </div>
 
-              <h2 className="text-xl sm:text-2xl font-bold text-zinc-100 tracking-tight">
+              {/* Full Name in Vibrant Orange */}
+              <h2 className="text-xl sm:text-2xl font-extrabold text-orange-400 tracking-tight">
                 {profile.full_name}
               </h2>
 
@@ -171,8 +178,8 @@ export default function ProfileView({
             <span className="text-[10px] text-zinc-400 uppercase tracking-widest font-semibold block">
               UIU Campus Hub Identity Key
             </span>
-            <code className="text-xs text-orange-400 font-mono tracking-wider">
-              UIU-STUDENT-{profile.id.toUpperCase().slice(0, 14)}
+            <code className="text-xs text-orange-400 font-mono tracking-wider font-bold">
+              UIU-STUDENT-{studentId}
             </code>
           </div>
 
@@ -201,38 +208,62 @@ export default function ProfileView({
           </button>
         </div>
 
-        <div className="grid grid-cols-1 sm:grid-cols-2 gap-2.5 text-xs">
-          <div className="flex items-center gap-2.5 p-3 rounded-xl bg-zinc-900/60 border border-zinc-800">
+        {/* Breakdown Grid: Full Name, Student ID, and Student Mail highlighted in vibrant ORANGE */}
+        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-2.5 text-xs">
+          {/* 1. Full Name - Highlighted in Orange */}
+          <div className="flex items-center gap-2.5 p-3 rounded-xl bg-orange-500/10 border border-orange-500/40 shadow-sm shadow-orange-500/5">
             <User className="w-4 h-4 text-orange-400 shrink-0" />
-            <div>
-              <span className="text-[10px] text-zinc-500 block">Full Name</span>
-              <span className="text-zinc-200 font-medium">{profile.full_name}</span>
+            <div className="min-w-0">
+              <span className="text-[10px] text-orange-400/80 font-bold uppercase tracking-wider block">
+                Full Name
+              </span>
+              <span className="text-orange-400 font-bold text-sm truncate block">
+                {profile.full_name}
+              </span>
             </div>
           </div>
 
+          {/* 2. Student ID - Highlighted in Orange */}
+          <div className="flex items-center gap-2.5 p-3 rounded-xl bg-orange-500/10 border border-orange-500/40 shadow-sm shadow-orange-500/5">
+            <GraduationCap className="w-4 h-4 text-orange-400 shrink-0" />
+            <div className="min-w-0">
+              <span className="text-[10px] text-orange-400/80 font-bold uppercase tracking-wider block">
+                Student ID
+              </span>
+              <span className="text-orange-400 font-mono font-bold text-sm tracking-wider block">
+                {studentId}
+              </span>
+            </div>
+          </div>
+
+          {/* 3. Student Email - Highlighted in Orange */}
+          <div className="flex items-center gap-2.5 p-3 rounded-xl bg-orange-500/10 border border-orange-500/40 shadow-sm shadow-orange-500/5 sm:col-span-2 lg:col-span-1">
+            <Mail className="w-4 h-4 text-orange-400 shrink-0" />
+            <div className="min-w-0">
+              <span className="text-[10px] text-orange-400/80 font-bold uppercase tracking-wider block">
+                Student Mail
+              </span>
+              <span className="text-orange-400 font-semibold text-xs sm:text-sm truncate block max-w-[240px]">
+                {profile.email || `${studentId}@bscse.uiu.ac.bd`}
+              </span>
+            </div>
+          </div>
+
+          {/* 4. Academic Program */}
           <div className="flex items-center gap-2.5 p-3 rounded-xl bg-zinc-900/60 border border-zinc-800">
-            <BookOpen className="w-4 h-4 text-orange-400 shrink-0" />
+            <BookOpen className="w-4 h-4 text-zinc-400 shrink-0" />
             <div>
               <span className="text-[10px] text-zinc-500 block">Academic Program</span>
               <span className="text-zinc-200 font-medium">{profile.department}</span>
             </div>
           </div>
 
+          {/* 5. Batch / Class Year */}
           <div className="flex items-center gap-2.5 p-3 rounded-xl bg-zinc-900/60 border border-zinc-800">
-            <Calendar className="w-4 h-4 text-orange-400 shrink-0" />
+            <Calendar className="w-4 h-4 text-zinc-400 shrink-0" />
             <div>
               <span className="text-[10px] text-zinc-500 block">Batch / Class Year</span>
               <span className="text-zinc-200 font-medium">{profile.batch}</span>
-            </div>
-          </div>
-
-          <div className="flex items-center gap-2.5 p-3 rounded-xl bg-zinc-900/60 border border-zinc-800">
-            <Mail className="w-4 h-4 text-orange-400 shrink-0" />
-            <div>
-              <span className="text-[10px] text-zinc-500 block">Student Email</span>
-              <span className="text-zinc-200 font-medium truncate block max-w-[200px]">
-                {profile.email || `${profile.id}@bscse.uiu.ac.bd`}
-              </span>
             </div>
           </div>
         </div>

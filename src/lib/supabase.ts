@@ -33,6 +33,7 @@ if (process.env.NODE_ENV !== "production") {
 export interface UserProfile {
   id: string;
   email?: string;
+  student_id?: string;
   full_name: string;
   department: string;
   batch: string;
@@ -55,6 +56,17 @@ export interface DirectCallInvite {
   timestamp: number;
 }
 
+export interface PostComment {
+  id: string;
+  postId: string;
+  userId: string;
+  userName: string;
+  userAvatar: string;
+  content: string;
+  createdAt: string;
+  timeAgo?: string;
+}
+
 export interface ShoutoutPost {
   id: string;
   userId: string;
@@ -66,6 +78,7 @@ export interface ShoutoutPost {
   likes: number;
   timeAgo: string;
   isRestricted?: boolean;
+  comments?: PostComment[];
 }
 
 export const UIU_PROGRAMS = [
@@ -177,6 +190,7 @@ export const DEV_SESSION_KEY = "campus_hub_dev_preview_session";
 export const DEV_MOCK_PROFILE: UserProfile = {
   id: "dev-preview-user",
   email: "student@bscse.uiu.ac.bd",
+  student_id: "011211024",
   full_name: "Test Student (UIU)",
   department: "Computer Science & Eng (CSE)",
   batch: "Batch '24 (Junior)",
@@ -211,7 +225,6 @@ export function setDevPreview(_active: boolean): void {
 }
 
 export async function fetchUserProfile(userId: string): Promise<UserProfile | null> {
-
   // First check if Supabase has it stored in remote profiles table
   try {
     const { data, error } = await supabase
@@ -225,6 +238,7 @@ export async function fetchUserProfile(userId: string): Promise<UserProfile | nu
       const profile: UserProfile = {
         id: data.id,
         email: data.email,
+        student_id: data.student_id || local?.student_id || (data.email ? data.email.split("@")[0] : undefined),
         full_name: data.full_name,
         department: data.department,
         batch: data.batch,
@@ -257,6 +271,7 @@ export async function syncProfileWithSupabase(profile: UserProfile): Promise<voi
     const payload: any = {
       id: profile.id,
       email: profile.email,
+      student_id: profile.student_id,
       full_name: profile.full_name,
       department: profile.department,
       batch: profile.batch,
@@ -273,10 +288,20 @@ export async function syncProfileWithSupabase(profile: UserProfile): Promise<voi
       { onConflict: "id" }
     );
     if (error) {
-      // If column call_restricted doesn't exist remotely, retry without it
+      let retryPayload = { ...payload };
+      let shouldRetry = false;
+      // If column student_id doesn't exist remotely yet
+      if (error.message?.includes("student_id") || error.code === "PGRST204") {
+        delete retryPayload.student_id;
+        shouldRetry = true;
+      }
+      // If column call_restricted doesn't exist remotely
       if (error.message?.includes("call_restricted") || error.code === "PGRST204") {
-        delete payload.call_restricted;
-        await supabase.from("profiles").upsert(payload, { onConflict: "id" });
+        delete retryPayload.call_restricted;
+        shouldRetry = true;
+      }
+      if (shouldRetry) {
+        await supabase.from("profiles").upsert(retryPayload, { onConflict: "id" });
       } else {
         console.warn("Supabase profiles table sync note:", error.message);
       }
@@ -312,6 +337,7 @@ export async function fetchRemoteProfiles(): Promise<UserProfile[]> {
     return data.map((d) => ({
       id: d.id,
       email: d.email,
+      student_id: d.student_id,
       full_name: d.full_name,
       department: d.department,
       batch: d.batch,
