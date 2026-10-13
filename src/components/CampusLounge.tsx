@@ -29,6 +29,7 @@ import {
   Edit3,
   Trash2,
   X,
+  Gamepad2,
 } from "lucide-react";
 import confetti from "canvas-confetti";
 
@@ -519,11 +520,20 @@ export default function CampusLounge({
             {/* Primary Orange Button: Turns dark gray on hover like official UIU portal */}
             <button
               onClick={onOpen1on1Match}
-              className="w-full sm:w-auto px-4 py-2.5 rounded-xl bg-orange-600 hover:bg-zinc-800 text-white font-semibold text-xs sm:text-sm shadow-sm active:scale-95 transition-all flex items-center justify-center gap-2"
+              className="w-full sm:w-auto px-4 py-2.5 rounded-xl bg-orange-600 hover:bg-zinc-800 text-white font-semibold text-xs sm:text-sm shadow-sm active:scale-95 transition-all flex items-center justify-center gap-2 cursor-pointer"
             >
               <Sparkles className="w-3.5 h-3.5 text-white" />
               1-on-1 Random Match
             </button>
+
+            {/* 4-Player Ludo Cross-Platform Game Arena Link */}
+            <a
+              href="/games/ludo"
+              className="w-full sm:w-auto px-4 py-2.5 rounded-xl bg-gradient-to-r from-amber-600 via-orange-600 to-rose-600 hover:from-amber-500 hover:to-orange-500 text-white font-semibold text-xs sm:text-sm shadow-sm active:scale-95 transition-all flex items-center justify-center gap-2 cursor-pointer border border-orange-500/40"
+            >
+              <Gamepad2 className="w-3.5 h-3.5 text-white" />
+              Play Ludo Arena (4-Player)
+            </a>
           </div>
         </div>
       </div>

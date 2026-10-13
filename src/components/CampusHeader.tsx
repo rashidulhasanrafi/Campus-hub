@@ -24,6 +24,7 @@ import {
   Bell,
   BellOff,
   UserCheck,
+  Gamepad2,
 } from "lucide-react";
 import { motion } from "framer-motion";
 import { getWhatsAppFeedbackUrl } from "@/config/creator";
@@ -270,6 +271,16 @@ export default function CampusHeader({
               })}
             </div>
           )}
+
+          {/* Cross-Platform Ludo Game Arena Link */}
+          <a
+            href="/games/ludo"
+            title="Play 4-Player Ludo with Voice Chat"
+            className="hidden md:flex items-center gap-1.5 px-2.5 py-1 rounded-md bg-gradient-to-r from-orange-600 to-amber-600 hover:from-orange-500 hover:to-amber-500 text-white font-bold text-xs shadow-sm shadow-orange-600/30 transition-all active:scale-95 shrink-0"
+          >
+            <Gamepad2 className="w-3.5 h-3.5" />
+            <span>Ludo 🎲</span>
+          </a>
 
           {/* Online count badge: Exactly as screenshot */}
           <div
