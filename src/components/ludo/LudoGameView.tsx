@@ -119,6 +119,16 @@ export default function LudoGameView({
   const myColor: PlayerColor | null = myPlayer ? myPlayer.color : null;
   const isMyTurn = myColor !== null && currentTurnColor === myColor;
 
+  // Current active turn player
+  const currentTurnPlayer = players.find((p) => p.color === currentTurnColor);
+
+  // Toast notice for 15s timeout
+  const [timeoutNotice, setTimeoutNotice] = useState<string | null>(null);
+  const showTimeoutNotice = (msg: string) => {
+    setTimeoutNotice(msg);
+    setTimeout(() => setTimeoutNotice(null), 3200);
+  };
+
   // -------------------------------------------------------------------
   // 1. SUPABASE REALTIME CHANNEL SYNC (`ludo_${roomId}`)
   // -------------------------------------------------------------------
@@ -142,6 +152,7 @@ export default function LudoGameView({
       setTimeout(() => {
         setIsRolling(false);
         setHasRolled(true);
+        setTurnTimeLeft(15);
       }, 350);
     });
 
@@ -240,7 +251,7 @@ export default function LudoGameView({
   }, [roomId, user.id, user.full_name, user.department, user.avatar]);
 
   // -------------------------------------------------------------------
-  // 2. TURN TIMEOUT & BOT/PASS AUTOMATION
+  // 2. TURN TIMEOUT (15s LIMIT) & AUTOMATIC PASS LOGIC
   // -------------------------------------------------------------------
   useEffect(() => {
     if (gameState !== "playing") return;
@@ -248,18 +259,30 @@ export default function LudoGameView({
     const timer = setInterval(() => {
       setTurnTimeLeft((prev) => {
         if (prev <= 1) {
-          // If my turn and I didn't roll or move, auto-pass
+          // 15 SECONDS LIMIT EXPIRED!
           if (isMyTurn) {
+            showTimeoutNotice("15s time up! Your turn has passed.");
+            handlePassTurn();
+          } else if (myPlayer?.isHost) {
+            // As host, pass for inactive/disconnected player
+            const inactivePlayer = players.find((p) => p.color === currentTurnColor);
+            showTimeoutNotice(`15s time up! ${inactivePlayer?.name || "Player"}'s turn passed.`);
             handlePassTurn();
           }
           return 15;
         }
+
+        // Warning sound on last 3 seconds
+        if (prev <= 4 && isMyTurn) {
+          ludoAudio.playTokenMove();
+        }
+
         return prev - 1;
       });
     }, 1000);
 
     return () => clearInterval(timer);
-  }, [gameState, isMyTurn, currentTurnColor]);
+  }, [gameState, isMyTurn, currentTurnColor, myPlayer?.isHost, players]);
 
   // Auto-move token if only one token can legally move
   useEffect(() => {
@@ -320,6 +343,7 @@ export default function LudoGameView({
     setTimeout(() => {
       setIsRolling(false);
       setHasRolled(true);
+      setTurnTimeLeft(15);
     }, 350);
   };
 
@@ -598,6 +622,14 @@ export default function LudoGameView({
         </div>
       </header>
 
+      {/* 15s Timeout Notice Floating Toast */}
+      {timeoutNotice && (
+        <div className="fixed top-16 left-1/2 -translate-x-1/2 z-50 flex items-center gap-2.5 px-4 py-2 rounded-2xl bg-rose-950/95 border border-rose-500/50 text-rose-200 text-xs font-bold shadow-2xl backdrop-blur-md animate-in fade-in slide-in-from-top-3 duration-200">
+          <Clock className="w-4 h-4 text-rose-400 animate-pulse" />
+          <span>{timeoutNotice}</span>
+        </div>
+      )}
+
       {/* ------------------------------------------------------------- */}
       {/* VIEW A: MAIN MATCHMAKING MENU (Create or Join Room)           */}
       {/* ------------------------------------------------------------- */}
@@ -820,9 +852,11 @@ export default function LudoGameView({
             <div className="flex lg:hidden items-center justify-center gap-4 mt-3 w-full p-3 bg-zinc-900/90 rounded-2xl border border-zinc-800">
               <LudoDice
                 currentTurnColor={currentTurnColor}
+                currentTurnPlayerName={currentTurnPlayer?.name}
                 diceValue={diceValue}
                 isRolling={isRolling}
                 canRoll={isMyTurn && !hasRolled}
+                hasRolled={hasRolled}
                 onRoll={handleRollDice}
                 turnTimeLeft={turnTimeLeft}
               />
@@ -835,9 +869,11 @@ export default function LudoGameView({
             <div className="hidden lg:flex flex-col items-center justify-center p-5 rounded-3xl bg-zinc-900/80 border border-zinc-800 shadow-xl backdrop-blur-md">
               <LudoDice
                 currentTurnColor={currentTurnColor}
+                currentTurnPlayerName={currentTurnPlayer?.name}
                 diceValue={diceValue}
                 isRolling={isRolling}
                 canRoll={isMyTurn && !hasRolled}
+                hasRolled={hasRolled}
                 onRoll={handleRollDice}
                 turnTimeLeft={turnTimeLeft}
               />
@@ -893,8 +929,22 @@ export default function LudoGameView({
                       </div>
                     </div>
 
-                    {/* Right side: Token Home Counter & Speaker Mute Toggle */}
+                    {/* Right side: 15s Timer Badge, Token Home Counter & Speaker Mute Toggle */}
                     <div className="flex items-center gap-2 shrink-0">
+                      {/* Active 15s Countdown Badge */}
+                      {isCurrentTurn && (
+                        <div
+                          className={`flex items-center gap-1 px-2 py-0.5 rounded-md text-[10px] font-extrabold border ${
+                            turnTimeLeft <= 4
+                              ? "bg-rose-500/20 text-rose-300 border-rose-500/40 animate-pulse"
+                              : "bg-orange-500/15 text-orange-400 border-orange-500/30"
+                          }`}
+                        >
+                          <Clock className="w-3 h-3" />
+                          <span>{turnTimeLeft}s</span>
+                        </div>
+                      )}
+
                       {/* Tokens finished count */}
                       <div className="flex items-center gap-1 px-2 py-1 rounded-lg bg-zinc-900 border border-zinc-800 text-[11px] font-bold text-zinc-300">
                         <Trophy className="w-3 h-3 text-amber-400" />
