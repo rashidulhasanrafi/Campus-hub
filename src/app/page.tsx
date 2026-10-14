@@ -37,7 +37,8 @@ import LudoGameView from "@/components/ludo/LudoGameView";
 import ProfileOnboardingModal from "@/components/ProfileOnboardingModal";
 import IncomingCallModal from "@/components/IncomingCallModal";
 import UiuBusTransition from "@/components/UiuBusTransition";
-import { Sparkles, Radio } from "lucide-react";
+import StudentAvatar from "@/components/StudentAvatar";
+import { Sparkles, Radio, X, Gamepad2 } from "lucide-react";
 import { useUiMode } from "@/context/UiModeContext";
 import { CREATOR_INFO, getWhatsAppFeedbackUrl } from "@/config/creator";
 
@@ -97,6 +98,15 @@ export default function CampusHubHome() {
     if (activeCallRecovered?.type === "hangout") return activeCallRecovered.roomId || activeCallRecovered.roomName || null;
     return null;
   });
+  const [incomingLudoInvite, setIncomingLudoInvite] = useState<{
+    fromId: string;
+    fromName: string;
+    fromAvatar: string;
+    fromDepartment: string;
+    roomId: string;
+    timestamp: number;
+  } | null>(null);
+  const [ludoRoomToJoin, setLudoRoomToJoin] = useState<string | null>(null);
   const [authNotice, setAuthNotice] = useState("");
   const [authPreFill, setAuthPreFill] = useState("");
   const [isInCall, setIsInCall] = useState(() => Boolean(activeCallRecovered));
@@ -232,6 +242,13 @@ export default function CampusHubHome() {
           return;
         }
         setIncomingInvite(invite);
+      }
+    });
+
+    channel.on("broadcast", { event: "ludo-invite" }, (payload) => {
+      const invite = payload.payload;
+      if (invite && invite.toId === profile.id) {
+        setIncomingLudoInvite(invite);
       }
     });
 
@@ -725,7 +742,12 @@ export default function CampusHubHome() {
                 {currentTab === "ludo" && (
                   <LudoGameView
                     currentProfile={profile}
-                    onExitGame={() => handleTabChange("lounge")}
+                    initialRoomCode={ludoRoomToJoin}
+                    onExitGame={() => {
+                      setLudoRoomToJoin(null);
+                      handleTabChange("lounge");
+                    }}
+                    onlineStudents={students}
                   />
                 )}
 
@@ -843,6 +865,65 @@ export default function CampusHubHome() {
               onAccept={handleAcceptInvite}
               onDecline={handleDeclineInvite}
             />
+
+            {/* Incoming Ludo Match Invite Notification */}
+            {incomingLudoInvite && (
+              <div className="fixed bottom-6 right-6 z-50 max-w-sm w-full p-4 rounded-3xl bg-zinc-950/95 border border-orange-500/40 shadow-2xl backdrop-blur-md animate-in slide-in-from-bottom-5 duration-200">
+                <div className="flex items-start gap-3">
+                  <div className="relative shrink-0">
+                    <StudentAvatar
+                      avatar={incomingLudoInvite.fromAvatar}
+                      name={incomingLudoInvite.fromName}
+                      size="md"
+                      isOnline={true}
+                    />
+                    <span className="absolute -bottom-1 -right-1 text-sm">🎲</span>
+                  </div>
+                  <div className="min-w-0 flex-1">
+                    <div className="flex items-center justify-between">
+                      <span className="text-[10px] font-extrabold text-orange-400 uppercase tracking-wider flex items-center gap-1">
+                        <Gamepad2 className="w-3 h-3 text-orange-400" />
+                        Ludo Match Invite
+                      </span>
+                      <button
+                        type="button"
+                        onClick={() => setIncomingLudoInvite(null)}
+                        className="p-1 text-zinc-500 hover:text-white transition-colors cursor-pointer"
+                      >
+                        <X className="w-3.5 h-3.5" />
+                      </button>
+                    </div>
+                    <h4 className="text-sm font-extrabold text-white truncate mt-0.5">
+                      {incomingLudoInvite.fromName}
+                    </h4>
+                    <p className="text-[11px] text-zinc-400">
+                      {incomingLudoInvite.fromDepartment} • Room: <span className="font-mono text-orange-400 font-bold">{incomingLudoInvite.roomId}</span>
+                    </p>
+                    <div className="flex gap-2 mt-3">
+                      <button
+                        type="button"
+                        onClick={() => {
+                          const rId = incomingLudoInvite.roomId;
+                          setIncomingLudoInvite(null);
+                          setLudoRoomToJoin(rId);
+                          setCurrentTab("ludo");
+                        }}
+                        className="flex-1 py-2 px-3 rounded-xl bg-gradient-to-r from-orange-500 to-amber-500 hover:from-orange-600 hover:to-amber-600 text-white font-bold text-xs shadow-md shadow-orange-500/30 transition-all active:scale-95 cursor-pointer"
+                      >
+                        Accept & Play 🎲
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => setIncomingLudoInvite(null)}
+                        className="py-2 px-3 rounded-xl bg-zinc-800 hover:bg-zinc-700 text-zinc-400 hover:text-white font-semibold text-xs transition-colors cursor-pointer"
+                      >
+                        Decline
+                      </button>
+                    </div>
+                  </div>
+                </div>
+              </div>
+            )}
           </div>
         </div>
       )}

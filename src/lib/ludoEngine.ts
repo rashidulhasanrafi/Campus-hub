@@ -84,6 +84,7 @@ export interface LudoPlayer {
   tokens: number[]; // 4 tokens, step: -1 (base), 0..50 (common), 51..55 (home path), 56 (finished)
   isAudioMuted?: boolean;
   isSpeaking?: boolean;
+  hasLeft?: boolean;
 }
 
 // Coordinate on 15x15 board (0 to 14)

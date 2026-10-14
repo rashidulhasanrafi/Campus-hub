@@ -55,6 +55,7 @@ export default function LudoBoardSvg({
     const items: TokenItem[] = [];
 
     players.forEach((player) => {
+      if (player.hasLeft || !player.tokens || player.tokens.length === 0) return;
       player.tokens.forEach((step, tokenIndex) => {
         const coord = getTokenBoardCoord(player.color, tokenIndex, step);
         const cx = coord.c * cellSize + cellSize / 2;

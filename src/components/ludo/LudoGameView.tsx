@@ -43,14 +43,19 @@ import {
   Smartphone,
   Laptop,
   Search,
+  UserPlus,
+  X,
+  Send,
 } from "lucide-react";
 import confetti from "canvas-confetti";
+import { Friend, getLocalFriends } from "@/lib/friends";
 
 interface LudoGameViewProps {
   currentProfile: UserProfile | null;
   initialRoomCode?: string | null;
   initialMode?: "random" | "custom" | null;
   onExitGame?: () => void;
+  onlineStudents?: UserProfile[];
 }
 
 export default function LudoGameView({
@@ -58,6 +63,7 @@ export default function LudoGameView({
   initialRoomCode,
   initialMode,
   onExitGame,
+  onlineStudents = [],
 }: LudoGameViewProps) {
   // Local student fallback if not signed in
   const user: UserProfile = currentProfile || {
@@ -123,12 +129,71 @@ export default function LudoGameView({
 
   // Turn & Game Loop State
   const [currentTurnColor, setCurrentTurnColor] = useState<PlayerColor>("RED");
+  const currentTurnColorRef = useRef<PlayerColor>(currentTurnColor);
+  useEffect(() => {
+    currentTurnColorRef.current = currentTurnColor;
+  }, [currentTurnColor]);
+
+  const gameStateRef = useRef(gameState);
+  useEffect(() => {
+    gameStateRef.current = gameState;
+  }, [gameState]);
+
   const [diceValue, setDiceValue] = useState<number | null>(null);
   const [isRolling, setIsRolling] = useState(false);
   const [hasRolled, setHasRolled] = useState(false);
   const [consecutiveSixes, setConsecutiveSixes] = useState(0);
   const [turnTimeLeft, setTurnTimeLeft] = useState(15);
   const [winner, setWinner] = useState<{ id: string; name: string; color: PlayerColor } | null>(null);
+
+  // Friend Invite State
+  const [showInviteModal, setShowInviteModal] = useState(false);
+  const [friendsList, setFriendsList] = useState<Friend[]>([]);
+  const [invitedFriendIds, setInvitedFriendIds] = useState<Set<string>>(new Set());
+
+  const isFriendActive = useCallback((friendId: string): boolean => {
+    if (onlineStudents && onlineStudents.length > 0) {
+      return onlineStudents.some((s) => s.id === friendId);
+    }
+    return false;
+  }, [onlineStudents]);
+
+  // Load friends when modal opens, sorting active friends first
+  useEffect(() => {
+    if (showInviteModal && user.id) {
+      const local = getLocalFriends(user.id);
+      const sorted = [...local].sort((a, b) => {
+        const aActive = isFriendActive(a.id);
+        const bActive = isFriendActive(b.id);
+        if (aActive && !bActive) return -1;
+        if (!aActive && bActive) return 1;
+        return a.full_name.localeCompare(b.full_name);
+      });
+      setFriendsList(sorted);
+    }
+  }, [showInviteModal, user.id, isFriendActive]);
+
+  const handleSendLudoInvite = (friend: Friend) => {
+    try {
+      const channel = supabase.channel("campus-lounge");
+      channel.send({
+        type: "broadcast",
+        event: "ludo-invite",
+        payload: {
+          fromId: user.id,
+          fromName: user.full_name,
+          fromAvatar: user.avatar,
+          fromDepartment: user.department,
+          toId: friend.id,
+          roomId: roomId,
+          timestamp: Date.now(),
+        },
+      });
+    } catch {}
+
+    setInvitedFriendIds((prev) => new Set(prev).add(friend.id));
+    showTimeoutNotice(`Invitation sent to ${friend.full_name} 🎲`);
+  };
 
   // Audio & Speaker State
   const [speakingUserIds, setSpeakingUserIds] = useState<Set<string>>(new Set());
@@ -379,15 +444,58 @@ export default function LudoGameView({
 
     // H. Listen for PLAYER_LEFT
     channel.on("broadcast", { event: "PLAYER_LEFT" }, ({ payload }: any) => {
-      if (payload?.userId) {
-        setPlayers((prev) => prev.filter((p) => p.id !== payload.userId));
-        if (payload?.playerName) {
-          showTimeoutNotice(`${payload.playerName} left the room.`);
+      const leftUserId = payload?.userId || payload?.playerId;
+      const leftPlayerName = payload?.playerName;
+      const leftColor = payload?.playerColor;
+
+      if (leftUserId || leftColor) {
+        showTimeoutNotice(`${leftPlayerName || "A player"} ber hoye gese (left match) 🏃‍♂️`);
+        ludoAudio.playCapture();
+
+        // If currently in lobby, remove them from the slot
+        if (gameStateRef.current === "lobby") {
+          setPlayers((prev) => prev.filter((p) => p.id !== leftUserId));
+          if (isHostRef.current) {
+            setTimeout(() => {
+              broadcastLobbyState(channel, playersRef.current);
+            }, 100);
+          }
+          return;
         }
-        if (isHostRef.current) {
+
+        // If in playing match: mark hasLeft: true and empty their tokens (guti faka hoye jabe)
+        setPlayers((prev) => {
+          const updated = prev.map((pl) => {
+            if (pl.id === leftUserId || (leftColor && pl.color === leftColor)) {
+              return {
+                ...pl,
+                hasLeft: true,
+                tokens: [], // Guti faka hoye jabe! Board theke sob guti clear
+              };
+            }
+            return pl;
+          });
+
+          // Check if only 1 active player remains
+          const activeRemaining = updated.filter((p) => !p.hasLeft && p.tokens.length > 0);
+          if (activeRemaining.length === 1 && gameStateRef.current === "playing") {
+            const loneWinner = activeRemaining[0];
+            setTimeout(() => {
+              handleGameOverRef.current(loneWinner.color, loneWinner.id, loneWinner.name);
+            }, 600);
+          }
+
+          return updated;
+        });
+
+        // If the player who left had the active turn, advance turn immediately
+        if (
+          currentTurnColorRef.current === leftColor ||
+          playersRef.current.find((p) => p.id === leftUserId)?.color === currentTurnColorRef.current
+        ) {
           setTimeout(() => {
-            broadcastLobbyState(channel, playersRef.current);
-          }, 100);
+            handlePassTurnRef.current();
+          }, 350);
         }
       }
     });
@@ -423,8 +531,41 @@ export default function LudoGameView({
         });
       });
 
+      // If in playing match, check if any active human player dropped out
+      if (gameStateRef.current === "playing") {
+        let presenceDropped = false;
+        const currentList = [...playersRef.current];
+        currentList.forEach((pl) => {
+          const isBot = pl.id.startsWith("ai_") || pl.id.startsWith("bot_");
+          if (!isBot && pl.id !== user.id && !pl.hasLeft) {
+            const isOnline = onlineUsers.some((u) => u.id === pl.id);
+            if (!isOnline) {
+              pl.hasLeft = true;
+              pl.tokens = []; // Guti faka
+              presenceDropped = true;
+              showTimeoutNotice(`${pl.name} ber hoye gese (disconnected) 🏃‍♂️`);
+              if (currentTurnColorRef.current === pl.color) {
+                setTimeout(() => {
+                  handlePassTurnRef.current();
+                }, 350);
+              }
+            }
+          }
+        });
+
+        if (presenceDropped) {
+          setPlayers(currentList);
+          const activeRemaining = currentList.filter((p) => !p.hasLeft && p.tokens.length > 0);
+          if (activeRemaining.length === 1) {
+            setTimeout(() => {
+              handleGameOverRef.current(activeRemaining[0].color, activeRemaining[0].id, activeRemaining[0].name);
+            }, 600);
+          }
+        }
+      }
+
       // If we are Host, inspect online peers and ensure all connected users are represented in the lobby
-      if (isHostRef.current) {
+      if (isHostRef.current && gameStateRef.current === "lobby") {
         let changed = false;
         let currentList = [...playersRef.current];
 
@@ -521,45 +662,6 @@ export default function LudoGameView({
   // 2. TURN PASSING, GAME OVER & LOBBY START HELPERS
   // -------------------------------------------------------------------
 
-  // Pass Turn to next active player (Broadcasts both NEXT_TURN and TURN_CHANGE)
-  const handlePassTurn = useCallback(() => {
-    const activeColors = players.map((p) => p.color);
-    const currentIndex = activeColors.indexOf(currentTurnColor);
-    const nextIndex = (currentIndex + 1) % activeColors.length;
-    const nextColor = activeColors[nextIndex] || "RED";
-    const nextPlayer = players.find((p) => p.color === nextColor);
-
-    setCurrentTurnColor(nextColor);
-    setDiceValue(null);
-    setHasRolled(false);
-    setTurnTimeLeft(15);
-
-    const androidTurnIdx = PLAYER_COLORS.indexOf(nextColor);
-
-    // 1. Broadcast NEXT_TURN (Native Android)
-    channelRef.current?.send({
-      type: "broadcast",
-      event: "NEXT_TURN",
-      payload: {
-        nextTurn: androidTurnIdx >= 0 ? androidTurnIdx : nextIndex,
-      },
-    });
-
-    // 2. Broadcast TURN_CHANGE (Web)
-    channelRef.current?.send({
-      type: "broadcast",
-      event: "TURN_CHANGE",
-      payload: {
-        roomId,
-        nextPlayerId: nextPlayer?.id || "",
-        nextPlayerColor: nextColor,
-        turnIndex: nextIndex,
-        nextTurn: androidTurnIdx >= 0 ? androidTurnIdx : nextIndex,
-        timestamp: Date.now(),
-      } as TurnChangePayload,
-    });
-  }, [players, currentTurnColor, roomId]);
-
   // Handle Game Over
   const handleGameOver = useCallback((winnerColor: PlayerColor, winnerId: string, winnerName: string) => {
     setWinner({ id: winnerId, name: winnerName, color: winnerColor });
@@ -593,6 +695,62 @@ export default function LudoGameView({
       });
     } catch {}
   }, [players, roomId]);
+
+  // Pass Turn to next active player (Broadcasts both NEXT_TURN and TURN_CHANGE)
+  const handlePassTurn = useCallback(() => {
+    // Only pass turn between players who have NOT left and still have active tokens
+    const activePlayers = players.filter((p) => !p.hasLeft && p.tokens.length > 0);
+    if (activePlayers.length === 0) return;
+
+    if (activePlayers.length === 1 && gameState === "playing") {
+      const loneWinner = activePlayers[0];
+      handleGameOver(loneWinner.color, loneWinner.id, loneWinner.name);
+      return;
+    }
+
+    const activeColors = activePlayers.map((p) => p.color);
+    const currentIndex = activeColors.indexOf(currentTurnColor);
+    const nextIndex = (currentIndex + 1) % activeColors.length;
+    const nextColor = activeColors[nextIndex] || activeColors[0] || "RED";
+    const nextPlayer = activePlayers.find((p) => p.color === nextColor);
+
+    setCurrentTurnColor(nextColor);
+    setDiceValue(null);
+    setHasRolled(false);
+    setTurnTimeLeft(15);
+
+    const androidTurnIdx = PLAYER_COLORS.indexOf(nextColor);
+
+    // 1. Broadcast NEXT_TURN (Native Android)
+    channelRef.current?.send({
+      type: "broadcast",
+      event: "NEXT_TURN",
+      payload: {
+        nextTurn: androidTurnIdx >= 0 ? androidTurnIdx : nextIndex,
+      },
+    });
+
+    // 2. Broadcast TURN_CHANGE (Web)
+    channelRef.current?.send({
+      type: "broadcast",
+      event: "TURN_CHANGE",
+      payload: {
+        roomId,
+        nextPlayerId: nextPlayer?.id || "",
+        nextPlayerColor: nextColor,
+        turnIndex: nextIndex,
+        nextTurn: androidTurnIdx >= 0 ? androidTurnIdx : nextIndex,
+        timestamp: Date.now(),
+      } as TurnChangePayload,
+    });
+  }, [players, currentTurnColor, roomId, gameState, handleGameOver]);
+
+  const handlePassTurnRef = useRef(handlePassTurn);
+  const handleGameOverRef = useRef(handleGameOver);
+  useEffect(() => {
+    handlePassTurnRef.current = handlePassTurn;
+    handleGameOverRef.current = handleGameOver;
+  }, [handlePassTurn, handleGameOver]);
 
   // Start Game (Host only in private lobby)
   const handleStartGame = useCallback(() => {
@@ -979,37 +1137,55 @@ export default function LudoGameView({
     setGameState("lobby");
   };
 
-  // Leave Lobby helper
-  const handleLeaveLobby = () => {
+  // Unified Exit Game / Match handler (Broadcasts PLAYER_LEFT so opponent board clears tokens)
+  const handleExitMatchOrMenu = () => {
     if (channelRef.current) {
-      channelRef.current.send({
-        type: "broadcast",
-        event: "PLAYER_LEFT",
-        payload: {
-          roomId,
-          userId: user.id,
-          playerName: user.full_name,
-        },
-      });
+      if (gameState === "playing" || gameState === "lobby") {
+        channelRef.current.send({
+          type: "broadcast",
+          event: "PLAYER_LEFT",
+          payload: {
+            roomId,
+            userId: user.id,
+            playerId: user.id,
+            playerName: user.full_name,
+            playerColor: myColor,
+            reason: "User exited match",
+          },
+        }).catch(() => {});
+      }
       supabase.removeChannel(channelRef.current);
       channelRef.current = null;
     }
-    setGameState("menu");
-    setRoomId(`UIU-${Math.floor(1000 + Math.random() * 9000)}`);
-    updateIsHost(true);
-    setPlayers([
-      {
-        id: user.id,
-        name: user.full_name,
-        avatar: user.avatar,
-        department: user.department,
-        batch: user.batch,
-        color: "RED",
-        isHost: true,
-        isReady: true,
-        tokens: [-1, -1, -1, -1],
-      },
-    ]);
+    if (matchChannelRef.current) {
+      supabase.removeChannel(matchChannelRef.current);
+      matchChannelRef.current = null;
+    }
+    if (gameState !== "menu") {
+      setGameState("menu");
+      setRoomId(`UIU-${Math.floor(1000 + Math.random() * 9000)}`);
+      updateIsHost(true);
+      setPlayers([
+        {
+          id: user.id,
+          name: user.full_name,
+          avatar: user.avatar,
+          department: user.department,
+          batch: user.batch,
+          color: "RED",
+          isHost: true,
+          isReady: true,
+          tokens: [-1, -1, -1, -1],
+        },
+      ]);
+    } else if (onExitGame) {
+      onExitGame();
+    }
+  };
+
+  // Leave Lobby helper
+  const handleLeaveLobby = () => {
+    handleExitMatchOrMenu();
   };
 
   // -------------------------------------------------------------------
@@ -1181,17 +1357,7 @@ export default function LudoGameView({
         <div className="flex items-center gap-3">
           <button
             type="button"
-            onClick={() => {
-              if (matchChannelRef.current) {
-                supabase.removeChannel(matchChannelRef.current);
-                matchChannelRef.current = null;
-              }
-              if (gameState !== "menu") {
-                setGameState("menu");
-              } else if (onExitGame) {
-                onExitGame();
-              }
-            }}
+            onClick={handleExitMatchOrMenu}
             className="p-2 rounded-xl bg-zinc-900 hover:bg-zinc-800 text-zinc-300 hover:text-white border border-zinc-800 transition-colors cursor-pointer"
             title="Exit Game"
           >
@@ -1228,6 +1394,17 @@ export default function LudoGameView({
               mutedSpeakers={mutedSpeakers}
               onToggleSpeakerMute={handleToggleSpeakerMute}
             />
+          )}
+
+          {gameState === "playing" && (
+            <button
+              type="button"
+              onClick={handleExitMatchOrMenu}
+              className="flex items-center gap-1 px-2.5 py-2 rounded-xl bg-rose-500/15 hover:bg-rose-500/25 text-rose-400 border border-rose-500/30 text-xs font-bold transition-all cursor-pointer"
+              title="Exit Ludo Match"
+            >
+              <span>Exit Match</span>
+            </button>
           )}
 
           <button
@@ -1443,19 +1620,16 @@ export default function LudoGameView({
             </div>
           </div>
 
-          {/* Action Buttons */}
-          <div className="space-y-2.5 pt-2 border-t border-zinc-800">
-            {/* If coordinator and >= 2 players, allow manual launch */}
-            {matchQueue[0]?.id === user.id && matchQueue.length >= 2 && (
-              <button
-                type="button"
-                onClick={() => launchQuickMatch(matchQueue)}
-                className="w-full py-3.5 px-4 rounded-xl bg-gradient-to-r from-orange-600 to-amber-600 hover:from-orange-500 hover:to-amber-500 text-white font-extrabold text-sm shadow-lg shadow-orange-600/30 flex items-center justify-center gap-2 transition-all active:scale-98 cursor-pointer"
-              >
-                <Play className="w-4 h-4" />
-                <span>Start Match Now with {matchQueue.length} Players →</span>
-              </button>
-            )}
+          {/* Action Area */}
+          <div className="space-y-3 pt-2 border-t border-zinc-800">
+            <div className="p-3.5 rounded-2xl bg-orange-500/10 border border-orange-500/30 flex items-center gap-3 text-xs text-orange-300">
+              <Sparkles className="w-4 h-4 text-orange-400 shrink-0 animate-spin" />
+              <span>
+                {matchQueue.length < 4
+                  ? `Waiting for 4 students (${matchQueue.length}/4)... 4 jon dhukle match auto start hoye jabe!`
+                  : `4 students joined! Match auto starting now...`}
+              </span>
+            </div>
 
             <button
               type="button"
@@ -1499,6 +1673,16 @@ export default function LudoGameView({
             </div>
 
             <div className="flex items-center gap-2">
+              <button
+                type="button"
+                onClick={() => setShowInviteModal(true)}
+                className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-gradient-to-r from-orange-500 to-amber-500 hover:from-orange-600 hover:to-amber-600 text-white text-xs font-bold transition-all shadow-md shadow-orange-500/20 active:scale-95 cursor-pointer"
+                title="Invite active friends to this room"
+              >
+                <UserPlus className="w-3.5 h-3.5" />
+                <span>Invite Friends</span>
+              </button>
+
               <button
                 type="button"
                 onClick={handleCopyCode}
@@ -1692,7 +1876,38 @@ export default function LudoGameView({
                 const isCurrentTurn = pl.color === currentTurnColor;
                 const isSpeaking = speakingUserIds.has(pl.id);
                 const isMuted = Boolean(mutedSpeakers[pl.id]);
-                const tokensFinished = pl.tokens.filter((t) => t >= 56).length;
+                const tokensFinished = pl.tokens ? pl.tokens.filter((t) => t >= 56).length : 0;
+
+                if (pl.hasLeft) {
+                  return (
+                    <div
+                      key={pl.color}
+                      className="p-3 sm:p-3.5 rounded-2xl border border-dashed border-rose-900/40 bg-zinc-950/40 opacity-55 flex items-center justify-between gap-3 text-zinc-500"
+                    >
+                      <div className="flex items-center gap-2.5 min-w-0">
+                        <div className="relative shrink-0 grayscale opacity-40">
+                          <StudentAvatar
+                            avatar={pl.avatar}
+                            name={pl.name}
+                            size="sm"
+                            isOnline={false}
+                          />
+                        </div>
+                        <div className="min-w-0">
+                          <span className="text-xs font-bold text-zinc-400 line-through block truncate">
+                            {pl.name}
+                          </span>
+                          <span className="text-[10px] text-rose-400 font-bold block">
+                            Ber hoye gese (Vacated)
+                          </span>
+                        </div>
+                      </div>
+                      <span className="text-[10px] px-2 py-0.5 rounded bg-rose-500/10 text-rose-400 border border-rose-500/20 font-bold shrink-0">
+                        Left
+                      </span>
+                    </div>
+                  );
+                }
 
                 return (
                   <div
@@ -1780,6 +1995,129 @@ export default function LudoGameView({
                   </div>
                 );
               })}
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* ------------------------------------------------------------- */}
+      {/* VIEW: INVITE ACTIVE FRIENDS MODAL                             */}
+      {/* ------------------------------------------------------------- */}
+      {showInviteModal && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/80 backdrop-blur-sm animate-in fade-in duration-150">
+          <div className="w-full max-w-md bg-zinc-950 border border-zinc-800 rounded-3xl p-6 shadow-2xl flex flex-col max-h-[85vh]">
+            <div className="flex items-center justify-between pb-4 border-b border-zinc-800">
+              <div className="flex items-center gap-2.5">
+                <div className="w-9 h-9 rounded-xl bg-orange-500/15 border border-orange-500/30 flex items-center justify-center text-orange-400">
+                  <UserPlus className="w-5 h-5" />
+                </div>
+                <div>
+                  <h3 className="text-base font-extrabold text-white">Invite Friends to Ludo</h3>
+                  <p className="text-xs text-zinc-400">
+                    Room Code: <span className="font-mono text-orange-400 font-bold">{roomId}</span>
+                  </p>
+                </div>
+              </div>
+              <button
+                type="button"
+                onClick={() => setShowInviteModal(false)}
+                className="p-1.5 rounded-xl bg-zinc-900 hover:bg-zinc-800 text-zinc-400 hover:text-white transition-colors cursor-pointer"
+              >
+                <X className="w-4 h-4" />
+              </button>
+            </div>
+
+            {/* Friends list container */}
+            <div className="flex-1 overflow-y-auto py-3 space-y-2">
+              {friendsList.length === 0 ? (
+                <div className="text-center py-8 px-4 text-zinc-500 text-xs">
+                  <Users className="w-8 h-8 mx-auto mb-2 text-zinc-700" />
+                  <p className="text-zinc-400 font-medium">No friends added yet.</p>
+                  <p className="text-[11px] text-zinc-600 mt-1">Connect with classmates in Campus Lounge to invite them to your matches!</p>
+                </div>
+              ) : (
+                friendsList.map((f) => {
+                  const active = isFriendActive(f.id);
+                  const isInvited = invitedFriendIds.has(f.id);
+
+                  return (
+                    <div
+                      key={f.id}
+                      className="flex items-center justify-between gap-3 p-2.5 rounded-2xl bg-zinc-900/40 border border-zinc-800/80 hover:bg-zinc-900/80 transition-colors"
+                    >
+                      <div className="flex items-center gap-3 min-w-0">
+                        <div className="relative shrink-0">
+                          <StudentAvatar
+                            avatar={f.avatar}
+                            name={f.full_name}
+                            size="md"
+                            isOnline={active}
+                          />
+                          {active && (
+                            <span className="absolute -bottom-0.5 -right-0.5 w-3 h-3 rounded-full bg-emerald-500 border-2 border-zinc-950 animate-pulse" />
+                          )}
+                        </div>
+                        <div className="min-w-0">
+                          <div className="flex items-center gap-2">
+                            <span className="text-xs font-bold text-white truncate block">
+                              {f.full_name}
+                            </span>
+                            {active ? (
+                              <span className="text-[10px] px-1.5 py-0.2 rounded bg-emerald-500/15 text-emerald-400 border border-emerald-500/30 font-semibold shrink-0">
+                                Active
+                              </span>
+                            ) : (
+                              <span className="text-[10px] px-1.5 py-0.2 rounded bg-zinc-800 text-zinc-500 font-medium shrink-0">
+                                Offline
+                              </span>
+                            )}
+                          </div>
+                          <span className="text-[11px] text-zinc-400 block truncate">
+                            {f.department || "UIU Student"}
+                          </span>
+                        </div>
+                      </div>
+
+                      <button
+                        type="button"
+                        onClick={() => handleSendLudoInvite(f)}
+                        disabled={isInvited}
+                        className={`px-3 py-1.5 rounded-xl text-xs font-bold flex items-center gap-1.5 transition-all cursor-pointer shrink-0 ${
+                          isInvited
+                            ? "bg-emerald-500/20 text-emerald-300 border border-emerald-500/30 cursor-default"
+                            : active
+                            ? "bg-gradient-to-r from-orange-500 to-amber-500 hover:from-orange-600 hover:to-amber-600 text-white shadow-md shadow-orange-500/20 active:scale-95"
+                            : "bg-zinc-800 hover:bg-zinc-700 text-zinc-300"
+                        }`}
+                      >
+                        {isInvited ? (
+                          <>
+                            <Check className="w-3.5 h-3.5 text-emerald-400" />
+                            <span>Sent ✓</span>
+                          </>
+                        ) : (
+                          <>
+                            <Send className="w-3 h-3" />
+                            <span>Invite</span>
+                          </>
+                        )}
+                      </button>
+                    </div>
+                  );
+                })
+              )}
+            </div>
+
+            {/* Quick Share Code Footer */}
+            <div className="pt-3 border-t border-zinc-800 flex items-center justify-between text-xs text-zinc-400">
+              <span>Direct Room Code: <strong className="font-mono text-white">{roomId}</strong></span>
+              <button
+                type="button"
+                onClick={handleCopyCode}
+                className="text-orange-400 hover:text-orange-300 font-bold cursor-pointer"
+              >
+                {copiedCode ? "Copied!" : "Copy Code"}
+              </button>
             </div>
           </div>
         </div>
