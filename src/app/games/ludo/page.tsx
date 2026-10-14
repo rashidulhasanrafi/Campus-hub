@@ -3,7 +3,7 @@
 import React, { useEffect, useState, Suspense } from "react";
 import { useSearchParams, useRouter } from "next/navigation";
 import LudoGameView from "@/components/ludo/LudoGameView";
-import { UserProfile, fetchUserProfile, supabase } from "@/lib/supabase";
+import { UserProfile, ensureUserProfile, supabase } from "@/lib/supabase";
 import { RefreshCw } from "lucide-react";
 
 function LudoPageContent() {
@@ -21,22 +21,10 @@ function LudoPageContent() {
       try {
         const { data } = await supabase.auth.getSession();
         if (data.session?.user) {
-          const prof = await fetchUserProfile(data.session.user.id);
+          // Single Source of Truth: Always load directly from public.profiles table
+          const prof = await ensureUserProfile(data.session.user);
           if (prof) {
             setProfile(prof);
-          } else {
-            // Build fallback from user metadata
-            const meta = data.session.user.user_metadata || {};
-            setProfile({
-              id: data.session.user.id,
-              full_name: meta.full_name || "UIU Student",
-              email: data.session.user.email,
-              student_id: meta.student_id || data.session.user.email?.split("@")[0],
-              department: meta.department || "BS in CSE",
-              batch: meta.batch || "2024",
-              avatar: meta.avatar || "/images/avatar-male.png",
-              status: "Playing Ludo 🎲",
-            });
           }
         }
       } catch (e) {

@@ -1,13 +1,13 @@
 "use client";
 
-import React, { useState } from "react";
+import React, { useState, useEffect } from "react";
 import {
   UserProfile,
   UIU_PROGRAMS,
   CAMPUS_BATCHES,
   CAMPUS_STATUS_OPTIONS,
   AVATAR_OPTIONS,
-  syncProfileWithSupabase,
+  updateUserProfile,
 } from "@/lib/supabase";
 import StudentAvatar from "@/components/StudentAvatar";
 import {
@@ -15,8 +15,8 @@ import {
   Check,
   User,
   GraduationCap,
-  Lock,
   ArrowRight,
+  RefreshCw,
 } from "lucide-react";
 
 interface ProfileOnboardingModalProps {
@@ -32,11 +32,8 @@ export default function ProfileOnboardingModal({
   onClose,
   currentProfile,
   onSaveProfile,
-  onRequireRelogin,
 }: ProfileOnboardingModalProps) {
-  const [fullName, setFullName] = useState(
-    currentProfile?.full_name || "Alex Chen"
-  );
+  const [fullName, setFullName] = useState(currentProfile?.full_name || "");
   const [studentId, setStudentId] = useState(
     currentProfile?.student_id ||
       (currentProfile?.email && currentProfile.email.includes("@")
@@ -55,9 +52,29 @@ export default function ProfileOnboardingModal({
   const [status, setStatus] = useState(
     currentProfile?.status || CAMPUS_STATUS_OPTIONS[0].label
   );
-  const [bio, setBio] = useState(
-    currentProfile?.bio || "Exploring campus, building projects, and connecting!"
-  );
+  const [bio, setBio] = useState(currentProfile?.bio || "");
+  const [isSaving, setIsSaving] = useState(false);
+  const [saveSuccess, setSaveSuccess] = useState(false);
+
+  // Single Source of Truth: When modal opens or profile changes, load the student's exact data
+  // "er profile edit option e default thakbe na jar profile thik omoni thakbe ja edit korte chai korbe"
+  useEffect(() => {
+    if (isOpen && currentProfile) {
+      setFullName(currentProfile.full_name || "");
+      setStudentId(
+        currentProfile.student_id ||
+          (currentProfile.email && currentProfile.email.includes("@")
+            ? currentProfile.email.split("@")[0]
+            : "")
+      );
+      setDepartment(currentProfile.department || UIU_PROGRAMS[0]);
+      setBatch(currentProfile.batch || CAMPUS_BATCHES[1]);
+      setSelectedAvatar(currentProfile.avatar || AVATAR_OPTIONS[0].emoji);
+      setStatus(currentProfile.status || CAMPUS_STATUS_OPTIONS[0].label);
+      setBio(currentProfile.bio || "");
+      setSaveSuccess(false);
+    }
+  }, [isOpen, currentProfile]);
 
   if (!isOpen) return null;
 
@@ -65,6 +82,7 @@ export default function ProfileOnboardingModal({
     e.preventDefault();
     if (!fullName.trim()) return;
 
+    setIsSaving(true);
     const id = currentProfile?.id || `student_${Date.now().toString(36)}`;
     const newProfile: UserProfile = {
       id,
@@ -81,13 +99,21 @@ export default function ProfileOnboardingModal({
       call_restricted: currentProfile?.call_restricted ?? false,
     };
 
-    onSaveProfile(newProfile);
-    await syncProfileWithSupabase(newProfile);
-    onClose();
-
-    // If user edited an existing profile, require logging in with password again
-    if (currentProfile && onRequireRelogin) {
-      onRequireRelogin();
+    try {
+      // 1. Direct update to Supabase public.profiles AND auth metadata AND localStorage
+      await updateUserProfile(newProfile);
+      onSaveProfile(newProfile);
+      setSaveSuccess(true);
+      setTimeout(() => {
+        setSaveSuccess(false);
+        onClose();
+      }, 500);
+    } catch (err) {
+      console.error("[Campus Hub] Failed to save profile:", err);
+      onSaveProfile(newProfile);
+      onClose();
+    } finally {
+      setIsSaving(false);
     }
   };
 
@@ -114,18 +140,10 @@ export default function ProfileOnboardingModal({
               UIU Student Profile
             </h2>
             <p className="text-xs text-zinc-400">
-              Customize your campus avatar, department, and live status
+              Customize your verified campus avatar, department, and live status
             </p>
           </div>
         </div>
-
-        {/* Security Notice: If editing, saving requires logging in again with password */}
-        {currentProfile && (
-          <div className="flex items-center gap-2 p-2.5 rounded-lg bg-orange-500/10 border border-orange-500/25 text-xs text-orange-300 mb-4">
-            <Lock className="w-3.5 h-3.5 text-orange-400 shrink-0" />
-            <span>Editing your profile will require you to log in with your password again.</span>
-          </div>
-        )}
 
         <form onSubmit={handleSubmit} className="space-y-4">
           {/* Avatar Selector */}
@@ -278,10 +296,29 @@ export default function ProfileOnboardingModal({
           {/* Action Button: UIU Orange by default, turns dark gray on hover */}
           <button
             type="submit"
-            className="w-full py-2.5 rounded-lg bg-orange-600 hover:bg-zinc-800 text-white font-semibold text-xs shadow-sm hover:opacity-95 active:scale-[0.98] transition-all flex items-center justify-center gap-2"
+            disabled={isSaving}
+            className={`w-full py-2.5 rounded-lg text-white font-semibold text-xs shadow-sm hover:opacity-95 active:scale-[0.98] transition-all flex items-center justify-center gap-2 ${
+              saveSuccess
+                ? "bg-emerald-600 border border-emerald-500"
+                : "bg-orange-600 hover:bg-zinc-800"
+            }`}
           >
-            <span>{currentProfile ? "Save Profile Changes" : "Enter UIU Campus Lounge"}</span>
-            <ArrowRight className="w-3.5 h-3.5 text-white" />
+            {isSaving ? (
+              <>
+                <RefreshCw className="w-3.5 h-3.5 animate-spin text-white" />
+                <span>Saving & Syncing Profile...</span>
+              </>
+            ) : saveSuccess ? (
+              <>
+                <Check className="w-3.5 h-3.5 text-white" />
+                <span>Saved & Synced Permanently!</span>
+              </>
+            ) : (
+              <>
+                <span>{currentProfile ? "Save Profile Changes" : "Enter UIU Campus Lounge"}</span>
+                <ArrowRight className="w-3.5 h-3.5 text-white" />
+              </>
+            )}
           </button>
         </form>
       </div>

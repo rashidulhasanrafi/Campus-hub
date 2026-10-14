@@ -6,6 +6,8 @@ import {
   UserProfile,
   DirectCallInvite,
   fetchUserProfile,
+  ensureUserProfile,
+  updateUserProfile,
   saveLocalProfile,
   fetchRemoteProfiles,
   syncProfileWithSupabase,
@@ -156,7 +158,7 @@ export default function CampusHubHome() {
     }
   }, [profile, session]);
 
-  // Check auth session & load user profile
+  // Check auth session & load user profile directly from public.profiles
   const checkAuthAndProfile = useCallback(async () => {
     try {
       if (typeof window !== "undefined") {
@@ -168,11 +170,12 @@ export default function CampusHubHome() {
       setSession(currentSession);
 
       if (currentSession && currentSession.user) {
-        const existingProfile = await fetchUserProfile(currentSession.user.id);
+        // Single Source of Truth: Always fetch from public.profiles table directly.
+        // NEVER overwrite an existing row in public.profiles with user_metadata or email!
+        const existingProfile = await ensureUserProfile(currentSession.user);
         if (existingProfile && existingProfile.full_name) {
           setProfile(existingProfile);
           setNeedsOnboarding(false);
-          await syncProfileWithSupabase(existingProfile);
         } else {
           setProfile(null);
           setNeedsOnboarding(true);
@@ -197,7 +200,8 @@ export default function CampusHubHome() {
     } = supabase.auth.onAuthStateChange(async (event, newSession) => {
       setSession(newSession);
       if (newSession && newSession.user) {
-        const userProfile = await fetchUserProfile(newSession.user.id);
+        // Single Source of Truth: Always fetch from public.profiles table directly
+        const userProfile = await ensureUserProfile(newSession.user);
         if (userProfile && userProfile.full_name) {
           setProfile(userProfile);
           setNeedsOnboarding(false);
@@ -322,6 +326,10 @@ export default function CampusHubHome() {
     channel.on("broadcast", { event: "profile-updated" }, (payload) => {
       const updated = payload.payload as UserProfile;
       if (updated && updated.id) {
+        if (profile && updated.id === profile.id) {
+          setProfile(updated);
+          saveLocalProfile(updated);
+        }
         setStudents((prev) =>
           prev.map((s) => (s.id === updated.id ? { ...s, ...updated } : s))
         );
@@ -350,6 +358,54 @@ export default function CampusHubHome() {
       supabase.removeChannel(channel);
     };
   }, [profile]);
+
+  // 3. Realtime Profile Sync across devices (PC <-> Mobile) via Supabase postgres_changes
+  useEffect(() => {
+    const currentUserId = session?.user?.id || profile?.id;
+    if (!currentUserId) return;
+
+    const channelName = `profile-postgres-sync-${currentUserId}`;
+    const profileSyncChannel = supabase
+      .channel(channelName)
+      .on(
+        "postgres_changes",
+        {
+          event: "*",
+          schema: "public",
+          table: "profiles",
+          filter: `id=eq.${currentUserId}`,
+        },
+        (payload) => {
+          console.log("[Campus Hub] Realtime postgres_changes profile update:", payload);
+          const newRow = payload.new as any;
+          if (newRow && newRow.id === currentUserId && newRow.full_name) {
+            setProfile((prev) => {
+              const updated: UserProfile = {
+                id: newRow.id,
+                email: newRow.email || prev?.email,
+                student_id: newRow.student_id ?? prev?.student_id,
+                full_name: newRow.full_name,
+                department: newRow.department || prev?.department || "Computer Science & Engineering (CSE)",
+                batch: newRow.batch || prev?.batch || "Batch '24 (Junior)",
+                avatar: newRow.avatar || prev?.avatar || "/images/avatar-male.png",
+                status: newRow.status || prev?.status || "Ready to chat 💬",
+                bio: newRow.bio ?? prev?.bio ?? "",
+                is_online: true,
+                last_seen: newRow.last_seen || new Date().toISOString(),
+                call_restricted: Boolean(newRow.call_restricted ?? prev?.call_restricted),
+              };
+              saveLocalProfile(updated);
+              return updated;
+            });
+          }
+        }
+      )
+      .subscribe();
+
+    return () => {
+      supabase.removeChannel(profileSyncChannel);
+    };
+  }, [session?.user?.id, profile?.id]);
 
   // Handler when first-time onboarding finishes
   const handleProfileCreated = (newProfile: UserProfile) => {
@@ -848,14 +904,15 @@ export default function CampusHubHome() {
               onSaveProfile={(updated) => {
                 setProfile(updated);
                 saveLocalProfile(updated);
-                syncProfileWithSupabase(updated);
-              }}
-              onRequireRelogin={async () => {
-                const userIdentifier = profile?.email || profile?.id || "";
-                setAuthPreFill(userIdentifier);
-                setAuthNotice("Profile updated successfully! For security, please log in with your password again.");
-                setEditProfileOpen(false);
-                await handleSignOut();
+                try {
+                  const channel = supabase.channel("campus-lounge");
+                  channel.send({
+                    type: "broadcast",
+                    event: "profile-updated",
+                    payload: updated,
+                  });
+                  channel.track(updated);
+                } catch {}
               }}
             />
 

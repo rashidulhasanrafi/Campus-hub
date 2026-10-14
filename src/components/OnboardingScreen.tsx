@@ -29,9 +29,11 @@ export default function OnboardingScreen({
   user,
   onProfileCreated,
 }: OnboardingScreenProps) {
-  const initialName = user.email
-    ? user.email.split("@")[0].replace(/[._]/g, " ").replace(/\b\w/g, (c) => c.toUpperCase())
-    : "Campus Student";
+  const initialName =
+    user.user_metadata?.full_name ||
+    (user.email
+      ? user.email.split("@")[0].replace(/[._]/g, " ").replace(/\b\w/g, (c) => c.toUpperCase())
+      : "Campus Student");
 
   const [fullName, setFullName] = useState(initialName);
   const [department, setDepartment] = useState(CAMPUS_DEPARTMENTS[0]);
