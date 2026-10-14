@@ -4,7 +4,6 @@ import React, { useState } from "react";
 import {
   UserProfile,
   CAMPUS_STATUS_OPTIONS,
-  syncProfileWithSupabase,
 } from "@/lib/supabase";
 import StudentAvatar from "@/components/StudentAvatar";
 import { useTheme } from "@/context/ThemeContext";
@@ -60,8 +59,6 @@ export default function CampusHeader({
     if (!profile) return;
     setStatusDropdownOpen(false);
     onStatusChange(statusLabel);
-    const updated = { ...profile, status: statusLabel };
-    await syncProfileWithSupabase(updated);
   };
 
   const desktopNavItems = [

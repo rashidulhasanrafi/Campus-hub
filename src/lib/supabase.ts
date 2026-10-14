@@ -224,39 +224,122 @@ export function setDevPreview(_active: boolean): void {
   }
 }
 
-export async function fetchUserProfile(userId: string): Promise<UserProfile | null> {
-  // Single Source of Truth: Always query public.profiles directly from Supabase
+export function clearLocalProfile(userId?: string): void {
+  if (typeof window === "undefined") return;
   try {
+    localStorage.removeItem(LOCAL_STORAGE_KEY);
+    if (userId) {
+      localStorage.removeItem(`${LOCAL_STORAGE_KEY}_${userId}`);
+    }
+    // Also scan and clear any lingering campus_hub_student_profile keys
+    for (let i = 0; i < localStorage.length; i++) {
+      const key = localStorage.key(i);
+      if (key && key.startsWith(LOCAL_STORAGE_KEY)) {
+        localStorage.removeItem(key);
+      }
+    }
+  } catch (err) {
+    console.error("Failed to clear local profile:", err);
+  }
+}
+
+/**
+ * Single Source of Truth (public.profiles):
+ * Always fetch the user's profile directly from Supabase public.profiles table.
+ * NEVER overwrite an existing row in public.profiles with user_metadata or email.
+ * Only insert default metadata if the user row does NOT exist at all in public.profiles.
+ */
+export async function fetchUserProfile(userId: string): Promise<UserProfile | null> {
+  if (!userId) return null;
+
+  try {
+    // 1. Primary Query: Fetch remote profile directly from public.profiles
     const { data, error } = await supabase
       .from("profiles")
       .select("*")
       .eq("id", userId)
       .maybeSingle();
 
-    if (!error && data && data.full_name) {
-      const local = getLocalProfile(userId);
+    if (!error && data) {
+      // Row exists in public.profiles — this is the Single Source of Truth!
       const profile: UserProfile = {
         id: data.id,
         email: data.email,
-        student_id: data.student_id || local?.student_id || (data.email ? data.email.split("@")[0] : undefined),
-        full_name: data.full_name,
-        department: data.department || "Computer Science & Engineering (CSE)",
-        batch: data.batch || "Batch '24 (Junior)",
-        avatar: data.avatar || "/images/avatar-male.png",
+        student_id: data.student_id || (data.email ? data.email.split("@")[0] : undefined),
+        full_name: data.full_name || (data.email ? data.email.split("@")[0] : "UIU Student"),
+        department: data.department || UIU_PROGRAMS[0],
+        batch: data.batch || CAMPUS_BATCHES[1],
+        avatar: data.avatar || AVATAR_OPTIONS[0].emoji,
         status: data.status || "Ready to chat 💬",
         bio: data.bio ?? "",
         is_online: true,
         last_seen: data.last_seen || new Date().toISOString(),
-        call_restricted: Boolean(data.call_restricted ?? local?.call_restricted),
+        call_restricted: Boolean(data.call_restricted),
       };
+
+      // Refresh local cache with the verified remote profile
       saveLocalProfile(profile);
       return profile;
+    }
+
+    // 2. If row DOES NOT exist in public.profiles at all, create default row from auth metadata
+    if (!error && !data) {
+      const { data: authData } = await supabase.auth.getUser();
+      const authUser = authData?.user;
+      if (authUser && authUser.id === userId) {
+        const meta = authUser.user_metadata || {};
+        const newProfile: UserProfile = {
+          id: userId,
+          email: authUser.email,
+          student_id: meta.student_id || (authUser.email ? authUser.email.split("@")[0] : ""),
+          full_name: meta.full_name || (authUser.email ? authUser.email.split("@")[0] : "UIU Student"),
+          department: meta.department || UIU_PROGRAMS[0],
+          batch: meta.batch || CAMPUS_BATCHES[1],
+          avatar: meta.avatar || AVATAR_OPTIONS[0].emoji,
+          status: "Ready to chat 💬",
+          bio: meta.bio || "",
+          is_online: true,
+          last_seen: new Date().toISOString(),
+          call_restricted: false,
+        };
+
+        const insertPayload: any = {
+          id: newProfile.id,
+          email: newProfile.email,
+          student_id: newProfile.student_id,
+          full_name: newProfile.full_name,
+          department: newProfile.department,
+          batch: newProfile.batch,
+          avatar: newProfile.avatar,
+          status: newProfile.status,
+          bio: newProfile.bio,
+          is_online: true,
+          last_seen: newProfile.last_seen,
+          call_restricted: false,
+        };
+
+        const { error: insertErr } = await supabase.from("profiles").insert(insertPayload);
+        if (insertErr) {
+          // If optional columns fail on older schemas
+          const retryPayload = { ...insertPayload };
+          if (insertErr.message?.includes("student_id") || insertErr.code === "PGRST204") {
+            delete retryPayload.student_id;
+          }
+          if (insertErr.message?.includes("call_restricted") || insertErr.code === "PGRST204") {
+            delete retryPayload.call_restricted;
+          }
+          await supabase.from("profiles").insert(retryPayload);
+        }
+
+        saveLocalProfile(newProfile);
+        return newProfile;
+      }
     }
   } catch (err) {
     console.warn("fetchUserProfile error (checking fallback local):", err);
   }
 
-  // Fallback to local storage only if offline / network error
+  // Fallback to local storage only if offline/network error (never writes back to remote)
   const local = getLocalProfile(userId);
   if (local && local.full_name) {
     return local;
@@ -266,224 +349,113 @@ export async function fetchUserProfile(userId: string): Promise<UserProfile | nu
 }
 
 /**
- * Ensures user profile exists in public.profiles.
- * NEVER overwrites an existing row in public.profiles with user_metadata or email!
- * Only inserts default metadata if the user row does NOT exist at all in public.profiles.
+ * Profile Edit Persistence:
+ * 1. Immediate update in public.profiles table (.update({...}).eq('id', user.id))
+ * 2. Simultaneous supabase.auth.updateUser({ data: { full_name, ... } }) so auth metadata & DB stay permanently in sync
+ * 3. Immediate localStorage update
+ * 4. Realtime broadcast to peers
  */
-export async function ensureUserProfile(user: {
-  id: string;
-  email?: string;
-  user_metadata?: Record<string, unknown>;
-}): Promise<UserProfile | null> {
-  if (!user || !user.id) return null;
-
-  try {
-    // 1. Single Source of Truth: Always fetch from public.profiles first
-    const { data, error } = await supabase
-      .from("profiles")
-      .select("*")
-      .eq("id", user.id)
-      .maybeSingle();
-
-    if (!error && data && data.full_name) {
-      // Existing row found: use it directly. NEVER overwrite with stale user_metadata or email!
-      const profile: UserProfile = {
-        id: data.id,
-        email: data.email || user.email,
-        student_id: data.student_id || (data.email ? data.email.split("@")[0] : undefined),
-        full_name: data.full_name,
-        department: data.department || "Computer Science & Engineering (CSE)",
-        batch: data.batch || "Batch '24 (Junior)",
-        avatar: data.avatar || "/images/avatar-male.png",
-        status: data.status || "Ready to chat 💬",
-        bio: data.bio ?? "",
-        is_online: true,
-        last_seen: new Date().toISOString(),
-        call_restricted: Boolean(data.call_restricted),
-      };
-
-      saveLocalProfile(profile);
-
-      // Keep auth metadata in sync with profiles table if it drifted
-      const metaFullName = (user.user_metadata?.full_name as string) || "";
-      if (metaFullName !== data.full_name) {
-        try {
-          await supabase.auth.updateUser({
-            data: {
-              full_name: data.full_name,
-              department: data.department,
-              batch: data.batch,
-              avatar: data.avatar,
-              student_id: data.student_id,
-            },
-          });
-        } catch {}
-      }
-
-      return profile;
-    }
-
-    // 2. ONLY if row does not exist at all in public.profiles:
-    if (!data) {
-      const meta = user.user_metadata || {};
-      const emailPrefix = user.email ? user.email.split("@")[0] : "";
-      const initialName = (meta.full_name as string) || emailPrefix || "UIU Student";
-      const initialDept = (meta.department as string) || "Computer Science & Engineering (CSE)";
-      const initialBatch = (meta.batch as string) || "Batch '24 (Junior)";
-      const initialAvatar =
-        (meta.avatar as string) ||
-        (meta.gender === "female" ? "/images/avatar-female.png" : "/images/avatar-male.png");
-
-      const defaultProfile: UserProfile = {
-        id: user.id,
-        email: user.email,
-        student_id: (meta.student_id as string) || emailPrefix,
-        full_name: initialName,
-        department: initialDept,
-        batch: initialBatch,
-        avatar: initialAvatar,
-        status: "Ready to chat 💬",
-        bio: (meta.bio as string) || "",
-        is_online: true,
-        last_seen: new Date().toISOString(),
-        call_restricted: false,
-      };
-
-      const insertPayload: Record<string, unknown> = {
-        id: defaultProfile.id,
-        email: defaultProfile.email,
-        full_name: defaultProfile.full_name,
-        department: defaultProfile.department,
-        batch: defaultProfile.batch,
-        avatar: defaultProfile.avatar,
-        status: defaultProfile.status,
-        bio: defaultProfile.bio,
-        is_online: true,
-        last_seen: defaultProfile.last_seen,
-        call_restricted: false,
-      };
-      if (defaultProfile.student_id) {
-        insertPayload.student_id = defaultProfile.student_id;
-      }
-
-      const { error: insertErr } = await supabase.from("profiles").insert(insertPayload);
-      if (insertErr) {
-        if (insertErr.message?.includes("student_id") || insertErr.message?.includes("call_restricted")) {
-          delete insertPayload.student_id;
-          delete insertPayload.call_restricted;
-          await supabase.from("profiles").insert(insertPayload);
-        } else {
-          console.warn("[Campus Hub] Insert default profile note:", insertErr.message);
-        }
-      }
-
-      saveLocalProfile(defaultProfile);
-      return defaultProfile;
-    }
-  } catch (err) {
-    console.error("[Campus Hub] ensureUserProfile error:", err);
-  }
-
-  // Fallback to local storage
-  const local = getLocalProfile(user.id);
-  if (local && local.full_name) {
-    return local;
-  }
-
-  return null;
-}
-
-/**
- * Updates profile immediately in public.profiles table AND syncs auth metadata.
- * Also immediately updates localStorage cache so both PC and mobile stay permanently in sync.
- */
-export async function updateUserProfile(profile: UserProfile): Promise<{ error: unknown }> {
+export async function updateUserProfile(
+  profile: UserProfile
+): Promise<{ success: boolean; error?: string }> {
   // 1. Immediately update localStorage cache
   saveLocalProfile(profile);
 
-  // 2. Immediate direct Supabase update on public.profiles table
-  const updatePayload: Record<string, unknown> = {
-    full_name: profile.full_name.trim(),
-    department: profile.department,
-    batch: profile.batch,
-    avatar: profile.avatar,
-    status: profile.status,
-    bio: profile.bio ?? "",
-    call_restricted: Boolean(profile.call_restricted),
-    last_seen: new Date().toISOString(),
-    updated_at: new Date().toISOString(),
-  };
-
-  if (profile.student_id) {
-    updatePayload.student_id = profile.student_id.trim();
-  }
-  if (profile.email) {
-    updatePayload.email = profile.email;
-  }
-
-  let { error } = await supabase
-    .from("profiles")
-    .update(updatePayload)
-    .eq("id", profile.id);
-
-  // Gracefully handle column mismatch if student_id or call_restricted not yet added
-  if (error && (error.message?.includes("student_id") || error.code === "PGRST204")) {
-    delete updatePayload.student_id;
-    const retryRes = await supabase.from("profiles").update(updatePayload).eq("id", profile.id);
-    error = retryRes.error;
-  }
-  if (error && (error.message?.includes("call_restricted") || error.code === "PGRST204")) {
-    delete updatePayload.call_restricted;
-    const retryRes = await supabase.from("profiles").update(updatePayload).eq("id", profile.id);
-    error = retryRes.error;
-  }
-
-  // If the profile row did not exist, insert it now
-  if (!error) {
-    const { data: existingRow } = await supabase
-      .from("profiles")
-      .select("id")
-      .eq("id", profile.id)
-      .maybeSingle();
-
-    if (!existingRow) {
-      const insertPayload = { id: profile.id, ...updatePayload };
-      await supabase.from("profiles").insert(insertPayload);
-    }
-  }
-
-  // 3. Keep Supabase Auth metadata permanently in sync
   try {
-    await supabase.auth.updateUser({
-      data: {
-        full_name: profile.full_name.trim(),
-        department: profile.department,
-        batch: profile.batch,
-        avatar: profile.avatar,
-        student_id: profile.student_id,
-        bio: profile.bio,
-      },
-    });
-  } catch (authErr) {
-    console.warn("[Campus Hub] auth.updateUser sync note:", authErr);
-  }
+    const payload: any = {
+      full_name: profile.full_name,
+      department: profile.department,
+      batch: profile.batch,
+      avatar: profile.avatar,
+      status: profile.status,
+      bio: profile.bio ?? "",
+      student_id: profile.student_id,
+      last_seen: new Date().toISOString(),
+      call_restricted: Boolean(profile.call_restricted),
+    };
+    if (profile.email) {
+      payload.email = profile.email;
+    }
 
-  return { error };
+    // 2. Direct update on public.profiles for this user ID
+    let { error } = await supabase
+      .from("profiles")
+      .update(payload)
+      .eq("id", profile.id);
+
+    if (error) {
+      const retryPayload = { ...payload };
+      let shouldRetry = false;
+      if (error.message?.includes("student_id") || error.code === "PGRST204") {
+        delete retryPayload.student_id;
+        shouldRetry = true;
+      }
+      if (error.message?.includes("call_restricted") || error.code === "PGRST204") {
+        delete retryPayload.call_restricted;
+        shouldRetry = true;
+      }
+      if (shouldRetry) {
+        const retryRes = await supabase.from("profiles").update(retryPayload).eq("id", profile.id);
+        error = retryRes.error;
+      }
+    }
+
+    // If update affected 0 rows (row does not exist yet), upsert fallback
+    if (error) {
+      console.warn("Update profiles fallback to upsert:", error.message);
+      await supabase.from("profiles").upsert(
+        { id: profile.id, ...payload },
+        { onConflict: "id" }
+      );
+    }
+
+    // 3. Keep Supabase Auth user_metadata permanently in sync
+    try {
+      await supabase.auth.updateUser({
+        data: {
+          full_name: profile.full_name,
+          student_id: profile.student_id,
+          department: profile.department,
+          batch: profile.batch,
+          avatar: profile.avatar,
+          bio: profile.bio,
+        },
+      });
+    } catch (authErr) {
+      console.warn("supabase.auth.updateUser note:", authErr);
+    }
+
+    // 4. Realtime Broadcast event to all active sessions / tabs
+    try {
+      const loungeChannel = supabase.channel("campus-lounge");
+      loungeChannel.send({
+        type: "broadcast",
+        event: "profile-updated",
+        payload: profile,
+      });
+    } catch {}
+
+    return { success: true };
+  } catch (err: any) {
+    console.error("updateUserProfile error:", err);
+    return { success: false, error: err?.message || "Failed to update profile" };
+  }
 }
 
+/**
+ * Backward compatibility alias for syncProfileWithSupabase
+ */
 export async function syncProfileWithSupabase(profile: UserProfile): Promise<void> {
   await updateUserProfile(profile);
 }
 
-export async function signOutCampusUser(): Promise<void> {
+export async function signOutCampusUser(userId?: string): Promise<void> {
   try {
     await supabase.auth.signOut();
   } catch (err) {
     console.warn("Sign out error:", err);
   }
-  if (typeof window !== "undefined") {
-    localStorage.removeItem(LOCAL_STORAGE_KEY);
-  }
+  clearLocalProfile(userId);
 }
 
 export async function fetchRemoteProfiles(): Promise<UserProfile[]> {

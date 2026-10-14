@@ -1,13 +1,13 @@
 "use client";
 
-import React, { useState, useEffect } from "react";
+import React, { useState } from "react";
 import {
   UserProfile,
   UIU_PROGRAMS,
   CAMPUS_BATCHES,
   CAMPUS_STATUS_OPTIONS,
   AVATAR_OPTIONS,
-  updateUserProfile,
+  syncProfileWithSupabase,
 } from "@/lib/supabase";
 import StudentAvatar from "@/components/StudentAvatar";
 import {
@@ -15,16 +15,15 @@ import {
   Check,
   User,
   GraduationCap,
+  Lock,
   ArrowRight,
-  RefreshCw,
 } from "lucide-react";
 
 interface ProfileOnboardingModalProps {
   isOpen: boolean;
   onClose: () => void;
   currentProfile: UserProfile | null;
-  onSaveProfile: (profile: UserProfile) => void;
-  onRequireRelogin?: () => void;
+  onSaveProfile: (profile: UserProfile) => void | Promise<void>;
 }
 
 export default function ProfileOnboardingModal({
@@ -33,6 +32,7 @@ export default function ProfileOnboardingModal({
   currentProfile,
   onSaveProfile,
 }: ProfileOnboardingModalProps) {
+  // Never hardcode dummy defaults like "Alex Chen" — populate strictly from user's currentProfile
   const [fullName, setFullName] = useState(currentProfile?.full_name || "");
   const [studentId, setStudentId] = useState(
     currentProfile?.student_id ||
@@ -54,11 +54,10 @@ export default function ProfileOnboardingModal({
   );
   const [bio, setBio] = useState(currentProfile?.bio || "");
   const [isSaving, setIsSaving] = useState(false);
-  const [saveSuccess, setSaveSuccess] = useState(false);
+  const [saveError, setSaveError] = useState("");
 
-  // Single Source of Truth: When modal opens or profile changes, load the student's exact data
-  // "er profile edit option e default thakbe na jar profile thik omoni thakbe ja edit korte chai korbe"
-  useEffect(() => {
+  // Whenever modal opens or currentProfile changes, sync fields to currentProfile
+  React.useEffect(() => {
     if (isOpen && currentProfile) {
       setFullName(currentProfile.full_name || "");
       setStudentId(
@@ -67,32 +66,44 @@ export default function ProfileOnboardingModal({
             ? currentProfile.email.split("@")[0]
             : "")
       );
-      setDepartment(currentProfile.department || UIU_PROGRAMS[0]);
-      setBatch(currentProfile.batch || CAMPUS_BATCHES[1]);
-      setSelectedAvatar(currentProfile.avatar || AVATAR_OPTIONS[0].emoji);
-      setStatus(currentProfile.status || CAMPUS_STATUS_OPTIONS[0].label);
+      if (currentProfile.department) setDepartment(currentProfile.department);
+      if (currentProfile.batch) setBatch(currentProfile.batch);
+      if (currentProfile.avatar) setSelectedAvatar(currentProfile.avatar);
+      if (currentProfile.status) setStatus(currentProfile.status);
       setBio(currentProfile.bio || "");
-      setSaveSuccess(false);
+      setSaveError("");
     }
   }, [isOpen, currentProfile]);
 
   if (!isOpen) return null;
+
+  const programsList =
+    department && !UIU_PROGRAMS.includes(department)
+      ? [department, ...UIU_PROGRAMS]
+      : UIU_PROGRAMS;
+
+  const batchesList =
+    batch && !CAMPUS_BATCHES.includes(batch)
+      ? [batch, ...CAMPUS_BATCHES]
+      : CAMPUS_BATCHES;
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!fullName.trim()) return;
 
     setIsSaving(true);
+    setSaveError("");
+
     const id = currentProfile?.id || `student_${Date.now().toString(36)}`;
     const newProfile: UserProfile = {
       id,
       email: currentProfile?.email,
       student_id: studentId.trim(),
       full_name: fullName.trim(),
-      department,
-      batch,
+      department: department.trim(),
+      batch: batch.trim(),
       avatar: selectedAvatar,
-      status,
+      status: status.trim() || CAMPUS_STATUS_OPTIONS[0].label,
       bio: bio.trim(),
       is_online: true,
       last_seen: new Date().toISOString(),
@@ -100,18 +111,11 @@ export default function ProfileOnboardingModal({
     };
 
     try {
-      // 1. Direct update to Supabase public.profiles AND auth metadata AND localStorage
-      await updateUserProfile(newProfile);
-      onSaveProfile(newProfile);
-      setSaveSuccess(true);
-      setTimeout(() => {
-        setSaveSuccess(false);
-        onClose();
-      }, 500);
-    } catch (err) {
-      console.error("[Campus Hub] Failed to save profile:", err);
-      onSaveProfile(newProfile);
+      await onSaveProfile(newProfile);
       onClose();
+    } catch (err: any) {
+      console.error("Save profile error:", err);
+      setSaveError(err?.message || "Failed to save profile changes.");
     } finally {
       setIsSaving(false);
     }
@@ -124,7 +128,8 @@ export default function ProfileOnboardingModal({
         {currentProfile && (
           <button
             onClick={onClose}
-            className="absolute top-5 right-5 p-1.5 rounded-lg text-zinc-400 hover:text-zinc-200 transition-colors"
+            disabled={isSaving}
+            className="absolute top-5 right-5 p-1.5 rounded-lg text-zinc-400 hover:text-zinc-200 transition-colors disabled:opacity-50"
           >
             <X className="w-4 h-4" />
           </button>
@@ -140,10 +145,16 @@ export default function ProfileOnboardingModal({
               UIU Student Profile
             </h2>
             <p className="text-xs text-zinc-400">
-              Customize your verified campus avatar, department, and live status
+              Customize your campus avatar, department, and live status
             </p>
           </div>
         </div>
+
+        {saveError && (
+          <div className="p-2.5 rounded-lg bg-rose-500/10 border border-rose-500/30 text-xs text-rose-300 mb-4">
+            {saveError}
+          </div>
+        )}
 
         <form onSubmit={handleSubmit} className="space-y-4">
           {/* Avatar Selector */}
@@ -227,7 +238,7 @@ export default function ProfileOnboardingModal({
                 onChange={(e) => setDepartment(e.target.value)}
                 className="w-full px-3 py-2 rounded-lg bg-zinc-900 border border-zinc-800 text-xs text-zinc-100 focus:outline-none focus:border-zinc-600 transition-colors"
               >
-                {UIU_PROGRAMS.map((dept) => (
+                {programsList.map((dept) => (
                   <option key={dept} value={dept} className="bg-zinc-900 text-white">
                     {dept}
                   </option>
@@ -244,7 +255,7 @@ export default function ProfileOnboardingModal({
                 onChange={(e) => setBatch(e.target.value)}
                 className="w-full px-3 py-2 rounded-lg bg-zinc-900 border border-zinc-800 text-xs text-zinc-100 focus:outline-none focus:border-zinc-600 transition-colors"
               >
-                {CAMPUS_BATCHES.map((b) => (
+                {batchesList.map((b) => (
                   <option key={b} value={b} className="bg-zinc-900 text-white">
                     {b}
                   </option>
@@ -297,28 +308,16 @@ export default function ProfileOnboardingModal({
           <button
             type="submit"
             disabled={isSaving}
-            className={`w-full py-2.5 rounded-lg text-white font-semibold text-xs shadow-sm hover:opacity-95 active:scale-[0.98] transition-all flex items-center justify-center gap-2 ${
-              saveSuccess
-                ? "bg-emerald-600 border border-emerald-500"
-                : "bg-orange-600 hover:bg-zinc-800"
-            }`}
+            className="w-full py-2.5 rounded-lg bg-orange-600 hover:bg-zinc-800 disabled:opacity-50 text-white font-semibold text-xs shadow-sm hover:opacity-95 active:scale-[0.98] transition-all flex items-center justify-center gap-2"
           >
-            {isSaving ? (
-              <>
-                <RefreshCw className="w-3.5 h-3.5 animate-spin text-white" />
-                <span>Saving & Syncing Profile...</span>
-              </>
-            ) : saveSuccess ? (
-              <>
-                <Check className="w-3.5 h-3.5 text-white" />
-                <span>Saved & Synced Permanently!</span>
-              </>
-            ) : (
-              <>
-                <span>{currentProfile ? "Save Profile Changes" : "Enter UIU Campus Lounge"}</span>
-                <ArrowRight className="w-3.5 h-3.5 text-white" />
-              </>
-            )}
+            <span>
+              {isSaving
+                ? "Saving Profile Changes..."
+                : currentProfile
+                ? "Save Profile Changes"
+                : "Enter UIU Campus Lounge"}
+            </span>
+            <ArrowRight className="w-3.5 h-3.5 text-white" />
           </button>
         </form>
       </div>

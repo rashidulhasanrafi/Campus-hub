@@ -8,6 +8,7 @@ import {
   CAMPUS_BATCHES,
   CAMPUS_STATUS_OPTIONS,
   AVATAR_OPTIONS,
+  updateUserProfile,
   syncProfileWithSupabase,
 } from "@/lib/supabase";
 import StudentAvatar from "@/components/StudentAvatar";
@@ -29,11 +30,9 @@ export default function OnboardingScreen({
   user,
   onProfileCreated,
 }: OnboardingScreenProps) {
-  const initialName =
-    user.user_metadata?.full_name ||
-    (user.email
-      ? user.email.split("@")[0].replace(/[._]/g, " ").replace(/\b\w/g, (c) => c.toUpperCase())
-      : "Campus Student");
+  const initialName = user.email
+    ? user.email.split("@")[0].replace(/[._]/g, " ").replace(/\b\w/g, (c) => c.toUpperCase())
+    : "Campus Student";
 
   const [fullName, setFullName] = useState(initialName);
   const [department, setDepartment] = useState(CAMPUS_DEPARTMENTS[0]);
@@ -68,7 +67,7 @@ export default function OnboardingScreen({
     };
 
     try {
-      await syncProfileWithSupabase(newProfile);
+      await updateUserProfile(newProfile);
       try {
         confetti({
           particleCount: 40,

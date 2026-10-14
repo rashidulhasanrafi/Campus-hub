@@ -127,6 +127,31 @@ export default function LudoGameView({
     playersRef.current = players;
   }, [players]);
 
+  // Synchronize host player slot whenever currentProfile arrives or updates
+  useEffect(() => {
+    if (currentProfile && currentProfile.id) {
+      setPlayers((prev) => {
+        if (!prev || prev.length === 0) return prev;
+        const updated = [...prev];
+        const playerIndex = updated.findIndex(
+          (p) => p.id === currentProfile.id || p.id.startsWith("guest_")
+        );
+        if (playerIndex !== -1) {
+          updated[playerIndex] = {
+            ...updated[playerIndex],
+            id: currentProfile.id,
+            name: currentProfile.full_name,
+            avatar: currentProfile.avatar,
+            department: currentProfile.department,
+            batch: currentProfile.batch,
+          };
+          return updated;
+        }
+        return prev;
+      });
+    }
+  }, [currentProfile]);
+
   // Turn & Game Loop State
   const [currentTurnColor, setCurrentTurnColor] = useState<PlayerColor>("RED");
   const currentTurnColorRef = useRef<PlayerColor>(currentTurnColor);

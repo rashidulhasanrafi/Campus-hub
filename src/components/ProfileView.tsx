@@ -4,7 +4,6 @@ import React from "react";
 import {
   UserProfile,
   CAMPUS_STATUS_OPTIONS,
-  syncProfileWithSupabase,
 } from "@/lib/supabase";
 import StudentAvatar from "@/components/StudentAvatar";
 import {
@@ -294,7 +293,6 @@ export default function ProfileView({
                 key={opt.label}
                 onClick={async () => {
                   onUpdateStatus(opt.label);
-                  await syncProfileWithSupabase({ ...profile, status: opt.label });
                 }}
                 className={`flex items-center justify-between p-3 rounded-xl border text-xs font-medium text-left transition-colors ${
                   isSelected
