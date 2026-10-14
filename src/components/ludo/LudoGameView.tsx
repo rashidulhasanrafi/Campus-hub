@@ -93,6 +93,14 @@ export default function LudoGameView({
   >([]);
   const matchChannelRef = useRef<ReturnType<typeof supabase.channel> | null>(null);
 
+  // User host state: True if creating room, false if joining with code or initialRoomCode
+  const [isHost, setIsHost] = useState<boolean>(!initialRoomCode);
+  const isHostRef = useRef<boolean>(!initialRoomCode);
+  const updateIsHost = (val: boolean) => {
+    setIsHost(val);
+    isHostRef.current = val;
+  };
+
   // Players in room (up to 4)
   const [players, setPlayers] = useState<LudoPlayer[]>([
     {
@@ -101,12 +109,17 @@ export default function LudoGameView({
       avatar: user.avatar,
       department: user.department,
       batch: user.batch,
-      color: "RED",
-      isHost: true,
+      color: initialRoomCode ? "GREEN" : "RED",
+      isHost: !initialRoomCode,
       isReady: true,
       tokens: [-1, -1, -1, -1],
     },
   ]);
+
+  const playersRef = useRef<LudoPlayer[]>(players);
+  useEffect(() => {
+    playersRef.current = players;
+  }, [players]);
 
   // Turn & Game Loop State
   const [currentTurnColor, setCurrentTurnColor] = useState<PlayerColor>("RED");
@@ -144,6 +157,35 @@ export default function LudoGameView({
     setTimeoutNotice(msg);
     setTimeout(() => setTimeoutNotice(null), 3200);
   };
+
+  // Broadcast lobby update to all clients on Supabase channel
+  const broadcastLobbyState = useCallback((ch: any, currentPlayers: LudoPlayer[]) => {
+    if (!ch) return;
+    const LUDO_COLORS_MAP = ["red", "green", "yellow", "blue"];
+    const lobbyPayload = currentPlayers.map((p, idx) => ({
+      id: p.id,
+      name: p.name,
+      avatar: p.avatar,
+      department: p.department,
+      batch: p.batch || "2024",
+      color: LUDO_COLORS_MAP[idx] || "red",
+      colorIndex: idx,
+      isHost: p.isHost,
+      isReady: p.isReady,
+      isBot: p.id.startsWith("ai_") || p.id.startsWith("bot_"),
+    }));
+
+    ch.send({
+      type: "broadcast",
+      event: "LOBBY_UPDATE",
+      payload: {
+        roomId,
+        lobby: lobbyPayload,
+        players: currentPlayers,
+        timestamp: Date.now(),
+      },
+    });
+  }, [roomId]);
 
   // -------------------------------------------------------------------
   // 1. SUPABASE REALTIME CHANNEL SYNC (`ludo_${roomId}`)
@@ -227,8 +269,9 @@ export default function LudoGameView({
 
     // D. Listen for GAME_START (Native Android {players, initialTurn} and Web)
     channel.on("broadcast", { event: "GAME_START" }, ({ payload }: any) => {
-      if (payload.players && Array.isArray(payload.players)) {
-        const mappedPlayers: LudoPlayer[] = payload.players.map((p: any, idx: number) => {
+      const receivedPlayers = payload.players || payload.androidPlayers;
+      if (receivedPlayers && Array.isArray(receivedPlayers)) {
+        const mappedPlayers: LudoPlayer[] = receivedPlayers.map((p: any, idx: number) => {
           const rawColor = p.color ? (typeof p.color === "string" ? p.color.toUpperCase() : PLAYER_COLORS[idx]) : PLAYER_COLORS[idx];
           const color: PlayerColor = (PLAYER_COLORS.includes(rawColor as PlayerColor) ? rawColor : PLAYER_COLORS[idx]) as PlayerColor;
           const tokens = Array.isArray(p.tokens)
@@ -257,45 +300,99 @@ export default function LudoGameView({
       setTurnTimeLeft(15);
     });
 
-    // E. Listen for LOBBY_UPDATE (Native Android) and PLAYER_JOIN (Web)
+    // E. Listen for LOBBY_UPDATE (Native Android & Web)
     channel.on("broadcast", { event: "LOBBY_UPDATE" }, ({ payload }: any) => {
-      const remoteLobby = payload?.lobby;
-      if (remoteLobby && Array.isArray(remoteLobby)) {
+      const remoteList = payload?.lobby || payload?.players;
+      if (!remoteList || !Array.isArray(remoteList) || remoteList.length === 0) return;
+
+      const mapped: LudoPlayer[] = remoteList.map((lp: any, idx: number) => {
+        const rawCol = lp.color
+          ? typeof lp.color === "string"
+            ? lp.color.toUpperCase()
+            : PLAYER_COLORS[idx]
+          : PLAYER_COLORS[idx];
+        const color: PlayerColor = (PLAYER_COLORS.includes(rawCol as PlayerColor)
+          ? rawCol
+          : PLAYER_COLORS[idx]) as PlayerColor;
+
+        return {
+          id: lp.id,
+          name: lp.name || `Player ${idx + 1}`,
+          avatar: lp.avatar || "/images/avatar-male.png",
+          department: lp.department || "BS in CSE",
+          batch: lp.batch || "2024",
+          color,
+          isHost: lp.isHost ?? idx === 0,
+          isReady: lp.isReady ?? true,
+          tokens: [-1, -1, -1, -1],
+        };
+      });
+
+      setPlayers(mapped);
+
+      // Verify whether the current user is host in this lobby
+      const myRecord = mapped.find((p) => p.id === user.id);
+      if (myRecord) {
+        updateIsHost(Boolean(myRecord.isHost));
+      }
+    });
+
+    // F. Listen for PLAYER_JOIN (Web & Native)
+    channel.on("broadcast", { event: "PLAYER_JOIN" }, ({ payload }: any) => {
+      const incoming = payload?.player;
+      if (!incoming || !incoming.id || incoming.id === user.id) return;
+
+      if (isHostRef.current) {
         setPlayers((prev) => {
-          return remoteLobby.map((lp: any, idx: number) => {
-            const existing = prev.find((p) => p.id === lp.id);
-            const col = PLAYER_COLORS[idx] || "RED";
-            return {
-              id: lp.id,
-              name: lp.name,
-              avatar: lp.avatar || "/images/avatar-male.png",
-              department: lp.department || "BS in CSE",
-              batch: lp.batch || "2024",
-              color: col,
-              isHost: lp.isHost ?? idx === 0,
-              isReady: true,
-              tokens: existing ? existing.tokens : [-1, -1, -1, -1],
-            };
-          });
+          if (prev.some((p) => p.id === incoming.id)) {
+            broadcastLobbyState(channel, prev);
+            return prev;
+          }
+
+          const usedColors = prev.map((p) => p.color);
+          const nextColor = PLAYER_COLORS.find((c) => !usedColors.includes(c)) || "GREEN";
+          const newPlayer: LudoPlayer = {
+            id: incoming.id,
+            name: incoming.name || "Campus Peer",
+            avatar: incoming.avatar || "/images/avatar-male.png",
+            department: incoming.department || "BS in CSE",
+            batch: incoming.batch || "2024",
+            color: nextColor,
+            isHost: false,
+            isReady: true,
+            tokens: [-1, -1, -1, -1],
+          };
+
+          const updated = [...prev, newPlayer];
+          broadcastLobbyState(channel, updated);
+          return updated;
         });
       }
     });
 
-    channel.on("broadcast", { event: "PLAYER_JOIN" }, ({ payload }: { payload: PlayerJoinPayload }) => {
-      setPlayers((prev) => {
-        if (prev.some((p) => p.id === payload.player.id)) return prev;
-        return [...prev, payload.player];
-      });
-    });
-
-    // F. Listen for PLAYER_LEFT
-    channel.on("broadcast", { event: "PLAYER_LEFT" }, ({ payload }: any) => {
-      if (payload?.playerName) {
-        showTimeoutNotice(`${payload.playerName} left the match.`);
+    // G. Listen for REQUEST_LOBBY (When guest enters existing room)
+    channel.on("broadcast", { event: "REQUEST_LOBBY" }, () => {
+      if (isHostRef.current) {
+        broadcastLobbyState(channel, playersRef.current);
       }
     });
 
-    // G. Listen for GAME_OVER
+    // H. Listen for PLAYER_LEFT
+    channel.on("broadcast", { event: "PLAYER_LEFT" }, ({ payload }: any) => {
+      if (payload?.userId) {
+        setPlayers((prev) => prev.filter((p) => p.id !== payload.userId));
+        if (payload?.playerName) {
+          showTimeoutNotice(`${payload.playerName} left the room.`);
+        }
+        if (isHostRef.current) {
+          setTimeout(() => {
+            broadcastLobbyState(channel, playersRef.current);
+          }, 100);
+        }
+      }
+    });
+
+    // I. Listen for GAME_OVER
     channel.on("broadcast", { event: "GAME_OVER" }, ({ payload }: { payload: GameOverPayload }) => {
       ludoAudio.playHomeCheer();
       setWinner({
@@ -314,7 +411,53 @@ export default function LudoGameView({
       } catch {}
     });
 
-    // Presence: Track who is joined
+    // J. Presence: Track who is joined & Auto-sync lobby
+    channel.on("presence", { event: "sync" }, () => {
+      const state = channel.presenceState();
+      const onlineUsers: any[] = [];
+      Object.values(state).forEach((presences: any) => {
+        presences.forEach((p: any) => {
+          if (p && p.id && !onlineUsers.some((u) => u.id === p.id)) {
+            onlineUsers.push(p);
+          }
+        });
+      });
+
+      // If we are Host, inspect online peers and ensure all connected users are represented in the lobby
+      if (isHostRef.current) {
+        let changed = false;
+        let currentList = [...playersRef.current];
+
+        onlineUsers.forEach((presUser) => {
+          if (presUser.id !== user.id && !currentList.some((p) => p.id === presUser.id)) {
+            const usedColors = currentList.map((p) => p.color);
+            const nextColor = PLAYER_COLORS.find((c) => !usedColors.includes(c));
+            if (nextColor && currentList.length < 4) {
+              currentList.push({
+                id: presUser.id,
+                name: presUser.name || "Campus Peer",
+                avatar: presUser.avatar || "/images/avatar-male.png",
+                department: presUser.department || "BS in CSE",
+                batch: presUser.batch || "2024",
+                color: nextColor,
+                isHost: false,
+                isReady: true,
+                tokens: [-1, -1, -1, -1],
+              });
+              changed = true;
+            }
+          }
+        });
+
+        if (changed) {
+          setPlayers(currentList);
+          broadcastLobbyState(channel, currentList);
+        } else {
+          broadcastLobbyState(channel, currentList);
+        }
+      }
+    });
+
     channel.subscribe(async (status) => {
       if (status === "SUBSCRIBED") {
         await channel.track({
@@ -322,8 +465,49 @@ export default function LudoGameView({
           name: user.full_name,
           department: user.department,
           avatar: user.avatar,
+          batch: user.batch || "2024",
+          isHost: isHostRef.current,
           joinedAt: Date.now(),
         });
+
+        if (!isHostRef.current) {
+          // Guest: announce join and request current lobby state from host
+          const guestMe: LudoPlayer = {
+            id: user.id,
+            name: user.full_name,
+            avatar: user.avatar,
+            department: user.department,
+            batch: user.batch || "2024",
+            color: "GREEN",
+            isHost: false,
+            isReady: true,
+            tokens: [-1, -1, -1, -1],
+          };
+
+          channel.send({
+            type: "broadcast",
+            event: "PLAYER_JOIN",
+            payload: {
+              roomId,
+              player: guestMe,
+              timestamp: Date.now(),
+            },
+          });
+
+          channel.send({
+            type: "broadcast",
+            event: "REQUEST_LOBBY",
+            payload: {
+              roomId,
+              userId: user.id,
+              userName: user.full_name,
+              timestamp: Date.now(),
+            },
+          });
+        } else {
+          // Host: broadcast current lobby state
+          broadcastLobbyState(channel, playersRef.current);
+        }
       }
     });
 
@@ -331,7 +515,7 @@ export default function LudoGameView({
       supabase.removeChannel(channel);
       channelRef.current = null;
     };
-  }, [roomId, user.id, user.full_name, user.department, user.avatar]);
+  }, [roomId, user.id, user.full_name, user.department, user.avatar, user.batch, broadcastLobbyState]);
 
   // -------------------------------------------------------------------
   // 2. TURN PASSING, GAME OVER & LOBBY START HELPERS
@@ -412,8 +596,15 @@ export default function LudoGameView({
 
   // Start Game (Host only in private lobby)
   const handleStartGame = useCallback(() => {
-    const filledPlayers = [...players];
-    const unusedColors = PLAYER_COLORS.filter((c) => !players.some((p) => p.color === c));
+    // Only the verified room host can launch
+    if (!isHostRef.current) {
+      showTimeoutNotice("Only the room host can launch the match.");
+      return;
+    }
+
+    const current = playersRef.current;
+    const filledPlayers = [...current];
+    const unusedColors = PLAYER_COLORS.filter((c) => !current.some((p) => p.color === c));
 
     while (filledPlayers.length < 4 && unusedColors.length > 0) {
       const nextColor = unusedColors.shift()!;
@@ -437,19 +628,35 @@ export default function LudoGameView({
     setCurrentTurnColor("RED");
     setTurnTimeLeft(15);
 
-    // Broadcast GAME_START to all devices
+    // Broadcast GAME_START to all devices (Android and Web compatible)
+    const LUDO_COLORS_MAP = ["red", "green", "yellow", "blue"];
+    const androidPlayersPayload = filledPlayers.map((p, idx) => ({
+      id: p.id,
+      name: p.name,
+      avatar: p.avatar,
+      department: p.department,
+      batch: p.batch || "2024",
+      color: LUDO_COLORS_MAP[idx] || "red",
+      colorIndex: idx,
+      isHost: p.isHost,
+      isReady: p.isReady,
+      isBot: p.id.startsWith("ai_") || p.id.startsWith("bot_"),
+      tokens: p.tokens,
+    }));
+
     channelRef.current?.send({
       type: "broadcast",
       event: "GAME_START",
       payload: {
         roomId,
         players: filledPlayers,
+        androidPlayers: androidPlayersPayload,
         initialTurn: 0,
         firstTurnColor: "RED",
         timestamp: Date.now(),
       },
     });
-  }, [players, roomId]);
+  }, [roomId]);
 
   // -------------------------------------------------------------------
   // 3. TURN TIMEOUT (15s LIMIT) & AUTOMATIC PASS LOGIC
@@ -599,6 +806,8 @@ export default function LudoGameView({
           };
         });
 
+        const isMeCoordinator = initialGamePlayers[0]?.id === user.id;
+        updateIsHost(isMeCoordinator);
         setPlayers(initialGamePlayers);
         setCurrentTurnColor("RED");
         setDiceValue(null);
@@ -692,6 +901,8 @@ export default function LudoGameView({
       };
     });
 
+    const isCoordinator = group[0]?.id === user.id;
+    updateIsHost(isCoordinator);
     setPlayers(initialGamePlayers);
     setCurrentTurnColor("RED");
     setDiceValue(null);
@@ -723,57 +934,82 @@ export default function LudoGameView({
     };
   }, [initialMode, handleStartQuickMatch]);
 
-  // Join Room by Code helper
-  const handleJoinByCode = (code: string) => {
-    const clean = code.trim().toUpperCase();
-    if (!clean) return;
-    setRoomId(clean);
-    setGameState("lobby");
-
-    setPlayers((prev) => {
-      if (prev.some((p) => p.id === user.id)) return prev;
-      const nextIdx = prev.length;
-      const nextColor = PLAYER_COLORS[nextIdx] || "GREEN";
-      const newPlayer: LudoPlayer = {
+  // Create Custom Room helper (Host role)
+  const handleCreateCustomRoom = () => {
+    const customCode = `UIU-${Math.floor(1000 + Math.random() * 9000)}`;
+    updateIsHost(true);
+    setPlayers([
+      {
         id: user.id,
         name: user.full_name,
         avatar: user.avatar,
         department: user.department,
         batch: user.batch,
-        color: nextColor,
+        color: "RED",
+        isHost: true,
+        isReady: true,
+        tokens: [-1, -1, -1, -1],
+      },
+    ]);
+    setRoomId(customCode);
+    setGameState("lobby");
+  };
+
+  // Join Room by Code helper (Guest role)
+  const handleJoinByCode = (code: string) => {
+    const clean = code.trim().toUpperCase();
+    if (!clean) return;
+
+    updateIsHost(false);
+    // Initialize as non-host guest waiting for host sync
+    setPlayers([
+      {
+        id: user.id,
+        name: user.full_name,
+        avatar: user.avatar,
+        department: user.department,
+        batch: user.batch,
+        color: "GREEN",
         isHost: false,
         isReady: true,
         tokens: [-1, -1, -1, -1],
-      };
-      const updated = [...prev, newPlayer];
+      },
+    ]);
+    setRoomId(clean);
+    setGameState("lobby");
+  };
 
-      // Broadcast both PLAYER_JOIN (Web) and LOBBY_UPDATE (Native Android)
-      const LUDO_COLORS_MAP = ["red", "green", "yellow", "blue"];
-      channelRef.current?.send({
+  // Leave Lobby helper
+  const handleLeaveLobby = () => {
+    if (channelRef.current) {
+      channelRef.current.send({
         type: "broadcast",
-        event: "PLAYER_JOIN",
-        payload: { roomId: clean, player: newPlayer, timestamp: Date.now() },
-      });
-      channelRef.current?.send({
-        type: "broadcast",
-        event: "LOBBY_UPDATE",
+        event: "PLAYER_LEFT",
         payload: {
-          lobby: updated.map((p, idx) => ({
-            id: p.id,
-            name: p.name,
-            avatar: p.avatar,
-            department: p.department,
-            batch: p.batch || "2024",
-            color: LUDO_COLORS_MAP[idx] || "red",
-            colorIndex: idx,
-            isHost: p.isHost,
-            isReady: p.isReady,
-            isBot: p.id.startsWith("ai_") || p.id.startsWith("bot_"),
-          })),
+          roomId,
+          userId: user.id,
+          playerName: user.full_name,
         },
       });
-      return updated;
-    });
+      supabase.removeChannel(channelRef.current);
+      channelRef.current = null;
+    }
+    setGameState("menu");
+    setRoomId(`UIU-${Math.floor(1000 + Math.random() * 9000)}`);
+    updateIsHost(true);
+    setPlayers([
+      {
+        id: user.id,
+        name: user.full_name,
+        avatar: user.avatar,
+        department: user.department,
+        batch: user.batch,
+        color: "RED",
+        isHost: true,
+        isReady: true,
+        tokens: [-1, -1, -1, -1],
+      },
+    ]);
   };
 
   // -------------------------------------------------------------------
@@ -1056,11 +1292,7 @@ export default function LudoGameView({
             {/* Create Custom Room */}
             <button
               type="button"
-              onClick={() => {
-                const customCode = `UIU-${Math.floor(1000 + Math.random() * 9000)}`;
-                setRoomId(customCode);
-                setGameState("lobby");
-              }}
+              onClick={handleCreateCustomRoom}
               className="w-full py-3.5 px-5 rounded-2xl bg-zinc-800 hover:bg-zinc-700/80 text-zinc-100 font-bold text-sm border border-zinc-700 flex items-center justify-center gap-2.5 transition-all active:scale-98 cursor-pointer"
             >
               <Users className="w-4 h-4 text-orange-400" />
@@ -1242,16 +1474,28 @@ export default function LudoGameView({
       {gameState === "lobby" && (
         <div className="w-full max-w-2xl mt-4 p-6 sm:p-8 rounded-3xl bg-zinc-900/90 border border-zinc-800 shadow-2xl backdrop-blur-md space-y-6 animate-in fade-in duration-200">
           <div className="flex items-center justify-between pb-4 border-b border-zinc-800">
-            <div>
-              <h2 className="text-xl font-black text-white flex items-center gap-2">
-                <span>Matchmaking Lobby</span>
-                <span className="text-xs px-2 py-0.5 rounded-full bg-orange-500/20 text-orange-400 border border-orange-500/30">
-                  {players.length}/4 Joined
-                </span>
-              </h2>
-              <p className="text-xs text-zinc-400 mt-0.5">
-                Share this room code with campus friends to join.
-              </p>
+            <div className="flex items-start gap-3">
+              <button
+                type="button"
+                onClick={handleLeaveLobby}
+                className="mt-0.5 p-2 rounded-xl bg-zinc-800/80 hover:bg-zinc-700 text-zinc-400 hover:text-white transition-all cursor-pointer"
+                title="Leave Lobby"
+              >
+                <ArrowLeft className="w-4 h-4" />
+              </button>
+              <div>
+                <h2 className="text-xl font-black text-white flex items-center gap-2">
+                  <span>Matchmaking Lobby</span>
+                  <span className="text-xs px-2.5 py-0.5 rounded-full bg-orange-500/20 text-orange-400 border border-orange-500/30 font-bold">
+                    {players.length}/4 Joined
+                  </span>
+                </h2>
+                <p className="text-xs text-zinc-400 mt-1">
+                  {isHost
+                    ? "Share this room code with campus friends. As host, you can launch when ready."
+                    : "Connected to room! Waiting for room host to launch the match."}
+                </p>
+              </div>
             </div>
 
             <div className="flex items-center gap-2">
@@ -1260,8 +1504,8 @@ export default function LudoGameView({
                 onClick={handleCopyCode}
                 className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-orange-500/15 hover:bg-orange-500/25 text-orange-400 border border-orange-500/40 text-xs font-bold transition-all cursor-pointer"
               >
-                {copiedCode ? <Check className="w-3.5 h-3.5" /> : <Copy className="w-3.5 h-3.5" />}
-                <span>{roomId}</span>
+                {copiedCode ? <Check className="w-3.5 h-3.5 text-emerald-400" /> : <Copy className="w-3.5 h-3.5" />}
+                <span className="font-mono tracking-wider">{roomId}</span>
               </button>
             </div>
           </div>
@@ -1269,8 +1513,9 @@ export default function LudoGameView({
           {/* 4 Player Slots Grid */}
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-3.5">
             {PLAYER_COLORS.map((color, idx) => {
-              const assignedPlayer = players.find((p) => p.color === color) || players[idx];
+              const assignedPlayer = players.find((p) => p.color === color);
               const cfg = COLOR_CONFIG[color];
+              const isMe = assignedPlayer?.id === user.id;
 
               return (
                 <div
@@ -1283,8 +1528,8 @@ export default function LudoGameView({
                 >
                   {assignedPlayer ? (
                     <>
-                      <div className="flex items-center gap-3">
-                        <div className="relative">
+                      <div className="flex items-center gap-3 min-w-0">
+                        <div className="relative shrink-0">
                           <StudentAvatar
                             avatar={assignedPlayer.avatar}
                             name={assignedPlayer.name}
@@ -1296,23 +1541,31 @@ export default function LudoGameView({
                             style={{ backgroundColor: cfg.hex }}
                           />
                         </div>
-                        <div>
-                          <div className="flex items-center gap-1.5">
-                            <span className="text-xs sm:text-sm font-bold text-zinc-100 truncate max-w-[130px]">
+                        <div className="min-w-0">
+                          <div className="flex items-center gap-1.5 flex-wrap">
+                            <span className="text-xs sm:text-sm font-bold text-zinc-100 truncate max-w-[120px]">
                               {assignedPlayer.name}
                             </span>
+                            {isMe && (
+                              <span className="text-[10px] px-1.5 py-0.2 rounded bg-orange-500/20 text-orange-400 font-bold shrink-0">
+                                You
+                              </span>
+                            )}
                             {assignedPlayer.isHost && (
-                              <Crown className="w-3.5 h-3.5 text-amber-400 shrink-0" />
+                              <span className="flex items-center gap-1 text-[10px] px-1.5 py-0.2 rounded bg-amber-500/20 text-amber-300 font-bold border border-amber-500/30 shrink-0">
+                                <Crown className="w-3 h-3 text-amber-400" />
+                                Host
+                              </span>
                             )}
                           </div>
-                          <span className="text-[11px] text-zinc-400 block">
+                          <span className="text-[11px] text-zinc-400 block truncate">
                             {assignedPlayer.department} • {assignedPlayer.batch || "2024"}
                           </span>
                         </div>
                       </div>
 
                       <span
-                        className="text-[10px] font-extrabold uppercase px-2 py-0.5 rounded-md border"
+                        className="text-[10px] font-extrabold uppercase px-2 py-0.5 rounded-md border shrink-0"
                         style={{
                           color: cfg.hex,
                           backgroundColor: `${cfg.hex}15`,
@@ -1338,21 +1591,48 @@ export default function LudoGameView({
             })}
           </div>
 
-          {/* Lobby Launch Button */}
-          <div className="pt-2 flex flex-col sm:flex-row items-center justify-between gap-3">
-            <span className="text-xs text-zinc-400 flex items-center gap-1.5">
-              <Radio className="w-4 h-4 text-emerald-400 animate-pulse" />
-              <span>Host can launch with 1 to 4 players (Bots auto-fill empty seats)</span>
-            </span>
+          {/* Lobby Launch Button for Host / Waiting state for Guest */}
+          <div className="pt-2">
+            {isHost ? (
+              <div className="flex flex-col sm:flex-row items-center justify-between gap-3 border-t border-zinc-800 pt-4">
+                <span className="text-xs text-zinc-400 flex items-center gap-1.5">
+                  <Radio className="w-4 h-4 text-emerald-400 animate-pulse shrink-0" />
+                  <span>You are the Host • Launch match when ready (Empty slots filled by Bots)</span>
+                </span>
 
-            <button
-              type="button"
-              onClick={handleStartGame}
-              className="w-full sm:w-auto px-8 py-3.5 rounded-2xl bg-gradient-to-r from-orange-600 to-amber-600 hover:from-orange-500 hover:to-amber-500 text-white font-extrabold text-sm shadow-xl shadow-orange-600/30 active:scale-95 transition-all flex items-center justify-center gap-2 cursor-pointer"
-            >
-              <Play className="w-4 h-4 fill-white" />
-              <span>Launch Match Now</span>
-            </button>
+                <button
+                  type="button"
+                  onClick={handleStartGame}
+                  className="w-full sm:w-auto px-8 py-3.5 rounded-2xl bg-gradient-to-r from-orange-600 to-amber-600 hover:from-orange-500 hover:to-amber-500 text-white font-extrabold text-sm shadow-xl shadow-orange-600/30 active:scale-95 transition-all flex items-center justify-center gap-2 cursor-pointer"
+                >
+                  <Play className="w-4 h-4 fill-white" />
+                  <span>Launch Match Now ({players.length}/4)</span>
+                </button>
+              </div>
+            ) : (
+              <div className="flex flex-col sm:flex-row items-center justify-between gap-3.5 p-4 rounded-2xl bg-zinc-950/80 border border-amber-500/30">
+                <div className="flex items-center gap-3">
+                  <div className="relative flex items-center justify-center w-9 h-9 rounded-full bg-amber-500/15 text-amber-400 shrink-0">
+                    <Loader2 className="w-4 h-4 animate-spin" />
+                  </div>
+                  <div>
+                    <span className="text-xs sm:text-sm font-bold text-zinc-100 block">
+                      Waiting for Room Host to launch match...
+                    </span>
+                    <span className="text-[11px] text-zinc-400 block mt-0.5">
+                      Host: <strong className="text-amber-400">{players.find((p) => p.isHost)?.name || "Room Creator"}</strong> • Match will launch automatically on your screen once host starts.
+                    </span>
+                  </div>
+                </div>
+
+                <div className="flex items-center gap-2 self-end sm:self-auto shrink-0">
+                  <span className="text-[11px] font-bold text-emerald-400 px-2.5 py-1 rounded-lg bg-emerald-500/10 border border-emerald-500/30 flex items-center gap-1.5">
+                    <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-pulse" />
+                    Connected & Ready
+                  </span>
+                </div>
+              </div>
+            )}
           </div>
         </div>
       )}
