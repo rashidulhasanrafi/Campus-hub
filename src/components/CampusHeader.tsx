@@ -36,8 +36,8 @@ interface CampusHeaderProps {
   onStatusChange: (newStatus: string) => void;
   onToggleCallRestriction?: () => void;
   onSignOut?: () => void;
-  currentTab?: "lounge" | "match" | "hangouts" | "friends" | "profile";
-  onTabChange?: (tab: "lounge" | "match" | "hangouts" | "friends" | "profile") => void;
+  currentTab?: "lounge" | "ludo" | "match" | "hangouts" | "friends" | "profile";
+  onTabChange?: (tab: "lounge" | "ludo" | "match" | "hangouts" | "friends" | "profile") => void;
   pendingRequestsCount?: number;
 }
 
@@ -273,14 +273,19 @@ export default function CampusHeader({
           )}
 
           {/* Cross-Platform Ludo Game Arena Link */}
-          <a
-            href="/games/ludo"
+          <button
+            type="button"
+            onClick={() => onTabChange ? onTabChange("ludo") : (window.location.href = "/games/ludo")}
             title="Play 4-Player Ludo with Voice Chat"
-            className="hidden md:flex items-center gap-1.5 px-2.5 py-1 rounded-md bg-gradient-to-r from-orange-600 to-amber-600 hover:from-orange-500 hover:to-amber-500 text-white font-bold text-xs shadow-sm shadow-orange-600/30 transition-all active:scale-95 shrink-0"
+            className={`hidden md:flex items-center gap-1.5 px-2.5 py-1 rounded-md text-xs font-bold transition-all active:scale-95 shrink-0 cursor-pointer ${
+              currentTab === "ludo"
+                ? "bg-orange-500 text-white shadow-md shadow-orange-500/30"
+                : "bg-gradient-to-r from-orange-600 to-amber-600 hover:from-orange-500 hover:to-amber-500 text-white shadow-sm shadow-orange-600/30"
+            }`}
           >
             <Gamepad2 className="w-3.5 h-3.5" />
             <span>Ludo 🎲</span>
-          </a>
+          </button>
 
           {/* Online count badge: Exactly as screenshot */}
           <div

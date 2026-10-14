@@ -33,6 +33,7 @@ import RandomMatch from "@/components/RandomMatch";
 import GroupHangout from "@/components/GroupHangout";
 import FriendsView from "@/components/FriendsView";
 import ProfileView from "@/components/ProfileView";
+import LudoGameView from "@/components/ludo/LudoGameView";
 import ProfileOnboardingModal from "@/components/ProfileOnboardingModal";
 import IncomingCallModal from "@/components/IncomingCallModal";
 import UiuBusTransition from "@/components/UiuBusTransition";
@@ -718,6 +719,13 @@ export default function CampusHubHome() {
                       );
                       if (req) handleAcceptFriendRequest(req.id);
                     }}
+                  />
+                )}
+
+                {currentTab === "ludo" && (
+                  <LudoGameView
+                    currentProfile={profile}
+                    onExitGame={() => handleTabChange("lounge")}
                   />
                 )}
 

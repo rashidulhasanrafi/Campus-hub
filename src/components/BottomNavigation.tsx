@@ -1,12 +1,12 @@
 "use client";
 
 import React from "react";
-import { MessageSquare, Video, Users, User, UserCheck } from "lucide-react";
+import { MessageSquare, Video, Users, User, UserCheck, Gamepad2 } from "lucide-react";
 import { useUiMode } from "@/context/UiModeContext";
 import { useTheme } from "@/context/ThemeContext";
 import { motion } from "framer-motion";
 
-export type NavTab = "lounge" | "match" | "hangouts" | "friends" | "profile";
+export type NavTab = "lounge" | "ludo" | "match" | "hangouts" | "friends" | "profile";
 
 interface BottomNavigationProps {
   currentTab: NavTab;
@@ -33,11 +33,10 @@ export default function BottomNavigation({
       badge: null,
     },
     {
-      id: "hangouts" as NavTab,
-      label: "Hangouts",
-      icon: Users,
-      customIcon: "/images/icon-hangouts.png",
-      badge: "8 Max",
+      id: "ludo" as NavTab,
+      label: "Ludo",
+      icon: Gamepad2,
+      badge: "4P",
     },
     {
       id: "match" as NavTab,
@@ -46,6 +45,13 @@ export default function BottomNavigation({
       customIcon: "/images/icon-1on1-match.png",
       special: true,
       badge: "LIVE",
+    },
+    {
+      id: "hangouts" as NavTab,
+      label: "Hangouts",
+      icon: Users,
+      customIcon: "/images/icon-hangouts.png",
+      badge: "8 Max",
     },
     {
       id: "friends" as NavTab,
@@ -72,7 +78,7 @@ export default function BottomNavigation({
             : "border-slate-200/90 bg-white/98 backdrop-blur-2xl shadow-[0_-8px_25px_rgba(0,0,0,0.08)]"
       }`}
     >
-      <div className="w-full max-w-lg mx-auto px-2 py-1.5 flex items-center justify-around relative">
+      <div className="w-full max-w-lg mx-auto px-1 py-1 flex items-center justify-around relative">
         {tabs.map((tab) => {
           const isActive = currentTab === tab.id;
           const Icon = tab.icon;
@@ -83,11 +89,11 @@ export default function BottomNavigation({
               <button
                 key={tab.id}
                 onClick={() => onTabChange(tab.id)}
-                className="relative flex flex-col items-center justify-center -mt-4 group focus:outline-none"
+                className="relative flex flex-col items-center justify-center -mt-4 group focus:outline-none shrink-0 px-1"
               >
                 {/* Center Match CTA: Orange by default, turns dark gray on hover like official UIU site */}
                 <div
-                  className={`w-12 h-12 rounded-xl flex items-center justify-center shadow-lg transition-all duration-300 relative ${
+                  className={`w-11 h-11 sm:w-12 sm:h-12 rounded-xl flex items-center justify-center shadow-lg transition-all duration-300 relative ${
                     isActive
                       ? !isLightUi
                         ? "bg-gradient-to-tr from-orange-600 via-orange-500 to-amber-500 text-white scale-110 border-2 border-white/40 shadow-orange-500/50 shadow-lg"
@@ -108,7 +114,7 @@ export default function BottomNavigation({
                     <img
                       src={tab.customIcon}
                       alt={tab.label}
-                      className={`w-7 h-7 object-contain drop-shadow transition-transform ${
+                      className={`w-6 h-6 sm:w-7 sm:h-7 object-contain drop-shadow transition-transform ${
                         isActive ? "scale-110 liquid-glass-active-icon" : "group-hover:scale-110"
                       }`}
                     />
@@ -117,7 +123,7 @@ export default function BottomNavigation({
                   )}
                 </div>
                 <span
-                  className={`text-[10px] font-semibold mt-1 tracking-tight transition-colors ${
+                  className={`text-[9.5px] sm:text-[10px] font-semibold mt-1 tracking-tight transition-colors ${
                     isActive
                       ? isDark
                         ? "text-orange-400 font-bold"
@@ -130,7 +136,7 @@ export default function BottomNavigation({
                   {tab.label}
                 </span>
                 {tab.badge && (
-                  <span className={`absolute -top-1 right-0 px-1 py-0.2 rounded-md text-[8px] font-bold shadow-sm ${
+                  <span className={`absolute -top-1 right-0 px-1 py-0.2 rounded-md text-[7px] sm:text-[8px] font-bold shadow-sm ${
                     isDark
                       ? "bg-zinc-900 border border-orange-500/50 text-orange-400"
                       : "bg-white border border-orange-400 text-orange-600 shadow-sm"
@@ -146,7 +152,7 @@ export default function BottomNavigation({
             <button
               key={tab.id}
               onClick={() => onTabChange(tab.id)}
-              className={`flex-1 flex flex-col items-center justify-center py-1.5 px-1 rounded-xl transition-all duration-200 relative group ${
+              className={`flex-1 min-w-0 flex flex-col items-center justify-center py-1 px-0.5 rounded-xl transition-all duration-200 relative group ${
                 isActive
                   ? isLightUi
                     ? isDark
@@ -174,30 +180,37 @@ export default function BottomNavigation({
                 />
               )}
 
-              {useCustomIcon ? (
-                <img
-                  src={tab.customIcon}
-                  alt={tab.label}
-                  className={`w-5 h-5 object-contain mb-0.5 transition-all duration-200 ${
-                    isActive
-                      ? "scale-110 liquid-glass-active-icon"
-                      : "opacity-85 group-hover:opacity-100 group-hover:scale-105"
-                  }`}
-                />
-              ) : (
-                <Icon
-                  className={`w-4 h-4 mb-0.5 transition-colors ${
-                    isActive
-                      ? isDark
-                        ? "text-orange-400"
-                        : "text-orange-600"
-                      : isDark
-                        ? "text-zinc-400 group-hover:text-orange-400"
-                        : "text-slate-500 group-hover:text-orange-600"
-                  }`}
-                />
-              )}
-              <span className="text-[10px] truncate max-w-[65px]">{tab.label}</span>
+              <div className="relative flex items-center justify-center">
+                {useCustomIcon ? (
+                  <img
+                    src={tab.customIcon}
+                    alt={tab.label}
+                    className={`w-4 h-4 sm:w-5 sm:h-5 object-contain mb-0.5 transition-all duration-200 ${
+                      isActive
+                        ? "scale-110 liquid-glass-active-icon"
+                        : "opacity-85 group-hover:opacity-100 group-hover:scale-105"
+                    }`}
+                  />
+                ) : (
+                  <Icon
+                    className={`w-4 h-4 mb-0.5 transition-colors ${
+                      isActive
+                        ? isDark
+                          ? "text-orange-400"
+                          : "text-orange-600"
+                        : isDark
+                          ? "text-zinc-400 group-hover:text-orange-400"
+                          : "text-slate-500 group-hover:text-orange-600"
+                    }`}
+                  />
+                )}
+                {tab.badge && (
+                  <span className="absolute -top-1 -right-2 px-1 py-0.2 rounded-full text-[7px] font-extrabold bg-orange-500 text-white leading-none shadow-xs">
+                    {tab.badge}
+                  </span>
+                )}
+              </div>
+              <span className="text-[9.5px] sm:text-[10px] truncate max-w-full">{tab.label}</span>
               {isActive && isLightUi && (
                 <span className="w-1 h-1 rounded-full bg-orange-500 mt-0.5" />
               )}

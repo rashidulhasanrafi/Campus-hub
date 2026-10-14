@@ -39,6 +39,10 @@ import {
   Radio,
   Clock,
   ShieldAlert,
+  Loader2,
+  Smartphone,
+  Laptop,
+  Search,
 } from "lucide-react";
 import confetti from "canvas-confetti";
 
@@ -66,16 +70,28 @@ export default function LudoGameView({
     email: "student@bscse.uiu.ac.bd",
   };
 
-  // Matchmaking State: "menu" | "lobby" | "playing" | "game_over"
-  const [gameState, setGameState] = useState<"menu" | "lobby" | "playing" | "game_over">(
-    initialRoomCode ? "lobby" : "menu"
+  // Matchmaking State: "menu" | "matchmaking" | "lobby" | "playing" | "game_over"
+  const [gameState, setGameState] = useState<"menu" | "matchmaking" | "lobby" | "playing" | "game_over">(
+    initialRoomCode ? "lobby" : initialMode === "random" ? "matchmaking" : "menu"
   );
   const [roomId, setRoomId] = useState<string>(
     initialRoomCode || `UIU-${Math.floor(1000 + Math.random() * 9000)}`
   );
   const [joinInputCode, setJoinInputCode] = useState("");
-  const [isSearchingRandom, setIsSearchingRandom] = useState(false);
   const [copiedCode, setCopiedCode] = useState(false);
+
+  // Cross-Platform Matchmaking Queue (Synced via campus-ludo-matchmaking presence)
+  const [matchQueue, setMatchQueue] = useState<
+    Array<{
+      id: string;
+      name: string;
+      avatar: string;
+      department: string;
+      batch: string;
+      joinedAt: number;
+    }>
+  >([]);
+  const matchChannelRef = useRef<ReturnType<typeof supabase.channel> | null>(null);
 
   // Players in room (up to 4)
   const [players, setPlayers] = useState<LudoPlayer[]>([
@@ -144,11 +160,13 @@ export default function LudoGameView({
     });
     channelRef.current = channel;
 
-    // A. Listen for DICE_ROLL
-    channel.on("broadcast", { event: "DICE_ROLL" }, ({ payload }: { payload: DiceRollPayload }) => {
+    // A. Listen for DICE_ROLL (Supports both Android {playerIndex, value} and Web {diceValue, playerColor})
+    channel.on("broadcast", { event: "DICE_ROLL" }, ({ payload }: any) => {
+      const rolledVal = payload.diceValue ?? payload.value;
+      if (rolledVal == null) return;
       ludoAudio.playDiceRoll();
       setIsRolling(true);
-      setDiceValue(payload.diceValue);
+      setDiceValue(rolledVal);
       setTimeout(() => {
         setIsRolling(false);
         setHasRolled(true);
@@ -156,55 +174,113 @@ export default function LudoGameView({
       }, 350);
     });
 
-    // B. Listen for MOVE_TOKEN
-    channel.on("broadcast", { event: "MOVE_TOKEN" }, ({ payload }: { payload: MoveTokenPayload }) => {
+    // B. Listen for MOVE_TOKEN (Supports both Android {playerIndex, tokenIndex, newStep, cutOpponent} and Web)
+    channel.on("broadcast", { event: "MOVE_TOKEN" }, ({ payload }: any) => {
       ludoAudio.playTokenMove();
-      setAnimatingToken({ color: payload.playerColor, tokenIndex: payload.tokenIndex });
+      const targetStep = payload.newStep ?? payload.toPos;
+      const targetTokenIdx = payload.tokenIndex;
+      const targetColor: PlayerColor | null = payload.playerColor 
+        ?? (payload.playerIndex != null ? PLAYER_COLORS[payload.playerIndex] : null);
 
-      setPlayers((prev) =>
-        prev.map((pl) => {
-          if (pl.color === payload.playerColor) {
-            const nextTokens = [...pl.tokens];
-            nextTokens[payload.tokenIndex] = payload.toPos;
-            return { ...pl, tokens: nextTokens };
-          }
-          if (
-            payload.isCaptured &&
-            payload.capturedPlayerColor &&
-            pl.color === payload.capturedPlayerColor &&
-            payload.capturedTokenIndex !== null
-          ) {
-            ludoAudio.playCapture();
-            const nextTokens = [...pl.tokens];
-            nextTokens[payload.capturedTokenIndex] = -1; // Reset captured token to base
-            return { ...pl, tokens: nextTokens };
-          }
-          return pl;
-        })
-      );
+      if (targetColor && targetTokenIdx != null && targetStep != null) {
+        setAnimatingToken({ color: targetColor, tokenIndex: targetTokenIdx });
 
-      setTimeout(() => setAnimatingToken(null), 400);
+        const cutPlayerColor: PlayerColor | null = payload.cutOpponent?.cutPlayerIndex != null 
+          ? PLAYER_COLORS[payload.cutOpponent.cutPlayerIndex] 
+          : payload.capturedPlayerColor;
+        const cutTokenIdx = payload.cutOpponent?.cutTokenIndex ?? payload.capturedTokenIndex;
+
+        setPlayers((prev) =>
+          prev.map((pl) => {
+            if (pl.color === targetColor) {
+              const nextTokens = [...pl.tokens];
+              nextTokens[targetTokenIdx] = targetStep;
+              return { ...pl, tokens: nextTokens };
+            }
+            if (cutPlayerColor && pl.color === cutPlayerColor && cutTokenIdx != null) {
+              ludoAudio.playCapture();
+              const nextTokens = [...pl.tokens];
+              nextTokens[cutTokenIdx] = -1; // Reset captured token to base
+              return { ...pl, tokens: nextTokens };
+            }
+            return pl;
+          })
+        );
+
+        setTimeout(() => setAnimatingToken(null), 400);
+      }
     });
 
-    // C. Listen for TURN_CHANGE
-    channel.on("broadcast", { event: "TURN_CHANGE" }, ({ payload }: { payload: TurnChangePayload }) => {
-      setCurrentTurnColor(payload.nextPlayerColor);
-      setDiceValue(null);
-      setHasRolled(false);
-      setTurnTimeLeft(15);
-    });
+    // C. Listen for NEXT_TURN (Native Android) and TURN_CHANGE (Web)
+    const handleTurnChangeReceived = (payload: any) => {
+      const nextCol: PlayerColor | null = payload.nextPlayerColor 
+        ?? (payload.nextTurn != null ? PLAYER_COLORS[payload.nextTurn] : null);
+      if (nextCol) {
+        setCurrentTurnColor(nextCol);
+        setDiceValue(null);
+        setHasRolled(false);
+        setTurnTimeLeft(15);
+      }
+    };
+    channel.on("broadcast", { event: "NEXT_TURN" }, ({ payload }) => handleTurnChangeReceived(payload));
+    channel.on("broadcast", { event: "TURN_CHANGE" }, ({ payload }) => handleTurnChangeReceived(payload));
 
-    // D. Listen for GAME_START
-    channel.on("broadcast", { event: "GAME_START" }, ({ payload }: { payload: GameStartPayload }) => {
-      setPlayers(payload.players);
-      setCurrentTurnColor(payload.firstTurnColor);
+    // D. Listen for GAME_START (Native Android {players, initialTurn} and Web)
+    channel.on("broadcast", { event: "GAME_START" }, ({ payload }: any) => {
+      if (payload.players && Array.isArray(payload.players)) {
+        const mappedPlayers: LudoPlayer[] = payload.players.map((p: any, idx: number) => {
+          const rawColor = p.color ? (typeof p.color === "string" ? p.color.toUpperCase() : PLAYER_COLORS[idx]) : PLAYER_COLORS[idx];
+          const color: PlayerColor = (PLAYER_COLORS.includes(rawColor as PlayerColor) ? rawColor : PLAYER_COLORS[idx]) as PlayerColor;
+          const tokens = Array.isArray(p.tokens)
+            ? (typeof p.tokens[0] === "object" ? p.tokens.map((t: any) => t.step ?? -1) : p.tokens)
+            : [-1, -1, -1, -1];
+          return {
+            id: p.id,
+            name: p.name || `Player ${idx + 1}`,
+            avatar: p.avatar || "/images/avatar-male.png",
+            department: p.department || "BS in CSE",
+            batch: p.batch || "2024",
+            color,
+            isHost: p.isHost ?? idx === 0,
+            isReady: true,
+            tokens,
+          };
+        });
+        setPlayers(mappedPlayers);
+      }
+      const rawStart = payload.firstTurnColor || (payload.initialTurn != null ? PLAYER_COLORS[payload.initialTurn] : "RED");
+      const startCol = (typeof rawStart === "string" ? rawStart.toUpperCase() : "RED") as PlayerColor;
+      setCurrentTurnColor(PLAYER_COLORS.includes(startCol) ? startCol : "RED");
       setGameState("playing");
       setDiceValue(null);
       setHasRolled(false);
       setTurnTimeLeft(15);
     });
 
-    // E. Listen for PLAYER_JOIN
+    // E. Listen for LOBBY_UPDATE (Native Android) and PLAYER_JOIN (Web)
+    channel.on("broadcast", { event: "LOBBY_UPDATE" }, ({ payload }: any) => {
+      const remoteLobby = payload?.lobby;
+      if (remoteLobby && Array.isArray(remoteLobby)) {
+        setPlayers((prev) => {
+          return remoteLobby.map((lp: any, idx: number) => {
+            const existing = prev.find((p) => p.id === lp.id);
+            const col = PLAYER_COLORS[idx] || "RED";
+            return {
+              id: lp.id,
+              name: lp.name,
+              avatar: lp.avatar || "/images/avatar-male.png",
+              department: lp.department || "BS in CSE",
+              batch: lp.batch || "2024",
+              color: col,
+              isHost: lp.isHost ?? idx === 0,
+              isReady: true,
+              tokens: existing ? existing.tokens : [-1, -1, -1, -1],
+            };
+          });
+        });
+      }
+    });
+
     channel.on("broadcast", { event: "PLAYER_JOIN" }, ({ payload }: { payload: PlayerJoinPayload }) => {
       setPlayers((prev) => {
         if (prev.some((p) => p.id === payload.player.id)) return prev;
@@ -212,7 +288,14 @@ export default function LudoGameView({
       });
     });
 
-    // F. Listen for GAME_OVER
+    // F. Listen for PLAYER_LEFT
+    channel.on("broadcast", { event: "PLAYER_LEFT" }, ({ payload }: any) => {
+      if (payload?.playerName) {
+        showTimeoutNotice(`${payload.playerName} left the match.`);
+      }
+    });
+
+    // G. Listen for GAME_OVER
     channel.on("broadcast", { event: "GAME_OVER" }, ({ payload }: { payload: GameOverPayload }) => {
       ludoAudio.playHomeCheer();
       setWinner({
@@ -251,7 +334,125 @@ export default function LudoGameView({
   }, [roomId, user.id, user.full_name, user.department, user.avatar]);
 
   // -------------------------------------------------------------------
-  // 2. TURN TIMEOUT (15s LIMIT) & AUTOMATIC PASS LOGIC
+  // 2. TURN PASSING, GAME OVER & LOBBY START HELPERS
+  // -------------------------------------------------------------------
+
+  // Pass Turn to next active player (Broadcasts both NEXT_TURN and TURN_CHANGE)
+  const handlePassTurn = useCallback(() => {
+    const activeColors = players.map((p) => p.color);
+    const currentIndex = activeColors.indexOf(currentTurnColor);
+    const nextIndex = (currentIndex + 1) % activeColors.length;
+    const nextColor = activeColors[nextIndex] || "RED";
+    const nextPlayer = players.find((p) => p.color === nextColor);
+
+    setCurrentTurnColor(nextColor);
+    setDiceValue(null);
+    setHasRolled(false);
+    setTurnTimeLeft(15);
+
+    const androidTurnIdx = PLAYER_COLORS.indexOf(nextColor);
+
+    // 1. Broadcast NEXT_TURN (Native Android)
+    channelRef.current?.send({
+      type: "broadcast",
+      event: "NEXT_TURN",
+      payload: {
+        nextTurn: androidTurnIdx >= 0 ? androidTurnIdx : nextIndex,
+      },
+    });
+
+    // 2. Broadcast TURN_CHANGE (Web)
+    channelRef.current?.send({
+      type: "broadcast",
+      event: "TURN_CHANGE",
+      payload: {
+        roomId,
+        nextPlayerId: nextPlayer?.id || "",
+        nextPlayerColor: nextColor,
+        turnIndex: nextIndex,
+        nextTurn: androidTurnIdx >= 0 ? androidTurnIdx : nextIndex,
+        timestamp: Date.now(),
+      } as TurnChangePayload,
+    });
+  }, [players, currentTurnColor, roomId]);
+
+  // Handle Game Over
+  const handleGameOver = useCallback((winnerColor: PlayerColor, winnerId: string, winnerName: string) => {
+    setWinner({ id: winnerId, name: winnerName, color: winnerColor });
+    setGameState("game_over");
+    ludoAudio.playHomeCheer();
+
+    channelRef.current?.send({
+      type: "broadcast",
+      event: "GAME_OVER",
+      payload: {
+        roomId,
+        winnerColor,
+        winnerId,
+        winnerName,
+        rankings: players.map((p, idx) => ({
+          id: p.id,
+          name: p.name,
+          color: p.color,
+          rank: idx + 1,
+        })),
+        timestamp: Date.now(),
+      } as GameOverPayload,
+    });
+
+    try {
+      confetti({
+        particleCount: 90,
+        spread: 100,
+        origin: { y: 0.5 },
+        colors: ["#ea580c", "#f97316", "#fbbf24"],
+      });
+    } catch {}
+  }, [players, roomId]);
+
+  // Start Game (Host only in private lobby)
+  const handleStartGame = useCallback(() => {
+    const filledPlayers = [...players];
+    const unusedColors = PLAYER_COLORS.filter((c) => !players.some((p) => p.color === c));
+
+    while (filledPlayers.length < 4 && unusedColors.length > 0) {
+      const nextColor = unusedColors.shift()!;
+      const botNames = ["UIU Bot Green 🤖", "Campus Bot Yellow ⚡", "CSE Bot Blue 🎮"];
+      const botName = botNames[filledPlayers.length - 1] || `Campus Peer ${filledPlayers.length + 1}`;
+      filledPlayers.push({
+        id: `ai_${Math.random().toString(36).substring(2, 7)}`,
+        name: botName,
+        avatar: filledPlayers.length % 2 === 0 ? "/images/avatar-male.png" : "/images/avatar-female.png",
+        department: "BS in CSE",
+        batch: "AI",
+        color: nextColor,
+        isHost: false,
+        isReady: true,
+        tokens: [-1, -1, -1, -1],
+      });
+    }
+
+    setPlayers(filledPlayers);
+    setGameState("playing");
+    setCurrentTurnColor("RED");
+    setTurnTimeLeft(15);
+
+    // Broadcast GAME_START to all devices
+    channelRef.current?.send({
+      type: "broadcast",
+      event: "GAME_START",
+      payload: {
+        roomId,
+        players: filledPlayers,
+        initialTurn: 0,
+        firstTurnColor: "RED",
+        timestamp: Date.now(),
+      },
+    });
+  }, [players, roomId]);
+
+  // -------------------------------------------------------------------
+  // 3. TURN TIMEOUT (15s LIMIT) & AUTOMATIC PASS LOGIC
   // -------------------------------------------------------------------
   useEffect(() => {
     if (gameState !== "playing") return;
@@ -318,7 +519,268 @@ export default function LudoGameView({
   // 3. GAME ACTIONS & BROADCAST HANDLERS
   // -------------------------------------------------------------------
 
-  // Roll Dice Action
+  // -------------------------------------------------------------------
+  // 3. CROSS-PLATFORM RANDOM MATCHMAKING ENGINE
+  // (Syncs with Native Android campus-ludo-matchmaking channel)
+  // -------------------------------------------------------------------
+
+  // Start Quick Match Queue
+  const handleStartQuickMatch = useCallback(() => {
+    setGameState("matchmaking");
+    setMatchQueue([]);
+
+    if (matchChannelRef.current) {
+      supabase.removeChannel(matchChannelRef.current);
+      matchChannelRef.current = null;
+    }
+
+    const matchChannel = supabase.channel("campus-ludo-matchmaking", {
+      config: {
+        presence: { key: user.id },
+        broadcast: { self: false },
+      },
+    });
+    matchChannelRef.current = matchChannel;
+
+    // A. Sync queue presence
+    matchChannel.on("presence", { event: "sync" }, () => {
+      const state = matchChannel.presenceState();
+      const waitingList: Array<{
+        id: string;
+        name: string;
+        avatar: string;
+        department: string;
+        batch: string;
+        joinedAt: number;
+      }> = [];
+
+      Object.values(state).forEach((presences: any) => {
+        presences.forEach((p: any) => {
+          if (p && p.id && !waitingList.some((item) => item.id === p.id)) {
+            waitingList.push(p);
+          }
+        });
+      });
+
+      waitingList.sort((a, b) => (a.joinedAt || 0) - (b.joinedAt || 0));
+      setMatchQueue(waitingList);
+
+      // Deterministic Coordinator: Oldest waiting student triggers match launch when 4 join
+      const isCoordinator = waitingList[0]?.id === user.id;
+      if (isCoordinator && waitingList.length >= 4) {
+        launchQuickMatch(waitingList.slice(0, 4));
+      }
+    });
+
+    // B. Listen for match launch broadcast from coordinator (Android or Web)
+    matchChannel.on("broadcast", { event: "LUDO_MATCH_START" }, ({ payload }) => {
+      const { matchedIds, roomCode: matchedCode, players: matchedLobby } = payload || {};
+      if (matchedIds && Array.isArray(matchedIds) && matchedIds.includes(user.id)) {
+        if (matchChannelRef.current) {
+          supabase.removeChannel(matchChannelRef.current);
+          matchChannelRef.current = null;
+        }
+
+        setRoomId(matchedCode);
+
+        // Build game players for Ludo Board
+        const initialGamePlayers: LudoPlayer[] = (matchedLobby || []).map((lp: any, idx: number) => {
+          const color = PLAYER_COLORS[idx] || "RED";
+          return {
+            id: lp.id,
+            name: lp.name || `Player ${idx + 1}`,
+            avatar: lp.avatar || "/images/avatar-male.png",
+            department: lp.department || "BS in CSE",
+            batch: lp.batch || "2024",
+            color,
+            isHost: idx === 0,
+            isReady: true,
+            tokens: [-1, -1, -1, -1],
+          };
+        });
+
+        setPlayers(initialGamePlayers);
+        setCurrentTurnColor("RED");
+        setDiceValue(null);
+        setHasRolled(false);
+        setTurnTimeLeft(15);
+        setGameState("playing");
+      }
+    });
+
+    // C. Subscribe and track presence
+    matchChannel.subscribe(async (status) => {
+      if (status === "SUBSCRIBED") {
+        await matchChannel.track({
+          id: user.id,
+          name: user.full_name || "UIU Student",
+          avatar: user.avatar || "/images/avatar-male.png",
+          department: user.department || "BS in CSE",
+          batch: user.batch || "2024",
+          joinedAt: Date.now(),
+        });
+      }
+    });
+  }, [user.id, user.full_name, user.avatar, user.department, user.batch]);
+
+  // Coordinator helper to trigger matched game
+  const launchQuickMatch = (group: typeof matchQueue) => {
+    if (!matchChannelRef.current) return;
+    const newCode = `UIU-Q${Math.floor(100 + Math.random() * 900)}`;
+
+    const LUDO_COLORS_LOWER = ["red", "green", "yellow", "blue"];
+    const groupLobby: any[] = group.map((u, idx) => ({
+      id: u.id,
+      name: u.name,
+      avatar: u.avatar,
+      department: u.department,
+      batch: u.batch,
+      color: LUDO_COLORS_LOWER[idx],
+      colorIndex: idx,
+      isHost: idx === 0,
+      isReady: true,
+      isBot: false,
+    }));
+
+    // If fewer than 4 players, fill remaining with AI peers so game can start
+    const botNames = ["UIU Bot Green 🤖", "Campus Bot Yellow ⚡", "CSE Bot Blue 🎮"];
+    while (groupLobby.length < 4) {
+      const idx = groupLobby.length;
+      groupLobby.push({
+        id: `bot_${idx}_${Date.now()}`,
+        name: botNames[idx - 1] || `Campus Bot ${idx + 1} 🤖`,
+        avatar: idx % 2 === 0 ? "/images/avatar-male.png" : "/images/avatar-female.png",
+        department: "BS in CSE",
+        batch: "AI",
+        color: LUDO_COLORS_LOWER[idx],
+        colorIndex: idx,
+        isHost: false,
+        isReady: true,
+        isBot: true,
+      });
+    }
+
+    matchChannelRef.current.send({
+      type: "broadcast",
+      event: "LUDO_MATCH_START",
+      payload: {
+        matchedIds: group.map((u) => u.id),
+        roomCode: newCode,
+        players: groupLobby,
+      },
+    });
+
+    if (matchChannelRef.current) {
+      supabase.removeChannel(matchChannelRef.current);
+      matchChannelRef.current = null;
+    }
+
+    setRoomId(newCode);
+
+    const initialGamePlayers: LudoPlayer[] = groupLobby.map((lp: any, idx: number) => {
+      const color = PLAYER_COLORS[idx] || "RED";
+      return {
+        id: lp.id,
+        name: lp.name,
+        avatar: lp.avatar,
+        department: lp.department,
+        batch: lp.batch || "2024",
+        color,
+        isHost: idx === 0,
+        isReady: true,
+        tokens: [-1, -1, -1, -1],
+      };
+    });
+
+    setPlayers(initialGamePlayers);
+    setCurrentTurnColor("RED");
+    setDiceValue(null);
+    setHasRolled(false);
+    setTurnTimeLeft(15);
+    setGameState("playing");
+  };
+
+  // Cancel Matchmaking
+  const handleCancelMatchmaking = () => {
+    if (matchChannelRef.current) {
+      supabase.removeChannel(matchChannelRef.current);
+      matchChannelRef.current = null;
+    }
+    setMatchQueue([]);
+    setGameState("menu");
+  };
+
+  // Auto trigger random match if initiated via URL param
+  useEffect(() => {
+    if (initialMode === "random" && gameState === "matchmaking") {
+      handleStartQuickMatch();
+    }
+    return () => {
+      if (matchChannelRef.current) {
+        supabase.removeChannel(matchChannelRef.current);
+        matchChannelRef.current = null;
+      }
+    };
+  }, [initialMode, handleStartQuickMatch]);
+
+  // Join Room by Code helper
+  const handleJoinByCode = (code: string) => {
+    const clean = code.trim().toUpperCase();
+    if (!clean) return;
+    setRoomId(clean);
+    setGameState("lobby");
+
+    setPlayers((prev) => {
+      if (prev.some((p) => p.id === user.id)) return prev;
+      const nextIdx = prev.length;
+      const nextColor = PLAYER_COLORS[nextIdx] || "GREEN";
+      const newPlayer: LudoPlayer = {
+        id: user.id,
+        name: user.full_name,
+        avatar: user.avatar,
+        department: user.department,
+        batch: user.batch,
+        color: nextColor,
+        isHost: false,
+        isReady: true,
+        tokens: [-1, -1, -1, -1],
+      };
+      const updated = [...prev, newPlayer];
+
+      // Broadcast both PLAYER_JOIN (Web) and LOBBY_UPDATE (Native Android)
+      const LUDO_COLORS_MAP = ["red", "green", "yellow", "blue"];
+      channelRef.current?.send({
+        type: "broadcast",
+        event: "PLAYER_JOIN",
+        payload: { roomId: clean, player: newPlayer, timestamp: Date.now() },
+      });
+      channelRef.current?.send({
+        type: "broadcast",
+        event: "LOBBY_UPDATE",
+        payload: {
+          lobby: updated.map((p, idx) => ({
+            id: p.id,
+            name: p.name,
+            avatar: p.avatar,
+            department: p.department,
+            batch: p.batch || "2024",
+            color: LUDO_COLORS_MAP[idx] || "red",
+            colorIndex: idx,
+            isHost: p.isHost,
+            isReady: p.isReady,
+            isBot: p.id.startsWith("ai_") || p.id.startsWith("bot_"),
+          })),
+        },
+      });
+      return updated;
+    });
+  };
+
+  // -------------------------------------------------------------------
+  // 4. GAME ACTIONS & TWO-WAY BROADCAST HANDLERS
+  // -------------------------------------------------------------------
+
+  // Roll Dice Action (Supports both Android & Web protocol)
   const handleRollDice = () => {
     if (!isMyTurn || hasRolled || isRolling || myColor === null) return;
 
@@ -327,17 +789,21 @@ export default function LudoGameView({
     setDiceValue(rolled);
     ludoAudio.playDiceRoll();
 
-    // Broadcast DICE_ROLL to all cross-platform players
+    const colorIndex = PLAYER_COLORS.indexOf(myColor);
+
+    // Broadcast DICE_ROLL with both Android ({playerIndex, value}) and Web ({diceValue, playerColor}) keys
     channelRef.current?.send({
       type: "broadcast",
       event: "DICE_ROLL",
       payload: {
+        playerIndex: colorIndex >= 0 ? colorIndex : 0,
+        value: rolled,
+        diceValue: rolled,
+        playerColor: myColor,
         roomId,
         playerId: user.id,
-        playerColor: myColor,
-        diceValue: rolled,
         timestamp: Date.now(),
-      } as DiceRollPayload,
+      },
     });
 
     setTimeout(() => {
@@ -347,7 +813,7 @@ export default function LudoGameView({
     }, 350);
   };
 
-  // Move Token Action
+  // Move Token Action (Supports both Android & Web protocol)
   const handleMoveToken = (tokenIndex: number) => {
     if (!isMyTurn || !hasRolled || diceValue === null || myColor === null || !myPlayer) return;
 
@@ -365,7 +831,6 @@ export default function LudoGameView({
       ludoAudio.playHomeCheer();
     }
 
-    // Optimistically update local player tokens
     let didWin = false;
     setPlayers((prev) => {
       const updated = prev.map((pl) => {
@@ -392,23 +857,42 @@ export default function LudoGameView({
       return updated;
     });
 
-    // Broadcast MOVE_TOKEN
+    const myColorIdx = PLAYER_COLORS.indexOf(myColor);
+    const cutOpp =
+      captureResult.isCaptured &&
+      captureResult.capturedPlayerColor &&
+      captureResult.capturedTokenIndex !== null
+        ? {
+            cutPlayerIndex: PLAYER_COLORS.indexOf(captureResult.capturedPlayerColor),
+            cutTokenIndex: captureResult.capturedTokenIndex,
+          }
+        : null;
+
+    // Broadcast MOVE_TOKEN with both Android ({playerIndex, tokenIndex, newStep, cutOpponent}) and Web fields
     channelRef.current?.send({
       type: "broadcast",
       event: "MOVE_TOKEN",
       payload: {
+        playerIndex: myColorIdx >= 0 ? myColorIdx : 0,
+        tokenIndex,
+        newStep: nextStep,
+        cutOpponent: cutOpp,
+        extraTurnReason:
+          diceValue === 6
+            ? "Rolled 6! Extra turn 🎲"
+            : captureResult.isCaptured
+            ? "Captured opponent! Extra turn ⚔️"
+            : null,
         roomId,
         playerId: user.id,
         playerColor: myColor,
-        tokenIndex,
-        diceValue,
         fromPos: currentStep,
         toPos: nextStep,
         isCaptured: captureResult.isCaptured,
         capturedPlayerColor: captureResult.capturedPlayerColor,
         capturedTokenIndex: captureResult.capturedTokenIndex,
         timestamp: Date.now(),
-      } as MoveTokenPayload,
+      },
     });
 
     // Check Win Condition
@@ -433,108 +917,6 @@ export default function LudoGameView({
       setConsecutiveSixes(0);
       handlePassTurn();
     }
-  };
-
-  // Pass Turn to next active player
-  const handlePassTurn = () => {
-    const activeColors = players.map((p) => p.color);
-    const currentIndex = activeColors.indexOf(currentTurnColor);
-    const nextIndex = (currentIndex + 1) % activeColors.length;
-    const nextColor = activeColors[nextIndex] || "RED";
-    const nextPlayer = players.find((p) => p.color === nextColor);
-
-    setCurrentTurnColor(nextColor);
-    setDiceValue(null);
-    setHasRolled(false);
-    setTurnTimeLeft(15);
-
-    // Broadcast TURN_CHANGE
-    channelRef.current?.send({
-      type: "broadcast",
-      event: "TURN_CHANGE",
-      payload: {
-        roomId,
-        nextPlayerId: nextPlayer?.id || "",
-        nextPlayerColor: nextColor,
-        turnIndex: nextIndex,
-        timestamp: Date.now(),
-      } as TurnChangePayload,
-    });
-  };
-
-  // Handle Game Over
-  const handleGameOver = (winnerColor: PlayerColor, winnerId: string, winnerName: string) => {
-    setWinner({ id: winnerId, name: winnerName, color: winnerColor });
-    setGameState("game_over");
-    ludoAudio.playHomeCheer();
-
-    channelRef.current?.send({
-      type: "broadcast",
-      event: "GAME_OVER",
-      payload: {
-        roomId,
-        winnerColor,
-        winnerId,
-        winnerName,
-        rankings: players.map((p, idx) => ({
-          id: p.id,
-          name: p.name,
-          color: p.color,
-          rank: idx + 1,
-        })),
-        timestamp: Date.now(),
-      } as GameOverPayload,
-    });
-
-    try {
-      confetti({
-        particleCount: 90,
-        spread: 100,
-        origin: { y: 0.5 },
-        colors: ["#ea580c", "#f97316", "#fbbf24"],
-      });
-    } catch {}
-  };
-
-  // Start Game (Host only)
-  const handleStartGame = () => {
-    // If fewer than 4 players, fill remaining spots with Campus AI peers
-    const filledPlayers = [...players];
-    const unusedColors = PLAYER_COLORS.filter((c) => !players.some((p) => p.color === c));
-
-    while (filledPlayers.length < 4 && unusedColors.length > 0) {
-      const nextColor = unusedColors.shift()!;
-      const botNames = ["UIU Bot Rafi", "Campus Bot Tanvir", "CSE Bot Shanto", "Library Bot Lamia"];
-      const botName = botNames[filledPlayers.length] || `Campus Peer ${filledPlayers.length + 1}`;
-      filledPlayers.push({
-        id: `ai_${Math.random().toString(36).substring(2, 7)}`,
-        name: botName,
-        avatar: filledPlayers.length % 2 === 0 ? "/images/avatar-male.png" : "/images/avatar-female.png",
-        department: "BS in CSE",
-        batch: "2024",
-        color: nextColor,
-        isHost: false,
-        isReady: true,
-        tokens: [-1, -1, -1, -1],
-      });
-    }
-
-    setPlayers(filledPlayers);
-    setGameState("playing");
-    setCurrentTurnColor("RED");
-    setTurnTimeLeft(15);
-
-    // Broadcast GAME_START
-    channelRef.current?.send({
-      type: "broadcast",
-      event: "GAME_START",
-      payload: {
-        roomId,
-        players: filledPlayers,
-        firstTurnColor: "RED",
-        timestamp: Date.now(),
-      } as GameStartPayload,
-    });
   };
 
   // Copy Room Code helper
@@ -563,7 +945,17 @@ export default function LudoGameView({
         <div className="flex items-center gap-3">
           <button
             type="button"
-            onClick={onExitGame || (() => setGameState("menu"))}
+            onClick={() => {
+              if (matchChannelRef.current) {
+                supabase.removeChannel(matchChannelRef.current);
+                matchChannelRef.current = null;
+              }
+              if (gameState !== "menu") {
+                setGameState("menu");
+              } else if (onExitGame) {
+                onExitGame();
+              }
+            }}
             className="p-2 rounded-xl bg-zinc-900 hover:bg-zinc-800 text-zinc-300 hover:text-white border border-zinc-800 transition-colors cursor-pointer"
             title="Exit Game"
           >
@@ -648,18 +1040,17 @@ export default function LudoGameView({
           </div>
 
           <div className="space-y-3 pt-2">
-            {/* Quick Random Match */}
+            {/* Quick Random Match (Cross-Platform with Android) */}
             <button
               type="button"
-              onClick={() => {
-                const randomId = `UIU-PUB-${Math.floor(100 + Math.random() * 900)}`;
-                setRoomId(randomId);
-                setGameState("lobby");
-              }}
-              className="w-full py-4 px-5 rounded-2xl bg-gradient-to-r from-orange-600 to-amber-600 hover:from-orange-500 hover:to-amber-500 text-white font-extrabold text-sm sm:text-base shadow-lg shadow-orange-600/30 flex items-center justify-center gap-3 transition-all active:scale-98 cursor-pointer"
+              onClick={handleStartQuickMatch}
+              className="w-full py-4 px-5 rounded-2xl bg-gradient-to-r from-orange-600 via-orange-500 to-amber-500 hover:from-orange-500 hover:to-amber-400 text-white font-extrabold text-sm sm:text-base shadow-lg shadow-orange-600/30 flex items-center justify-center gap-3 transition-all active:scale-98 cursor-pointer group"
             >
-              <Sparkles className="w-5 h-5" />
+              <Sparkles className="w-5 h-5 group-hover:rotate-12 transition-transform" />
               <span>Random Quick Match (Auto Queue)</span>
+              <span className="px-2 py-0.5 rounded-full text-[10px] font-extrabold bg-white/20 border border-white/30 text-white">
+                Live
+              </span>
             </button>
 
             {/* Create Custom Room */}
@@ -690,21 +1081,156 @@ export default function LudoGameView({
               type="text"
               value={joinInputCode}
               onChange={(e) => setJoinInputCode(e.target.value.toUpperCase())}
-              placeholder="e.g. UIU-4821"
+              placeholder="e.g. UIU-4821 or UIU-Q105"
               className="flex-1 px-4 py-3 rounded-xl bg-zinc-950 border border-zinc-800 text-sm font-mono text-white placeholder-zinc-500 focus:outline-none focus:border-orange-500 uppercase tracking-wider"
             />
             <button
               type="button"
               disabled={!joinInputCode.trim()}
-              onClick={() => {
-                if (joinInputCode.trim()) {
-                  setRoomId(joinInputCode.trim());
-                  setGameState("lobby");
-                }
-              }}
+              onClick={() => handleJoinByCode(joinInputCode)}
               className="px-6 py-3 rounded-xl bg-orange-600 hover:bg-orange-500 disabled:opacity-50 text-white font-bold text-sm transition-all active:scale-95 cursor-pointer"
             >
               Join
+            </button>
+          </div>
+        </div>
+      )}
+
+      {/* ------------------------------------------------------------- */}
+      {/* VIEW B: CROSS-PLATFORM RANDOM MATCHMAKING QUEUE               */}
+      {/* ------------------------------------------------------------- */}
+      {gameState === "matchmaking" && (
+        <div className="w-full max-w-lg mt-8 p-6 sm:p-8 rounded-3xl bg-zinc-900/90 border border-orange-500/30 shadow-2xl backdrop-blur-md space-y-6 animate-in fade-in zoom-in-95 duration-200">
+          <div className="text-center space-y-2">
+            <div className="relative w-16 h-16 mx-auto flex items-center justify-center">
+              <div className="absolute inset-0 rounded-2xl bg-orange-500/20 animate-ping" />
+              <div className="relative w-16 h-16 rounded-2xl bg-gradient-to-tr from-orange-600 via-orange-500 to-amber-500 flex items-center justify-center text-white shadow-xl shadow-orange-500/30">
+                <Radio className="w-8 h-8 animate-pulse" />
+              </div>
+            </div>
+            <h2 className="text-xl sm:text-2xl font-black tracking-tight text-white">
+              Searching for Campus Students...
+            </h2>
+            <p className="text-xs text-zinc-400">
+              Cross-platform matchmaking with UIU Android App & Web students
+            </p>
+          </div>
+
+          {/* Queue Slots Indicator */}
+          <div className="space-y-3">
+            <div className="flex items-center justify-between text-xs font-bold text-zinc-400 px-1">
+              <div className="flex items-center gap-2">
+                <Loader2 className="w-3.5 h-3.5 animate-spin text-orange-400" />
+                <span>Matchmaking Pool</span>
+              </div>
+              <span className="px-2 py-0.5 rounded-full bg-orange-500/20 text-orange-400 border border-orange-500/30 font-mono">
+                {matchQueue.length}/4 Joined
+              </span>
+            </div>
+
+            {/* 4 Player Slots */}
+            <div className="grid grid-cols-1 gap-2.5">
+              {[0, 1, 2, 3].map((slotIdx) => {
+                const player = matchQueue[slotIdx];
+                const slotColor = PLAYER_COLORS[slotIdx];
+                const cfg = COLOR_CONFIG[slotColor];
+
+                if (player) {
+                  const isMe = player.id === user.id;
+                  const isCoordinator = slotIdx === 0;
+
+                  return (
+                    <div
+                      key={player.id}
+                      className="p-3 rounded-2xl bg-zinc-950/90 border border-zinc-700/80 flex items-center justify-between gap-3 shadow-md animate-in fade-in slide-in-from-bottom-2 duration-200"
+                    >
+                      <div className="flex items-center gap-3 min-w-0">
+                        <div className="relative">
+                          <StudentAvatar
+                            avatar={player.avatar || "/images/avatar-male.png"}
+                            name={player.name}
+                            size="md"
+                          />
+                          <span
+                            className="absolute -bottom-0.5 -right-0.5 w-3 h-3 rounded-full border-2 border-zinc-950 shadow-sm"
+                            style={{ backgroundColor: cfg.hex }}
+                          />
+                        </div>
+                        <div className="min-w-0">
+                          <div className="flex items-center gap-1.5">
+                            <span className="text-sm font-bold text-white truncate max-w-[150px] sm:max-w-[200px]">
+                              {player.name}
+                            </span>
+                            {isMe && (
+                              <span className="text-[10px] px-1.5 py-0.2 rounded bg-orange-500/20 text-orange-400 font-bold">
+                                You
+                              </span>
+                            )}
+                            {isCoordinator && (
+                              <span className="text-[10px] px-1.5 py-0.2 rounded bg-amber-500/20 text-amber-300 font-bold border border-amber-500/30">
+                                Host
+                              </span>
+                            )}
+                          </div>
+                          <div className="flex items-center gap-2 text-[11px] text-zinc-400">
+                            <span>{player.department || "UIU Student"}</span>
+                            <span>•</span>
+                            <span className="font-mono text-zinc-500">Slot {slotIdx + 1} ({cfg.name})</span>
+                          </div>
+                        </div>
+                      </div>
+
+                      <div className="shrink-0 flex items-center gap-1 px-2 py-1 rounded-lg bg-emerald-500/10 border border-emerald-500/30 text-emerald-400 text-[10px] font-bold">
+                        <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-pulse" />
+                        <span>Ready</span>
+                      </div>
+                    </div>
+                  );
+                }
+
+                return (
+                  <div
+                    key={`slot-${slotIdx}`}
+                    className="p-3 rounded-2xl bg-zinc-950/40 border border-dashed border-zinc-800 flex items-center justify-between gap-3 text-zinc-600"
+                  >
+                    <div className="flex items-center gap-3">
+                      <div className="w-10 h-10 rounded-full border border-dashed border-zinc-800 flex items-center justify-center text-zinc-600">
+                        <Users className="w-4 h-4" />
+                      </div>
+                      <div className="text-left">
+                        <span className="text-xs font-semibold text-zinc-500 block">
+                          Waiting for peer...
+                        </span>
+                        <span className="text-[10px] text-zinc-600">Slot {slotIdx + 1} ({cfg.name})</span>
+                      </div>
+                    </div>
+                    <span className="w-2 h-2 rounded-full bg-zinc-800 animate-pulse" />
+                  </div>
+                );
+              })}
+            </div>
+          </div>
+
+          {/* Action Buttons */}
+          <div className="space-y-2.5 pt-2 border-t border-zinc-800">
+            {/* If coordinator and >= 2 players, allow manual launch */}
+            {matchQueue[0]?.id === user.id && matchQueue.length >= 2 && (
+              <button
+                type="button"
+                onClick={() => launchQuickMatch(matchQueue)}
+                className="w-full py-3.5 px-4 rounded-xl bg-gradient-to-r from-orange-600 to-amber-600 hover:from-orange-500 hover:to-amber-500 text-white font-extrabold text-sm shadow-lg shadow-orange-600/30 flex items-center justify-center gap-2 transition-all active:scale-98 cursor-pointer"
+              >
+                <Play className="w-4 h-4" />
+                <span>Start Match Now with {matchQueue.length} Players →</span>
+              </button>
+            )}
+
+            <button
+              type="button"
+              onClick={handleCancelMatchmaking}
+              className="w-full py-3 px-4 rounded-xl bg-zinc-800 hover:bg-zinc-700/80 text-zinc-300 hover:text-white font-bold text-xs border border-zinc-700 transition-all active:scale-98 cursor-pointer"
+            >
+              Cancel Matchmaking
             </button>
           </div>
         </div>

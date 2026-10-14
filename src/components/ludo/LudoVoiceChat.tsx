@@ -40,7 +40,8 @@ export default function LudoVoiceChat({
   // Connect to LiveKit Audio Room
   useEffect(() => {
     let isMounted = true;
-    const audioRoomName = `ludo_audio_${roomId}`;
+    // Match exact LiveKit voice room name used by Native Android app
+    const audioRoomName = `ludo_voice_${roomId}`;
 
     async function initAudioRoom() {
       try {
