@@ -77,6 +77,8 @@ export interface ShoutoutPost {
   tag: string;
   likes: number;
   timeAgo: string;
+  created_at?: string;
+  timestamp?: number;
   isRestricted?: boolean;
   comments?: PostComment[];
 }

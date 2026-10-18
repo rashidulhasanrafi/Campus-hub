@@ -34,12 +34,33 @@ import {
 import confetti from "canvas-confetti";
 
 const FEED_STORAGE_KEY = "campus_hub_feed_posts_cache";
+const ONE_WEEK_MS = 7 * 24 * 60 * 60 * 1000;
+
+function formatPostTimeAgo(createdAt?: string): string {
+  if (!createdAt) return "Recently";
+  const diff = Date.now() - new Date(createdAt).getTime();
+  if (isNaN(diff) || diff < 0) return "Just now";
+  if (diff < 60000) return "Just now";
+  const mins = Math.floor(diff / 60000);
+  if (mins < 60) return `${mins}m ago`;
+  const hours = Math.floor(mins / 60);
+  if (hours < 24) return `${hours}h ago`;
+  const days = Math.floor(hours / 24);
+  return `${days}d ago`;
+}
 
 function getCachedShoutouts(): ShoutoutPost[] {
   if (typeof window === "undefined") return INITIAL_SHOUTOUTS;
   try {
     const raw = localStorage.getItem(FEED_STORAGE_KEY);
-    if (raw) return JSON.parse(raw);
+    if (raw) {
+      const parsed: ShoutoutPost[] = JSON.parse(raw);
+      const oneWeekAgo = Date.now() - ONE_WEEK_MS;
+      return parsed.filter((p) => {
+        if (!p.created_at) return true;
+        return new Date(p.created_at).getTime() >= oneWeekAgo;
+      });
+    }
   } catch {}
   return INITIAL_SHOUTOUTS;
 }
@@ -47,7 +68,12 @@ function getCachedShoutouts(): ShoutoutPost[] {
 function saveCachedShoutouts(posts: ShoutoutPost[]) {
   if (typeof window === "undefined") return;
   try {
-    localStorage.setItem(FEED_STORAGE_KEY, JSON.stringify(posts));
+    const oneWeekAgo = Date.now() - ONE_WEEK_MS;
+    const valid = posts.filter((p) => {
+      if (!p.created_at) return true;
+      return new Date(p.created_at).getTime() >= oneWeekAgo;
+    });
+    localStorage.setItem(FEED_STORAGE_KEY, JSON.stringify(valid));
   } catch {}
 }
 
@@ -100,66 +126,81 @@ export default function CampusLounge({
   const [editTag, setEditTag] = useState("Study Jam");
   const [deleteConfirmId, setDeleteConfirmId] = useState<string | null>(null);
 
-  // Load real shoutouts from Supabase on mount
+  // Load real shoutouts from Supabase on mount (Max 1 week old, authoritative sync)
   useEffect(() => {
     let isMounted = true;
+
     const loadShoutouts = async () => {
       try {
+        const oneWeekAgo = new Date(Date.now() - ONE_WEEK_MS).toISOString();
         const { data, error } = await supabase
           .from("shoutouts")
           .select("*")
+          .gte("created_at", oneWeekAgo)
           .order("created_at", { ascending: false })
-          .limit(40);
+          .limit(60);
 
-        if (!error && data && data.length > 0 && isMounted) {
-          setShoutouts((prev) => {
-            const remotePosts: ShoutoutPost[] = data.map((d: any) => {
-              const existing = prev.find((p) => p.id === d.id);
-              return {
-                id: d.id,
-                userId: d.user_id,
-                userName: d.user_name,
-                userDepartment: d.user_department,
-                userAvatar: d.user_avatar,
-                content: d.content,
-                tag: d.category || "Study Jam",
-                likes: d.likes_count || 0,
-                timeAgo: "Recently",
-                comments: existing?.comments || [],
-              };
-            });
+        if (!error && data && isMounted) {
+          // Authoritative list from database filtered to max 1 week old
+          const remotePosts: ShoutoutPost[] = data
+            .filter((d: any) => {
+              if (!d.created_at) return true;
+              return new Date(d.created_at).getTime() >= Date.now() - ONE_WEEK_MS;
+            })
+            .map((d: any) => ({
+              id: d.id,
+              userId: d.user_id,
+              userName: d.user_name,
+              userDepartment: d.user_department || "UIU",
+              userAvatar: d.user_avatar || "/images/avatar-male.png",
+              content: d.content,
+              tag: d.category || "Study Jam",
+              likes: d.likes_count || 0,
+              created_at: d.created_at,
+              timeAgo: formatPostTimeAgo(d.created_at),
+              comments: [],
+            }));
 
-            // Keep locally-created posts that aren't yet in remote query
-            const remoteIds = new Set(remotePosts.map((r) => r.id));
-            const localOnly = prev.filter((p) => !remoteIds.has(p.id));
-            const merged = [...localOnly, ...remotePosts];
-            saveCachedShoutouts(merged);
-            return merged;
-          });
+          setShoutouts(remotePosts);
+          saveCachedShoutouts(remotePosts);
         }
-      } catch {}
+      } catch (err) {
+        console.warn("Failed to load shoutouts:", err);
+      }
     };
 
     loadShoutouts();
 
+    // Auto-refresh when tab gains focus or window is visible again to ensure deleted posts disappear immediately
+    const handleVisibilityChange = () => {
+      if (document.visibilityState === "visible") {
+        loadShoutouts();
+      }
+    };
+    window.addEventListener("visibilitychange", handleVisibilityChange);
+    window.addEventListener("focus", loadShoutouts);
+
     const channel = supabase.channel("campus-lounge-bulletin");
 
+    // Broadcast listeners (instant multi-client push)
     channel.on("broadcast", { event: "campus-shoutout" }, (payload) => {
-      if (payload && payload.payload) {
-        setShoutouts((prev) => {
-          const incoming = payload.payload as ShoutoutPost;
-          if (prev.some((p) => p.id === incoming.id)) return prev;
-          const next = [incoming, ...prev];
-          saveCachedShoutouts(next);
-          return next;
-        });
-      }
+      const data = payload?.payload || payload;
+      const incoming = data as ShoutoutPost;
+      if (!incoming || !incoming.id) return;
+      setShoutouts((prev) => {
+        if (prev.some((p) => p.id === incoming.id)) return prev;
+        const next = [incoming, ...prev];
+        saveCachedShoutouts(next);
+        return next;
+      });
     });
 
     channel.on("broadcast", { event: "campus-shoutout-delete" }, (payload) => {
-      if (payload && payload.payload?.postId) {
+      const data = payload?.payload || payload;
+      const postId = data?.postId;
+      if (postId) {
         setShoutouts((prev) => {
-          const next = prev.filter((p) => p.id !== payload.payload.postId);
+          const next = prev.filter((p) => p.id !== postId);
           saveCachedShoutouts(next);
           return next;
         });
@@ -167,11 +208,12 @@ export default function CampusLounge({
     });
 
     channel.on("broadcast", { event: "campus-shoutout-edit" }, (payload) => {
-      if (payload && payload.payload?.postId) {
+      const data = payload?.payload || payload;
+      if (data?.postId) {
         setShoutouts((prev) => {
           const next = prev.map((p) =>
-            p.id === payload.payload.postId
-              ? { ...p, content: payload.payload.content, tag: payload.payload.tag || p.tag }
+            p.id === data.postId
+              ? { ...p, content: data.content, tag: data.tag || p.tag }
               : p
           );
           saveCachedShoutouts(next);
@@ -181,13 +223,14 @@ export default function CampusLounge({
     });
 
     channel.on("broadcast", { event: "campus-shoutout-comment" }, (payload) => {
-      if (payload && payload.payload?.postId && payload.payload?.comment) {
+      const data = payload?.payload || payload;
+      if (data?.postId && data?.comment) {
         setShoutouts((prev) => {
           const next = prev.map((p) => {
-            if (p.id !== payload.payload.postId) return p;
+            if (p.id !== data.postId) return p;
             const comments = p.comments || [];
-            if (comments.some((c) => c.id === payload.payload.comment.id)) return p;
-            return { ...p, comments: [...comments, payload.payload.comment] };
+            if (comments.some((c) => c.id === data.comment.id)) return p;
+            return { ...p, comments: [...comments, data.comment] };
           });
           saveCachedShoutouts(next);
           return next;
@@ -196,13 +239,14 @@ export default function CampusLounge({
     });
 
     channel.on("broadcast", { event: "campus-shoutout-delete-comment" }, (payload) => {
-      if (payload && payload.payload?.postId && payload.payload?.commentId) {
+      const data = payload?.payload || payload;
+      if (data?.postId && data?.commentId) {
         setShoutouts((prev) => {
           const next = prev.map((p) => {
-            if (p.id !== payload.payload.postId) return p;
+            if (p.id !== data.postId) return p;
             return {
               ...p,
-              comments: (p.comments || []).filter((c) => c.id !== payload.payload.commentId),
+              comments: (p.comments || []).filter((c) => c.id !== data.commentId),
             };
           });
           saveCachedShoutouts(next);
@@ -212,10 +256,11 @@ export default function CampusLounge({
     });
 
     channel.on("broadcast", { event: "campus-shoutout-like" }, (payload) => {
-      if (payload && payload.payload?.postId) {
+      const data = payload?.payload || payload;
+      if (data?.postId) {
         setShoutouts((prev) => {
           const next = prev.map((p) =>
-            p.id === payload.payload.postId ? { ...p, likes: p.likes + 1 } : p
+            p.id === data.postId ? { ...p, likes: p.likes + 1 } : p
           );
           saveCachedShoutouts(next);
           return next;
@@ -223,10 +268,57 @@ export default function CampusLounge({
       }
     });
 
+    // Supabase Postgres DB Changes: guarantees deleted posts and new posts sync even if broadcast was missed
+    channel.on(
+      "postgres_changes",
+      { event: "DELETE", schema: "public", table: "shoutouts" },
+      (payload) => {
+        const deletedId = (payload.old as any)?.id;
+        if (deletedId) {
+          setShoutouts((prev) => {
+            const next = prev.filter((p) => p.id !== deletedId);
+            saveCachedShoutouts(next);
+            return next;
+          });
+        }
+      }
+    );
+
+    channel.on(
+      "postgres_changes",
+      { event: "INSERT", schema: "public", table: "shoutouts" },
+      (payload) => {
+        const d = payload.new as any;
+        if (d && d.id) {
+          setShoutouts((prev) => {
+            if (prev.some((p) => p.id === d.id)) return prev;
+            const newPost: ShoutoutPost = {
+              id: d.id,
+              userId: d.user_id,
+              userName: d.user_name,
+              userDepartment: d.user_department || "UIU",
+              userAvatar: d.user_avatar || "/images/avatar-male.png",
+              content: d.content,
+              tag: d.category || "Study Jam",
+              likes: d.likes_count || 0,
+              created_at: d.created_at,
+              timeAgo: formatPostTimeAgo(d.created_at),
+              comments: [],
+            };
+            const next = [newPost, ...prev];
+            saveCachedShoutouts(next);
+            return next;
+          });
+        }
+      }
+    );
+
     channel.subscribe();
 
     return () => {
       isMounted = false;
+      window.removeEventListener("visibilitychange", handleVisibilityChange);
+      window.removeEventListener("focus", loadShoutouts);
       supabase.removeChannel(channel);
     };
   }, []);
@@ -282,6 +374,7 @@ export default function CampusLounge({
     e.preventDefault();
     if (!newPostContent.trim()) return;
 
+    const nowIso = new Date().toISOString();
     const newPost: ShoutoutPost = {
       id: `post-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`,
       userId: currentProfile?.id || "anon",
@@ -292,6 +385,7 @@ export default function CampusLounge({
       content: newPostContent.trim(),
       tag: newPostTag,
       likes: 0,
+      created_at: nowIso,
       timeAgo: "Just now",
       isRestricted: currentProfile?.call_restricted,
       comments: [],
@@ -314,6 +408,7 @@ export default function CampusLounge({
           content: newPost.content,
           category: newPost.tag,
           likes_count: 0,
+          created_at: nowIso,
         })
         .then(() => {});
 
@@ -471,9 +566,19 @@ export default function CampusLounge({
     } catch {}
   };
 
-  // Filtered posts for Feed
-  const myPostsCount = shoutouts.filter((p) => p.userId === currentProfile?.id).length;
-  const displayedPosts = shoutouts.filter((p) => {
+  // 1-Week Filtered posts for Feed (Auto-expire posts older than 7 days)
+  const validShoutouts = shoutouts.filter((p) => {
+    if (p.created_at) {
+      const postTime = new Date(p.created_at).getTime();
+      if (!isNaN(postTime) && postTime < Date.now() - ONE_WEEK_MS) return false;
+    } else if (p.timestamp && Date.now() - p.timestamp > ONE_WEEK_MS) {
+      return false;
+    }
+    return true;
+  });
+
+  const myPostsCount = validShoutouts.filter((p) => p.userId === currentProfile?.id).length;
+  const displayedPosts = validShoutouts.filter((p) => {
     if (feedFilter === "mine") {
       return p.userId === currentProfile?.id;
     }
@@ -781,24 +886,13 @@ export default function CampusLounge({
                   );
                 })()}
 
-                {/* Quick Action Buttons:
-                    - 'Say Hi': Option button that turns Orange on hover
-                    - 'Invite Call' or 'Restricted': Orange button or Disabled Restricted button
-                */}
-                <div className="flex items-center gap-2 mt-3 pt-3 border-t border-zinc-800/70">
-                  <button
-                    onClick={() => handleSayHi(student)}
-                    className="flex-1 py-1.5 px-3 rounded-lg bg-zinc-800/80 hover:bg-zinc-800 text-zinc-300 hover:text-orange-400 hover:border-orange-500/50 text-xs font-medium transition-colors flex items-center justify-center gap-1.5 border border-zinc-700/60 active:scale-95"
-                  >
-                    <Hand className="w-3.5 h-3.5 text-zinc-400 group-hover:text-orange-400" />
-                    Say Hi
-                  </button>
-
+                {/* Quick Action Button: 'Invite Call' or 'Restricted' */}
+                <div className="mt-3 pt-3 border-t border-zinc-800/70">
                   {student.call_restricted ? (
                     <button
                       disabled
                       title={`${student.full_name} has enabled call restriction to avoid disturbance.`}
-                      className="flex-1 py-1.5 px-3 rounded-lg bg-zinc-900/90 border border-rose-500/30 text-rose-400/80 text-xs font-semibold flex items-center justify-center gap-1.5 cursor-not-allowed opacity-80"
+                      className="w-full py-1.5 px-3 rounded-lg bg-zinc-900/90 border border-rose-500/30 text-rose-400/80 text-xs font-semibold flex items-center justify-center gap-1.5 cursor-not-allowed opacity-80"
                     >
                       <BellOff className="w-3.5 h-3.5 text-rose-400" />
                       <span>Restricted</span>
@@ -806,7 +900,7 @@ export default function CampusLounge({
                   ) : (
                     <button
                       onClick={() => onInviteToCall(student)}
-                      className="flex-1 py-1.5 px-3 rounded-lg bg-orange-600 hover:bg-zinc-800 text-white text-xs font-semibold transition-all flex items-center justify-center gap-1.5 shadow-sm active:scale-95"
+                      className="w-full py-1.5 px-3 rounded-lg bg-orange-600 hover:bg-zinc-800 text-white text-xs font-semibold transition-all flex items-center justify-center gap-1.5 shadow-sm active:scale-95 cursor-pointer"
                     >
                       <Video className="w-3.5 h-3.5 text-white" />
                       Invite Call
@@ -836,6 +930,15 @@ export default function CampusLounge({
       ) : (
         /* Campus Social Feed */
         <div className="space-y-4">
+          {/* 1-Week Auto Vanish Policy Notice */}
+          <div className="flex items-center gap-3 px-4 py-3 rounded-xl bg-orange-500/10 border border-orange-500/25 text-orange-200 text-xs shadow-sm">
+            <Clock className="w-4 h-4 text-orange-400 shrink-0" />
+            <div className="flex-1 leading-snug">
+              <span className="font-bold text-orange-300">Feed Notice: </span>
+              Lounge feed-এর সকল পোস্ট ১ সপ্তাহের (৭ দিন) মধ্যে স্বয়ংক্রিয়ভাবে মুছে যাবে (All lounge posts automatically vanish after 1 week to keep feeds active & clean).
+            </div>
+          </div>
+
           {/* Create Post Box */}
           <form
             onSubmit={handlePostShoutout}
@@ -902,7 +1005,7 @@ export default function CampusLounge({
                     : "bg-zinc-900/90 text-zinc-400 hover:text-orange-400 border border-zinc-800"
                 }`}
               >
-                All Feed ({shoutouts.length})
+                All Feed ({validShoutouts.length})
               </button>
 
               <button

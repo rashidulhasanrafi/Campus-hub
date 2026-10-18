@@ -889,34 +889,22 @@ export default function LudoGameView({
     }
 
     const current = playersRef.current;
-    const filledPlayers = [...current];
-    const unusedColors = PLAYER_COLORS.filter((c) => !current.some((p) => p.color === c));
-
-    while (filledPlayers.length < 4 && unusedColors.length > 0) {
-      const nextColor = unusedColors.shift()!;
-      const botNames = ["UIU Bot Green 🤖", "Campus Bot Yellow ⚡", "CSE Bot Blue 🎮"];
-      const botName = botNames[filledPlayers.length - 1] || `Campus Peer ${filledPlayers.length + 1}`;
-      filledPlayers.push({
-        id: `ai_${Math.random().toString(36).substring(2, 7)}`,
-        name: botName,
-        avatar: filledPlayers.length % 2 === 0 ? "/images/avatar-male.png" : "/images/avatar-female.png",
-        department: "BS in CSE",
-        batch: "AI",
-        color: nextColor,
-        isHost: false,
-        isReady: true,
-        tokens: [-1, -1, -1, -1],
-      });
+    if (current.length < 2) {
+      showTimeoutNotice("At least 2 players are required to start the match.");
+      return;
     }
 
-    setPlayers(filledPlayers);
+    // Start with joined players directly (2, 3, or 4 players - NO bots added for custom room)
+    const finalPlayers = [...current];
+
+    setPlayers(finalPlayers);
     setGameState("playing");
     setCurrentTurnColor("RED");
     setTurnTimeLeft(15);
 
     // Broadcast GAME_START to all devices (Android and Web compatible)
     const LUDO_COLORS_MAP = ["red", "green", "yellow", "blue"];
-    const androidPlayersPayload = filledPlayers.map((p, idx) => ({
+    const androidPlayersPayload = finalPlayers.map((p, idx) => ({
       id: p.id,
       name: p.name,
       avatar: p.avatar,
@@ -935,7 +923,7 @@ export default function LudoGameView({
       event: "GAME_START",
       payload: {
         roomId,
-        players: filledPlayers,
+        players: finalPlayers,
         androidPlayers: androidPlayersPayload,
         initialTurn: 0,
         firstTurnColor: "RED",
@@ -1922,16 +1910,25 @@ export default function LudoGameView({
               <div className="flex flex-col sm:flex-row items-center justify-between gap-3 border-t border-zinc-800 pt-4">
                 <span className="text-xs text-zinc-400 flex items-center gap-1.5">
                   <Radio className="w-4 h-4 text-emerald-400 animate-pulse shrink-0" />
-                  <span>You are the Host • Launch match when ready (Empty slots filled by Bots)</span>
+                  <span>You are the Host • Launch match when at least 2 players have joined</span>
                 </span>
 
                 <button
                   type="button"
                   onClick={handleStartGame}
-                  className="w-full sm:w-auto px-8 py-3.5 rounded-2xl bg-gradient-to-r from-orange-600 to-amber-600 hover:from-orange-500 hover:to-amber-500 text-white font-extrabold text-sm shadow-xl shadow-orange-600/30 active:scale-95 transition-all flex items-center justify-center gap-2 cursor-pointer"
+                  disabled={players.length < 2}
+                  className={`w-full sm:w-auto px-8 py-3.5 rounded-2xl text-white font-extrabold text-sm shadow-xl transition-all flex items-center justify-center gap-2 ${
+                    players.length >= 2
+                      ? "bg-gradient-to-r from-orange-600 to-amber-600 hover:from-orange-500 hover:to-amber-500 shadow-orange-600/30 active:scale-95 cursor-pointer"
+                      : "bg-zinc-800 text-zinc-400 cursor-not-allowed opacity-60"
+                  }`}
                 >
                   <Play className="w-4 h-4 fill-white" />
-                  <span>Launch Match Now ({players.length}/4)</span>
+                  <span>
+                    {players.length >= 2
+                      ? `Launch Match Now (${players.length} Players)`
+                      : `Waiting for Players (${players.length}/2 joined)`}
+                  </span>
                 </button>
               </div>
             ) : (
