@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useState, useEffect, useRef, useCallback } from "react";
+import React, { useState, useEffect, useRef, useCallback, useMemo } from "react";
 import {
   PlayerColor,
   PLAYER_COLORS,
@@ -66,15 +66,19 @@ export default function LudoGameView({
   onlineStudents = [],
 }: LudoGameViewProps) {
   // Local student fallback if not signed in
-  const user: UserProfile = currentProfile || {
-    id: `guest_${Math.random().toString(36).substring(2, 8)}`,
-    full_name: "UIU Campus Peer",
-    department: "BS in CSE",
-    batch: "2024",
-    avatar: "/images/avatar-male.png",
-    status: "Playing Ludo 🎲",
-    email: "student@bscse.uiu.ac.bd",
-  };
+  const user: UserProfile = useMemo(() => {
+    return (
+      currentProfile || {
+        id: "guest_local_player",
+        full_name: "UIU Campus Peer",
+        department: "BS in CSE",
+        batch: "2024",
+        avatar: "/images/avatar-male.png",
+        status: "Playing Ludo 🎲",
+        email: "student@bscse.uiu.ac.bd",
+      }
+    );
+  }, [currentProfile]);
 
   // Matchmaking State: "menu" | "matchmaking" | "lobby" | "playing" | "game_over"
   const [gameState, setGameState] = useState<"menu" | "matchmaking" | "lobby" | "playing" | "game_over">(
@@ -108,19 +112,47 @@ export default function LudoGameView({
   };
 
   // Players in room (up to 4)
-  const [players, setPlayers] = useState<LudoPlayer[]>([
-    {
-      id: user.id,
-      name: user.full_name,
-      avatar: user.avatar,
-      department: user.department,
-      batch: user.batch,
-      color: initialRoomCode ? "GREEN" : "RED",
-      isHost: !initialRoomCode,
-      isReady: true,
-      tokens: [-1, -1, -1, -1],
-    },
-  ]);
+  const [players, setPlayers] = useState<LudoPlayer[]>(() => {
+    if (initialRoomCode) {
+      return [
+        {
+          id: "room_host",
+          name: "Room Host 👑",
+          avatar: "/images/avatar-male.png",
+          department: "UIU Campus",
+          batch: "Host",
+          color: "RED",
+          isHost: true,
+          isReady: true,
+          tokens: [-1, -1, -1, -1],
+        },
+        {
+          id: user.id,
+          name: user.full_name,
+          avatar: user.avatar,
+          department: user.department,
+          batch: user.batch,
+          color: "GREEN",
+          isHost: false,
+          isReady: true,
+          tokens: [-1, -1, -1, -1],
+        },
+      ];
+    }
+    return [
+      {
+        id: user.id,
+        name: user.full_name,
+        avatar: user.avatar,
+        department: user.department,
+        batch: user.batch,
+        color: "RED",
+        isHost: true,
+        isReady: true,
+        tokens: [-1, -1, -1, -1],
+      },
+    ];
+  });
 
   const playersRef = useRef<LudoPlayer[]>(players);
   useEffect(() => {
@@ -392,7 +424,8 @@ export default function LudoGameView({
 
     // E. Listen for LOBBY_UPDATE (Native Android & Web)
     channel.on("broadcast", { event: "LOBBY_UPDATE" }, ({ payload }: any) => {
-      const remoteList = payload?.lobby || payload?.players;
+      const data = payload?.payload || payload;
+      const remoteList = data?.players || data?.lobby;
       if (!remoteList || !Array.isArray(remoteList) || remoteList.length === 0) return;
 
       const mapped: LudoPlayer[] = remoteList.map((lp: any, idx: number) => {
@@ -418,18 +451,41 @@ export default function LudoGameView({
         };
       });
 
-      setPlayers(mapped);
+      // CRITICAL FIX: If current user is a guest, ensure they are NEVER wiped out
+      // Even if host broadcasted a lobby list with only the host or missing this guest
+      let finalList = mapped;
+      const meFound = mapped.some((p) => p.id === user.id);
+      if (!isHostRef.current && !meFound) {
+        const usedColors = mapped.map((p) => p.color);
+        const assignedColor = PLAYER_COLORS.find((c) => !usedColors.includes(c)) || "GREEN";
+        const mePlayer: LudoPlayer = {
+          id: user.id,
+          name: user.full_name,
+          avatar: user.avatar,
+          department: user.department,
+          batch: user.batch || "2024",
+          color: assignedColor,
+          isHost: false,
+          isReady: true,
+          tokens: [-1, -1, -1, -1],
+        };
+        finalList = [...mapped, mePlayer];
+      }
+
+      setPlayers(finalList);
+      playersRef.current = finalList;
 
       // Verify whether the current user is host in this lobby
-      const myRecord = mapped.find((p) => p.id === user.id);
+      const myRecord = finalList.find((p) => p.id === user.id);
       if (myRecord) {
         updateIsHost(Boolean(myRecord.isHost));
       }
     });
 
-    // F. Listen for PLAYER_JOIN (Web & Native)
-    channel.on("broadcast", { event: "PLAYER_JOIN" }, ({ payload }: any) => {
-      const incoming = payload?.player;
+    // F. Listen for PLAYER_JOIN and PLAYER_JOIN_REQUEST (Web & Native)
+    const handleIncomingPlayerJoin = ({ payload }: any) => {
+      const data = payload?.payload || payload;
+      const incoming = data?.player;
       if (!incoming || !incoming.id || incoming.id === user.id) return;
 
       if (isHostRef.current) {
@@ -454,18 +510,23 @@ export default function LudoGameView({
           };
 
           const updated = [...prev, newPlayer];
+          playersRef.current = updated;
           broadcastLobbyState(channel, updated);
           return updated;
         });
       }
-    });
+    };
+    channel.on("broadcast", { event: "PLAYER_JOIN" }, handleIncomingPlayerJoin);
+    channel.on("broadcast", { event: "PLAYER_JOIN_REQUEST" }, handleIncomingPlayerJoin);
 
-    // G. Listen for REQUEST_LOBBY (When guest enters existing room)
-    channel.on("broadcast", { event: "REQUEST_LOBBY" }, () => {
+    // G. Listen for REQUEST_LOBBY and REQUEST_LOBBY_STATE
+    const handleIncomingLobbyRequest = () => {
       if (isHostRef.current) {
         broadcastLobbyState(channel, playersRef.current);
       }
-    });
+    };
+    channel.on("broadcast", { event: "REQUEST_LOBBY" }, handleIncomingLobbyRequest);
+    channel.on("broadcast", { event: "REQUEST_LOBBY_STATE" }, handleIncomingLobbyRequest);
 
     // H. Listen for PLAYER_LEFT
     channel.on("broadcast", { event: "PLAYER_LEFT" }, ({ payload }: any) => {
@@ -650,16 +711,26 @@ export default function LudoGameView({
             tokens: [-1, -1, -1, -1],
           };
 
+          const joinPayload = {
+            roomId,
+            player: guestMe,
+            timestamp: Date.now(),
+          };
+
+          // Send both Web and Native Android join events
           channel.send({
             type: "broadcast",
             event: "PLAYER_JOIN",
-            payload: {
-              roomId,
-              player: guestMe,
-              timestamp: Date.now(),
-            },
+            payload: joinPayload,
           });
 
+          channel.send({
+            type: "broadcast",
+            event: "PLAYER_JOIN_REQUEST",
+            payload: { player: guestMe },
+          });
+
+          // Send both Web and Native Android lobby request events
           channel.send({
             type: "broadcast",
             event: "REQUEST_LOBBY",
@@ -670,6 +741,38 @@ export default function LudoGameView({
               timestamp: Date.now(),
             },
           });
+
+          channel.send({
+            type: "broadcast",
+            event: "REQUEST_LOBBY_STATE",
+            payload: { requesterId: user.id },
+          });
+
+          // Secondary ping after 450ms to ensure Android host catches join even across subscription races
+          setTimeout(() => {
+            if (channelRef.current && !isHostRef.current) {
+              channelRef.current.send({
+                type: "broadcast",
+                event: "PLAYER_JOIN",
+                payload: joinPayload,
+              });
+              channelRef.current.send({
+                type: "broadcast",
+                event: "PLAYER_JOIN_REQUEST",
+                payload: { player: guestMe },
+              });
+              channelRef.current.send({
+                type: "broadcast",
+                event: "REQUEST_LOBBY",
+                payload: {
+                  roomId,
+                  userId: user.id,
+                  userName: user.full_name,
+                  timestamp: Date.now(),
+                },
+              });
+            }
+          }, 450);
         } else {
           // Host: broadcast current lobby state
           broadcastLobbyState(channel, playersRef.current);
@@ -1144,14 +1247,25 @@ export default function LudoGameView({
     if (!clean) return;
 
     updateIsHost(false);
-    // Initialize as non-host guest waiting for host sync
+    // Initialize as non-host guest with host slot ready so both appear immediately in lobby
     setPlayers([
+      {
+        id: "room_host",
+        name: "Room Host 👑",
+        avatar: "/images/avatar-male.png",
+        department: "UIU Campus",
+        batch: "Host",
+        color: "RED",
+        isHost: true,
+        isReady: true,
+        tokens: [-1, -1, -1, -1],
+      },
       {
         id: user.id,
         name: user.full_name,
         avatar: user.avatar,
         department: user.department,
-        batch: user.batch,
+        batch: user.batch || "2024",
         color: "GREEN",
         isHost: false,
         isReady: true,
@@ -1722,7 +1836,9 @@ export default function LudoGameView({
           {/* 4 Player Slots Grid */}
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-3.5">
             {PLAYER_COLORS.map((color, idx) => {
-              const assignedPlayer = players.find((p) => p.color === color);
+              const assignedPlayer = players.find(
+                (p) => p.color === color || (typeof p.color === "string" && p.color.toUpperCase() === color)
+              );
               const cfg = COLOR_CONFIG[color];
               const isMe = assignedPlayer?.id === user.id;
 
