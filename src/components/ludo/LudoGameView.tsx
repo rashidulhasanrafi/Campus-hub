@@ -102,6 +102,11 @@ export default function LudoGameView({
     }>
   >([]);
   const matchChannelRef = useRef<ReturnType<typeof supabase.channel> | null>(null);
+  const [matchmakingTimeLeft, setMatchmakingTimeLeft] = useState<number>(120);
+  const matchQueueRef = useRef(matchQueue);
+  useEffect(() => {
+    matchQueueRef.current = matchQueue;
+  }, [matchQueue]);
 
   // User host state: True if creating room, false if joining with code or initialRoomCode
   const [isHost, setIsHost] = useState<boolean>(!initialRoomCode);
@@ -528,7 +533,34 @@ export default function LudoGameView({
     channel.on("broadcast", { event: "REQUEST_LOBBY" }, handleIncomingLobbyRequest);
     channel.on("broadcast", { event: "REQUEST_LOBBY_STATE" }, handleIncomingLobbyRequest);
 
-    // H. Listen for PLAYER_LEFT
+    // H1. Listen for ROOM_DISBANDED
+    channel.on("broadcast", { event: "ROOM_DISBANDED" }, () => {
+      showTimeoutNotice("Room Creator (Host) ber hoye gese! Room disband hoye gelo.");
+      if (gameStateRef.current === "lobby") {
+        if (channelRef.current) {
+          supabase.removeChannel(channelRef.current);
+          channelRef.current = null;
+        }
+        setGameState("menu");
+        setRoomId(`UIU-${Math.floor(1000 + Math.random() * 9000)}`);
+        updateIsHost(true);
+        setPlayers([
+          {
+            id: user.id,
+            name: user.full_name,
+            avatar: user.avatar,
+            department: user.department,
+            batch: user.batch,
+            color: "RED",
+            isHost: true,
+            isReady: true,
+            tokens: [-1, -1, -1, -1],
+          },
+        ]);
+      }
+    });
+
+    // H2. Listen for PLAYER_LEFT
     channel.on("broadcast", { event: "PLAYER_LEFT" }, ({ payload }: any) => {
       const leftUserId = payload?.userId || payload?.playerId;
       const leftPlayerName = payload?.playerName;
@@ -538,8 +570,35 @@ export default function LudoGameView({
         showTimeoutNotice(`${leftPlayerName || "A player"} ber hoye gese (left match) 🏃‍♂️`);
         ludoAudio.playCapture();
 
-        // If currently in lobby, remove them from the slot
+        // If currently in lobby, check if host left
         if (gameStateRef.current === "lobby") {
+          const isLeavingPlayerHost = payload?.isHost || playersRef.current.find((p) => p.id === leftUserId)?.isHost;
+          if (isLeavingPlayerHost) {
+            // Room Creator / Host left without starting: disband room and kick everyone out to menu!
+            showTimeoutNotice("Room Creator (Host) ber hoye gese! Room disband hoye gelo.");
+            if (channelRef.current) {
+              supabase.removeChannel(channelRef.current);
+              channelRef.current = null;
+            }
+            setGameState("menu");
+            setRoomId(`UIU-${Math.floor(1000 + Math.random() * 9000)}`);
+            updateIsHost(true);
+            setPlayers([
+              {
+                id: user.id,
+                name: user.full_name,
+                avatar: user.avatar,
+                department: user.department,
+                batch: user.batch,
+                color: "RED",
+                isHost: true,
+                isReady: true,
+                tokens: [-1, -1, -1, -1],
+              },
+            ]);
+            return;
+          }
+
           setPlayers((prev) => prev.filter((p) => p.id !== leftUserId));
           if (isHostRef.current) {
             setTimeout(() => {
@@ -1106,7 +1165,7 @@ export default function LudoGameView({
     });
   }, [user.id, user.full_name, user.avatar, user.department, user.batch]);
 
-  // Coordinator helper to trigger matched game
+  // Coordinator helper to trigger matched game (Starts with real players - NO BOTS)
   const launchQuickMatch = (group: typeof matchQueue) => {
     if (!matchChannelRef.current) return;
     const newCode = `UIU-Q${Math.floor(100 + Math.random() * 900)}`;
@@ -1118,30 +1177,12 @@ export default function LudoGameView({
       avatar: u.avatar,
       department: u.department,
       batch: u.batch,
-      color: LUDO_COLORS_LOWER[idx],
+      color: LUDO_COLORS_LOWER[idx] || "red",
       colorIndex: idx,
       isHost: idx === 0,
       isReady: true,
       isBot: false,
     }));
-
-    // If fewer than 4 players, fill remaining with AI peers so game can start
-    const botNames = ["UIU Bot Green 🤖", "Campus Bot Yellow ⚡", "CSE Bot Blue 🎮"];
-    while (groupLobby.length < 4) {
-      const idx = groupLobby.length;
-      groupLobby.push({
-        id: `bot_${idx}_${Date.now()}`,
-        name: botNames[idx - 1] || `Campus Bot ${idx + 1} 🤖`,
-        avatar: idx % 2 === 0 ? "/images/avatar-male.png" : "/images/avatar-female.png",
-        department: "BS in CSE",
-        batch: "AI",
-        color: LUDO_COLORS_LOWER[idx],
-        colorIndex: idx,
-        isHost: false,
-        isReady: true,
-        isBot: true,
-      });
-    }
 
     matchChannelRef.current.send({
       type: "broadcast",
@@ -1184,6 +1225,36 @@ export default function LudoGameView({
     setTurnTimeLeft(15);
     setGameState("playing");
   };
+
+  // 2-Minute Matchmaking Timer (Auto-starts when 2+ players after 2 mins, restarts if 1 player)
+  useEffect(() => {
+    if (gameState !== "matchmaking") {
+      setMatchmakingTimeLeft(120);
+      return;
+    }
+
+    const timer = setInterval(() => {
+      setMatchmakingTimeLeft((prev) => {
+        if (prev <= 1) {
+          const currentQueue = matchQueueRef.current;
+          const isCoordinator = currentQueue[0]?.id === user.id;
+
+          if (currentQueue.length >= 2) {
+            if (isCoordinator) {
+              launchQuickMatch(currentQueue.slice(0, 4));
+            }
+            return 0;
+          } else {
+            // Nobody joined: restart the 2-minute timer to keep searching
+            return 120;
+          }
+        }
+        return prev - 1;
+      });
+    }, 1000);
+
+    return () => clearInterval(timer);
+  }, [gameState, user.id]);
 
   // Cancel Matchmaking
   const handleCancelMatchmaking = () => {
@@ -1267,6 +1338,18 @@ export default function LudoGameView({
   // Unified Exit Game / Match handler (Broadcasts PLAYER_LEFT so opponent board clears tokens)
   const handleExitMatchOrMenu = () => {
     if (channelRef.current) {
+      if (gameState === "lobby" && isHostRef.current) {
+        channelRef.current.send({
+          type: "broadcast",
+          event: "ROOM_DISBANDED",
+          payload: {
+            roomId,
+            userId: user.id,
+            isHost: true,
+            reason: "Host disbanded the room",
+          },
+        }).catch(() => {});
+      }
       if (gameState === "playing" || gameState === "lobby") {
         channelRef.current.send({
           type: "broadcast",
@@ -1277,6 +1360,7 @@ export default function LudoGameView({
             playerId: user.id,
             playerName: user.full_name,
             playerColor: myColor,
+            isHost: isHostRef.current,
             reason: "User exited match",
           },
         }).catch(() => {});
@@ -1659,9 +1743,14 @@ export default function LudoGameView({
                 <Loader2 className="w-3.5 h-3.5 animate-spin text-orange-400" />
                 <span>Matchmaking Pool</span>
               </div>
-              <span className="px-2 py-0.5 rounded-full bg-orange-500/20 text-orange-400 border border-orange-500/30 font-mono">
-                {matchQueue.length}/4 Joined
-              </span>
+              <div className="flex items-center gap-2">
+                <span className="px-2.5 py-0.5 rounded-full bg-zinc-950 border border-orange-500/40 text-orange-400 font-mono text-xs font-bold">
+                  ⏱️ {Math.floor(matchmakingTimeLeft / 60)}:{(matchmakingTimeLeft % 60).toString().padStart(2, "0")}
+                </span>
+                <span className="px-2 py-0.5 rounded-full bg-orange-500/20 text-orange-400 border border-orange-500/30 font-mono">
+                  {matchQueue.length}/4 Joined
+                </span>
+              </div>
             </div>
 
             {/* 4 Player Slots */}
@@ -1752,9 +1841,11 @@ export default function LudoGameView({
             <div className="p-3.5 rounded-2xl bg-orange-500/10 border border-orange-500/30 flex items-center gap-3 text-xs text-orange-300">
               <Sparkles className="w-4 h-4 text-orange-400 shrink-0 animate-spin" />
               <span>
-                {matchQueue.length < 4
-                  ? `Waiting for 4 students (${matchQueue.length}/4)... 4 jon dhukle match auto start hoye jabe!`
-                  : `4 students joined! Match auto starting now...`}
+                {matchQueue.length >= 4
+                  ? `4 students joined! Auto-starting now...`
+                  : matchQueue.length >= 2
+                  ? `2+ students in queue (${matchQueue.length}/4). Auto-starting when timer reaches 00:00 (or immediately if 4 join)!`
+                  : `Waiting for students (${matchQueue.length}/4)... Auto-starts after 2 mins if 2+ join, or timer restarts.`}
               </span>
             </div>
 
