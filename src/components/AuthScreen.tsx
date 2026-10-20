@@ -212,57 +212,43 @@ export default function AuthScreen({
     setErrorMessage("");
     setInfoMessage("");
 
-    setLoading(true);
     const targetEmail = await resolveTargetEmail(loginInput);
     if (!targetEmail) {
-      setLoading(false);
       setErrorMessage("Please enter your Student Email or Student ID.");
       return;
     }
 
     if (!isOfficialUiuEmail(targetEmail)) {
-      setLoading(false);
       setErrorMessage("Not a valid email! Please login with your official UIU student email (@*.uiu.ac.bd).");
       return;
     }
 
+    if (!password.trim()) {
+      setErrorMessage("Password is required to log in. Please enter your password.");
+      return;
+    }
+
+    setLoading(true);
     try {
-      if (password.trim()) {
-        onStartBusTransition?.();
-        const { data, error } = await supabase.auth.signInWithPassword({
-          email: targetEmail,
-          password: password.trim(),
-        });
-
-        if (!error && data.session) {
-          triggerSuccessConfetti();
-          onAuthSuccess();
-          return;
-        }
-
-        if (error) {
-          onCancelBusTransition?.();
-          console.warn("Password login failed, offering OTP fallback:", error.message);
-          setErrorMessage(error.message || "Invalid credentials. Try logging in via OTP passcode.");
-          setLoading(false);
-          return;
-        }
-      }
-
-      // If password is blank, send OTP
-      const { error: otpError } = await supabase.auth.signInWithOtp({
+      onStartBusTransition?.();
+      const { data, error } = await supabase.auth.signInWithPassword({
         email: targetEmail,
-        options: {
-          shouldCreateUser: true,
-        },
+        password: password.trim(),
       });
 
-      if (otpError) throw otpError;
+      if (!error && data.session) {
+        triggerSuccessConfetti();
+        onAuthSuccess();
+        return;
+      }
 
-      setOtpTargetEmail(targetEmail);
-      setAuthMode("otp");
-      setResendCooldown(30);
-      setInfoMessage(`6-digit passcode dispatched to ${targetEmail}`);
+      if (error) {
+        onCancelBusTransition?.();
+        console.warn("Password login failed:", error.message);
+        setErrorMessage(error.message || "Invalid credentials. Please check your email and password.");
+        setLoading(false);
+        return;
+      }
     } catch (err: unknown) {
       onCancelBusTransition?.();
       const error = err as Error;
@@ -376,6 +362,11 @@ export default function AuthScreen({
       return;
     }
 
+    if (!regPassword.trim() || regPassword.trim().length < 6) {
+      setErrorMessage("Please create a password with at least 6 characters.");
+      return;
+    }
+
     onStartBusTransition?.();
     setLoading(true);
     const assignedAvatar =
@@ -384,36 +375,10 @@ export default function AuthScreen({
         : "/images/avatar-male.png";
 
     try {
-      if (regPassword.trim().length >= 6) {
-        const { data, error } = await supabase.auth.signUp({
-          email: targetEmail,
-          password: regPassword.trim(),
-          options: {
-            data: {
-              full_name: regName.trim(),
-              gender: regGender,
-              department: regDept,
-              batch: regBatch,
-              student_id: regId.trim(),
-              avatar: assignedAvatar,
-            },
-          },
-        });
-
-        if (error) throw error;
-
-        if (data.session) {
-          triggerSuccessConfetti();
-          onAuthSuccess();
-          return;
-        }
-      }
-
-      // Fallback to OTP verification
-      const { error: otpError } = await supabase.auth.signInWithOtp({
+      const { data, error } = await supabase.auth.signUp({
         email: targetEmail,
+        password: regPassword.trim(),
         options: {
-          shouldCreateUser: true,
           data: {
             full_name: regName.trim(),
             gender: regGender,
@@ -425,8 +390,15 @@ export default function AuthScreen({
         },
       });
 
-      if (otpError) throw otpError;
+      if (error) throw error;
 
+      if (data.session) {
+        triggerSuccessConfetti();
+        onAuthSuccess();
+        return;
+      }
+
+      // If email confirmation is required by Supabase, prompt for the code
       setOtpTargetEmail(targetEmail);
       setAuthMode("otp");
       setResendCooldown(30);
@@ -755,7 +727,7 @@ export default function AuthScreen({
                       type={showRegPassword ? "text" : "password"}
                       value={regPassword}
                       onChange={(e) => setRegPassword(e.target.value)}
-                      placeholder="Create a password (min 6 characters) or leave blank for OTP"
+                      placeholder="Create a password (min 6 characters)"
                       className="w-full pl-11 pr-12 py-3.5 rounded-xl bg-slate-950/80 border border-slate-800 text-sm sm:text-base text-slate-100 placeholder-slate-500 focus:outline-none focus:border-orange-500 focus:ring-2 focus:ring-orange-500/25 transition-all"
                     />
                     <button
@@ -1262,7 +1234,7 @@ export default function AuthScreen({
                     type={showPassword ? "text" : "password"}
                     value={password}
                     onChange={(e) => setPassword(e.target.value)}
-                    placeholder="Password (leave blank for Email OTP)"
+                    placeholder="Password"
                     className="w-full pl-10 pr-10 py-3 rounded-lg bg-slate-950/70 border border-slate-800 text-sm text-slate-100 placeholder-slate-500 focus:outline-none focus:border-orange-500 focus:ring-2 focus:ring-orange-500/25 transition-all"
                   />
                   <button
@@ -1277,7 +1249,7 @@ export default function AuthScreen({
                 {/* 3. Primary "Log In" Button: Solid UIU Orange, Rounded-lg, Font-semibold */}
                 <button
                   type="submit"
-                  disabled={loading || !loginInput.trim()}
+                  disabled={loading || !loginInput.trim() || !password.trim()}
                   className="w-full py-3 rounded-lg bg-[#ea580c] hover:bg-[#c2410c] text-white font-semibold text-sm shadow-lg shadow-orange-600/25 active:scale-[0.99] disabled:opacity-50 disabled:cursor-not-allowed transition-all flex items-center justify-center gap-2 cursor-pointer"
                 >
                   {loading ? (
@@ -1295,11 +1267,7 @@ export default function AuthScreen({
                   <button
                     type="button"
                     onClick={() => {
-                      if (loginInput.trim()) {
-                        handleSendOtp(loginInput);
-                      } else {
-                        setAuthMode("forgot");
-                      }
+                      setAuthMode("forgot");
                     }}
                     className="text-xs text-slate-400 hover:text-orange-400 hover:underline transition-colors"
                   >
